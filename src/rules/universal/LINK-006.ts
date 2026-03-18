@@ -114,10 +114,20 @@ function ooxmlBookmarkExists(name: string, xmlDoc: XMLDocument): boolean {
     .some(bm => bm.getAttribute('w:name') === name);
 }
 
+const ooxmlBookmarkNamesCache = new WeakMap<XMLDocument, string[]>();
+
 function getOoxmlBookmarkNames(xmlDoc: XMLDocument): string[] {
-  return Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))
+  const cached = ooxmlBookmarkNamesCache.get(xmlDoc);
+  if (cached) {
+    return cached;
+  }
+
+  const names = Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))
     .map(bm => bm.getAttribute('w:name') ?? '')
     .filter(name => name && name !== '_GoBack');
+
+  ooxmlBookmarkNamesCache.set(xmlDoc, names);
+  return names;
 }
 
 // ─── Fuzzy matching ───────────────────────────────────────────────────────────
