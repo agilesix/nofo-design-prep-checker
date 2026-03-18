@@ -109,6 +109,8 @@ export default function DownloadStep({
             className="usa-button usa-button--big margin-bottom-2"
             onClick={handleDownloadClick}
             disabled={isDownloading}
+            aria-live="polite"
+            aria-busy={isDownloading}
           >
             {isDownloading
               ? content.accessibility.loadingSpinner
