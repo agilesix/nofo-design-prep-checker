@@ -118,9 +118,9 @@ export default function DownloadStep({
           </button>
 
           <p
-            className="font-body-xs margin-top-1 margin-bottom-4 maxw-tablet"
-            style={{ color: '#71767a' }}
+            className="font-body-xs margin-top-1 margin-bottom-4 maxw-tablet text-base"
           >
+
             Word content controls from your original document are not preserved in the downloaded file.
             This is expected and consistent with how files behave throughout the design process.
             Your original document retains all content controls.
