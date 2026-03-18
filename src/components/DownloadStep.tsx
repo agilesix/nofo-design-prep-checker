@@ -20,7 +20,7 @@ export default function DownloadStep({
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [hasDownloaded, setHasDownloaded] = React.useState(false);
 
-  const downloadName = fileName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
+  const downloadName = fileName;
   const acceptedCount = acceptedFixes.length;
 
   const handleDownloadClick = async (): Promise<void> => {
