@@ -4,6 +4,38 @@ An internal HHS tool that helps staff and contractors prepare Notice of Funding 
 
 > **Internal tool — not for public distribution.** This tool is for HHS staff and contractors. Do not share this URL publicly.
 
+## Impact
+
+Preparing a NOFO Word document for design has always been a manual, time-intensive process. A coach, grant writer, or designer working carefully through a NOFO — checking metadata fields, verifying 60 to 100+ hyperlinks, reviewing table structures, hunting for footnote and image issues, then fixing each problem found directly in the Word document — typically spent **3 to 4 hours per NOFO**.
+
+This tool automates that process. The same comprehensive review now takes about **10 minutes**.
+
+| | Manual process | With this tool |
+|---|---|---|
+| **Time per NOFO** | 3–4 hours | ~10 minutes |
+| **Staff time saved per NOFO** | — | 2.5–3.5 hours |
+| **Annual savings (300 SimplerNOFOs/year)** | — | 750–1,050 hours returned to program work |
+| **Link coverage** | Often partial or skipped | Every link, every time |
+| **Consistency** | Depends on reviewer's familiarity | Same checks applied to every document |
+
+## What it checks
+
+- **Document metadata** — Author, Subject, and Keywords fields required for 508 compliance
+- **Document cleanliness** — tracked changes, unresolved comments, leftover instruction boxes, and placeholder text
+- **Heading structure** — sequential heading levels, bold text mistakenly used as headings, body copy accidentally tagged as headings
+- **Links** — broken internal links (with fuzzy match suggestions for near-miss anchors), non-descriptive link text, punctuation in link text, missing file type/size labels on download links, plain text email addresses converted to mailto: links automatically, and non-standard page fragment syntax on file links
+- **Tables** — merged cells, multiple header rows, and callout boxes not formatted correctly
+- **Footnotes and endnotes** — unlinked reference numbers and repeated reference numbers
+- **Images** — missing alt text
+- **Application checklists** — checkbox items formatted as bulleted lists instead of ballot box glyphs
+- **Text formatting** — date and time range formatting that doesn't follow SimplerNOFOs style: en dashes, em dashes, hyphens, or "through" used as range separators (should be "to"); incorrect a.m./p.m. capitalization; "EST" instead of "ET"; exact hours written with `:00`; and "12:00 p.m." or "12:00 a.m." instead of "noon" or "midnight"
+
+## Your document stays private
+
+This tool runs entirely in your browser. **Your document is never uploaded to a server, saved, or shared with anyone.** When you close the tab, all data is cleared automatically.
+
+NOFO drafts are pre-decisional, sensitive HHS documents that are not for public release until published on grants.gov. This tool was built with that in mind — there is no backend, no database, and no way for document content to leave your computer.
+
 ## What it does
 
 Upload a NOFO `.docx` file and the tool will:
