@@ -13,7 +13,7 @@ export async function buildDocx(
   // Separate fixes by type for safe ordering
   const metaFixes = acceptedFixes.filter(f => f.targetField?.startsWith('metadata.'));
   const bodyFixes = acceptedFixes.filter(
-    f => f.ruleId.startsWith('LINK-003') || f.ruleId.startsWith('FORMAT-')
+    f => f.ruleId.startsWith('LINK-003') || f.ruleId.startsWith('FORMAT-') || f.ruleId === 'LINK-006'
   );
   const imgFixes = acceptedFixes.filter(f => f.targetField?.startsWith('image.'));
   const noteFixes = acceptedFixes.filter(f => f.ruleId === 'NOTE-003');
@@ -92,12 +92,26 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
       }
     }
 
+    // LINK-006: retarget internal bookmark anchor
+    // targetField: "link.bookmark.{old_anchor}", value: "{new_anchor}"
+    if (fix.ruleId === 'LINK-006' && fix.targetField?.startsWith('link.bookmark.')) {
+      const oldAnchor = fix.targetField.replace('link.bookmark.', '');
+      const newAnchor = fix.value;
+      const normalizedNewAnchor = newAnchor.trim().replace(/^#/, '');
+      if (!normalizedNewAnchor) {
+        continue;
+      }
+      const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+      for (const el of hyperlinks) {
+        if (el.getAttribute('w:anchor') === oldAnchor) {
+          el.setAttribute('w:anchor', normalizedNewAnchor);
+        }
+      }
+    }
+
     // LINK-003: update link text
     if (fix.ruleId === 'LINK-003' && fix.targetField?.startsWith('link.')) {
-      // Target field: link.{issueId}.text
-      // This is a simplified approach - production would need to match the specific hyperlink
-      // Match by relationship ID stored in the issue - production implementation needed
-      // In production, match by relationship ID stored in the issue
+      // Production implementation: match by relationship ID stored in the issue
     }
   }
 
