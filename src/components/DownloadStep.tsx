@@ -148,15 +148,7 @@ export default function DownloadStep({
       <button
         type="button"
         onClick={onStartOver}
-        style={{
-          background: 'none',
-          border: 'none',
-          padding: 0,
-          cursor: 'pointer',
-          textDecoration: 'underline',
-          color: 'inherit',
-          font: 'inherit',
-        }}
+        className="usa-button usa-button--unstyled padding-0 margin-0 text-decoration-underline"
       >
         ← Check another document
       </button>
