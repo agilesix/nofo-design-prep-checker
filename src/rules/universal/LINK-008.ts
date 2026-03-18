@@ -24,8 +24,8 @@ const LINK_008: Rule = {
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
 
     // ── Plain-text emails → auto-applied mailto: conversion ──────────────────
-    const walker = document.createTreeWalker
-      ? document.createTreeWalker(htmlDoc.body, NodeFilter.SHOW_TEXT)
+    const walker = typeof htmlDoc.createTreeWalker === 'function'
+      ? htmlDoc.createTreeWalker(htmlDoc.body ?? htmlDoc, NodeFilter.SHOW_TEXT)
       : null;
 
     if (walker) {
