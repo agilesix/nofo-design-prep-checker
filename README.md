@@ -20,15 +20,15 @@ This tool automates that process. The same comprehensive review now takes about 
 
 ## What it checks
 
-- **Document metadata** — Author, Subject, and Keywords fields required for 508 compliance
-- **Document cleanliness** — tracked changes, unresolved comments, leftover instruction boxes, and placeholder text
-- **Heading structure** — sequential heading levels, bold text mistakenly used as headings, body copy accidentally tagged as headings
-- **Links** — broken internal links (with fuzzy match suggestions for near-miss anchors), non-descriptive link text, punctuation in link text, missing file type/size labels on download links, plain text email addresses converted to mailto: links automatically, and non-standard page fragment syntax on file links
-- **Tables** — merged cells, multiple header rows, and callout boxes not formatted correctly
-- **Footnotes and endnotes** — unlinked reference numbers and repeated reference numbers
-- **Images** — missing alt text
-- **Application checklists** — checkbox items formatted as bulleted lists instead of ballot box glyphs
-- **Text formatting** — date and time range formatting that doesn't follow SimplerNOFOs style: en dashes, em dashes, hyphens, or "through" used as range separators (should be "to"); incorrect a.m./p.m. capitalization; "EST" instead of "ET"; exact hours written with `:00`; and "12:00 p.m." or "12:00 a.m." instead of "noon" or "midnight"
+- **Document metadata** — key fields such as Author, Subject, and Keywords that support accessibility and consistency
+- **Document cleanliness** — common issues like unresolved comments, leftover instruction boxes, and placeholder text
+- **Heading structure** — obvious heading level and tagging inconsistencies that can affect navigation and readability
+- **Links** — internal and external link issues, including non-descriptive link text and basic formatting problems
+- **Tables** — structural issues that can cause accessibility or reading-order problems
+- **Footnotes and endnotes** — basic reference and linking issues
+- **Images** — missing or incomplete alternative text
+- **Application checklists** — formatting issues that make checklist items harder to scan or understand
+- **Text formatting** — common style issues in dates, times, and ranges based on SimplerNOFOs guidance
 
 ## Your document stays private
 
