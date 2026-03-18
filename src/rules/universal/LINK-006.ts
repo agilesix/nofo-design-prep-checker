@@ -70,7 +70,7 @@ const LINK_006: Rule = {
             label: 'Replacement anchor',
             fieldDescription: `Current anchor: #${anchor}`,
             prefill: fuzzy,
-            prefillNote: 'Matched by normalizing the anchor against bookmark names in the document. Edit if needed.',
+            prefillNote: 'Matched by normalizing the anchor against content in the document (e.g., bookmarks, IDs, or headings). Edit if needed.',
             targetField: `link.bookmark.${anchor}`,
           },
         } as Issue);
