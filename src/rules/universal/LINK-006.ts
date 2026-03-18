@@ -117,20 +117,14 @@ function findFuzzyMatch(anchor: string, htmlDoc: Document): string | null {
     candidates.push({ id, normalized: normalizeAnchor(id) });
   }
 
-  // Also collect heading text as candidate anchors (mammoth generates IDs from headings)
+  // Also collect heading text mapped to real heading IDs (if present)
   const headings = Array.from(htmlDoc.querySelectorAll('h1,h2,h3,h4,h5,h6'));
   for (const h of headings) {
     const text = (h.textContent ?? '').trim();
-    if (text) {
-      // Build a slug-style candidate the way mammoth/Word might name a bookmark
-      const slug = text
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, '')
-        .replace(/\s+/g, '-')
-        .trim();
-      if (slug && !candidates.some(c => c.id === slug)) {
-        candidates.push({ id: slug, normalized: normalizeAnchor(text) });
-      }
+    const headingId = h.getAttribute('id') ?? '';
+    // Only consider headings that already have a real ID; do not synthesize new ones
+    if (text && headingId && !candidates.some(c => c.id === headingId)) {
+      candidates.push({ id: headingId, normalized: normalizeAnchor(text) });
     }
   }
 
