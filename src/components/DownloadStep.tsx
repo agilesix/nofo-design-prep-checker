@@ -23,7 +23,7 @@ export default function DownloadStep({
   const downloadName = fileName;
   const acceptedCount = acceptedFixes.length;
 
-  const strings = (content as any).downloadStep ?? (content as any).download ?? {};
+  const strings = (content as Record<string, unknown>).downloadStep ?? (content as Record<string, unknown>).download ?? {};
 
   const headingText: string = strings.headingText ?? 'Download your corrected document';
   const primaryAlertHeading: string = strings.primaryAlertHeading ?? 'This file is ready for design handoff.';
