@@ -10,7 +10,7 @@ Preparing a NOFO Word document for design has always been a manual, time-intensi
 
 This tool automates that process. The same comprehensive review now takes about **10 minutes**.
 
-| | Manual process | With this tool |
+| Metric | Manual process | With this tool |
 |---|---|---|
 | **Time per NOFO** | 3–4 hours | ~10 minutes |
 | **Staff time saved per NOFO** | — | 2.5–3.5 hours |
