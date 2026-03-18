@@ -244,6 +244,7 @@ export default function App(): React.ReactElement {
         {step === 'download' && (
           <DownloadStep
             acceptedFixes={acceptedFixes}
+            autoAppliedCount={reviewState?.autoAppliedChanges.length ?? 0}
             fileName={uploadedFile?.name ?? 'nofo.docx'}
             onDownload={handleDownload}
             onStartOver={handleStartOver}
