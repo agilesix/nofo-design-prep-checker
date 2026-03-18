@@ -73,13 +73,11 @@ export default function DownloadStep({
         <>
           {/* File card */}
           <div
-            className="radius-md padding-3 margin-bottom-3 bg-white"
-            style={{ border: '1px solid #c9c9c9' }}
+            className="radius-md padding-3 margin-bottom-3 bg-white border-1px border-base-light"
           >
             {/* Original file row */}
             <div
-              className="padding-bottom-2 margin-bottom-2"
-              style={{ borderBottom: '1px solid #dfe1e2' }}
+              className="padding-bottom-2 margin-bottom-2 border-bottom-1px border-base-lighter"
             >
               <div className="display-flex flex-align-center">
                 <span className="margin-right-1" aria-hidden="true">📄</span>
