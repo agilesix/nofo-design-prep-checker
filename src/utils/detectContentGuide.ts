@@ -41,7 +41,7 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
     categoryHits: Set<string>; // which signal categories fired
   };
 
-  const scoreMap: Record<string, ScoreEntry> = {};
+  const scoreMap: Partial<Record<ContentGuideId, ScoreEntry>> = {};
 
   for (const guide of contentGuides) {
     if (guide.id === 'cdc-research') continue;
