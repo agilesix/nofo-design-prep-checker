@@ -19,9 +19,6 @@ const LINK_006: Rule = {
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
     const bookmarkLinks = Array.from(htmlDoc.querySelectorAll('a[href^="#"]'));
 
-    // Cache fuzzy-match results per anchor to avoid repeating expensive DOM work
-    const fuzzyMatchCache = new Map<string, string | null>();
-
     bookmarkLinks.forEach((link, index) => {
       const href = link.getAttribute('href') ?? '';
       const anchor = href.slice(1); // strip leading #
@@ -31,10 +28,7 @@ const LINK_006: Rule = {
       if (htmlDoc.getElementById(anchor) !== null) return;
 
       // Tier 2: fuzzy match
-      if (!fuzzyMatchCache.has(anchor)) {
-        fuzzyMatchCache.set(anchor, findFuzzyMatch(anchor, htmlDoc));
-      }
-      const fuzzy = fuzzyMatchCache.get(anchor);
+      const fuzzy = findFuzzyMatch(anchor, htmlDoc);
 
       if (fuzzy !== null) {
         const sectionId = findSectionForElement(link, doc);
@@ -57,8 +51,6 @@ const LINK_006: Rule = {
             prefill: fuzzy,
             prefillNote: 'Matched by normalizing the anchor against heading text in the document. Edit if needed.',
             targetField: `link.bookmark.${anchor}`,
-            validationPattern: '^[^#]*$',
-            validationHint: 'Enter the bookmark ID without the leading "#".',
           },
         } as Issue);
         return;
@@ -117,14 +109,23 @@ function findFuzzyMatch(anchor: string, htmlDoc: Document): string | null {
     candidates.push({ id, normalized: normalizeAnchor(id) });
   }
 
-  // Also collect heading text mapped to real heading IDs (if present)
+  // For headings that have no id, also derive a text-based slug as a potential
+  // anchor target (mammoth sometimes generates IDs from heading text).
+  // Skip headings that already have an id — those are already in the candidates
+  // list above, and duplicating them would trigger the ambiguity guard.
   const headings = Array.from(htmlDoc.querySelectorAll('h1,h2,h3,h4,h5,h6'));
   for (const h of headings) {
+    if (h.getAttribute('id')) continue; // already captured via [id] scan
     const text = (h.textContent ?? '').trim();
-    const headingId = h.getAttribute('id') ?? '';
-    // Only consider headings that already have a real ID; do not synthesize new ones
-    if (text && headingId && !candidates.some(c => c.id === headingId)) {
-      candidates.push({ id: headingId, normalized: normalizeAnchor(text) });
+    if (text) {
+      const slug = text
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, '-')
+        .trim();
+      if (slug && !candidates.some(c => c.id === slug)) {
+        candidates.push({ id: slug, normalized: normalizeAnchor(text) });
+      }
     }
   }
 

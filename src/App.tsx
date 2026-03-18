@@ -168,7 +168,11 @@ export default function App(): React.ReactElement {
 
   const handleDownload = useCallback(async () => {
     if (!parsedDoc) return;
-    const blob = await buildDocx(parsedDoc.zipArchive, acceptedFixes);
+    const blob = await buildDocx(
+      parsedDoc.zipArchive,
+      acceptedFixes,
+      reviewState?.autoAppliedChanges ?? []
+    );
     const originalName = uploadedFile?.name ?? 'nofo.docx';
     const downloadName = originalName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
     const url = URL.createObjectURL(blob);
@@ -177,7 +181,7 @@ export default function App(): React.ReactElement {
     a.download = downloadName;
     a.click();
     URL.revokeObjectURL(url);
-  }, [parsedDoc, acceptedFixes, uploadedFile]);
+  }, [parsedDoc, acceptedFixes, reviewState, uploadedFile]);
 
   const handleStartOver = useCallback(() => {
     setStep('upload');
