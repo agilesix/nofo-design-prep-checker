@@ -97,10 +97,14 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
     if (fix.ruleId === 'LINK-006' && fix.targetField?.startsWith('link.bookmark.')) {
       const oldAnchor = fix.targetField.replace('link.bookmark.', '');
       const newAnchor = fix.value;
+      const normalizedNewAnchor = newAnchor.trim().replace(/^#/, '');
+      if (!normalizedNewAnchor) {
+        continue;
+      }
       const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
       for (const el of hyperlinks) {
         if (el.getAttribute('w:anchor') === oldAnchor) {
-          el.setAttribute('w:anchor', newAnchor);
+          el.setAttribute('w:anchor', normalizedNewAnchor);
         }
       }
     }
