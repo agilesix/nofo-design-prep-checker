@@ -4,8 +4,8 @@ import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types
  * LIST-001: Fake lists using manual bullets or dashes
  * Detects paragraphs that start with manual bullet characters instead of using proper list markup.
  */
-const MANUAL_BULLET_PATTERN = /^[\u2022\u2023\u25E6\u2043\u2219\u25CF\u25CB\u25A0\u25A1\-\*]\s+/;
-const MANUAL_NUMBER_PATTERN = /^\d+[\.\)]\s+/;
+const MANUAL_BULLET_PATTERN = /^[\u2022\u2023\u25E6\u2043\u2219\u25CF\u25CB\u25A0\u25A1\-*]\s+/;
+const MANUAL_NUMBER_PATTERN = /^\d+[.)]\s+/;
 
 const LIST_001: Rule = {
   id: 'LIST-001',
