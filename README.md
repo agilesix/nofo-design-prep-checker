@@ -1,0 +1,104 @@
+# NOFO Design Prep Checker
+
+An internal HHS tool that helps staff and contractors prepare Notice of Funding Opportunity (NOFO) documents for design by checking for common issues before handoff.
+
+> **Internal tool — not for public distribution.** This tool is for HHS staff and contractors. Do not share this URL publicly.
+
+## What it does
+
+Upload a NOFO `.docx` file and the tool will:
+
+1. **Detect the content guide** — Automatically identifies which HHS OpDiv content guide applies (ACF, ACL, CDC, CMS, IHS, HRSA variants)
+2. **Run automated checks** — Scans for common issues across metadata, links, tables, images, footnotes, headings, and required sections
+3. **Guide you through review** — Presents each issue with a severity rating and suggested fix
+4. **Download an updated document** — Applies accepted fixes and generates a corrected `.docx`
+
+All processing happens entirely in your browser. No file contents are sent to any server.
+
+## Supported content guides
+
+| OpDiv | Guide |
+|-------|-------|
+| ACF | ACF Content Guide (FY26 Interim) |
+| ACL | ACL Content Guide |
+| CDC | CDC Content Guide (Standard) |
+| CDC | CDC Content Guide (Research) |
+| CMS | CMS Content Guide |
+| IHS | IHS Content Guide |
+| HRSA | HRSA BHW R&R Content Guide |
+| HRSA | HRSA BPHC Content Guide |
+| HRSA | HRSA Construction Content Guide |
+| HRSA | HRSA MCHB R&R Content Guide |
+| HRSA | HRSA R&R Content Guide |
+
+## Getting started (development)
+
+### Prerequisites
+
+- Node.js 20+
+- npm 10+
+
+### Installation
+
+```sh
+git clone <repo-url>
+cd nofo-design-prep-checker
+npm install
+sh scripts/install-hooks.sh
+```
+
+### Development server
+
+```sh
+npm run dev
+```
+
+Opens at `http://localhost:5173`.
+
+### Build
+
+```sh
+npm run build
+```
+
+Output goes to `dist/`. The build is a static site with no server-side requirements.
+
+### Tests
+
+```sh
+npm test
+```
+
+### Lint
+
+```sh
+npm run lint
+```
+
+## Technology
+
+- **React 18** with TypeScript (strict mode)
+- **Vite 5** for bundling and dev server
+- **USWDS v3** (U.S. Web Design System) for all UI components and styles
+- **mammoth.js** for `.docx` to HTML conversion
+- **JSZip** for reading and writing `.docx` ZIP archives
+- **DOMPurify** for sanitizing parsed document HTML
+- **Vitest** for unit testing
+
+## Deployment
+
+The built `dist/` directory can be deployed to any static hosting platform. The project is configured for Cloudflare Pages (see `.github/workflows/ci.yml`).
+
+Security headers are set in `public/_headers`. The `robots.txt` blocks all crawlers.
+
+## Rules
+
+See [docs/rules.md](docs/rules.md) for a complete list of all checks performed by the tool.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development conventions, branching guidelines, and instructions for adding new rules.
+
+## License
+
+Apache 2.0. See [LICENSE](LICENSE).
