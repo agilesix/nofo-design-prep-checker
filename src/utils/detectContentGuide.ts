@@ -107,12 +107,15 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
     return { detectedId: null, confidence: 'none', signals: ['No OpDiv identifiers found'] };
   }
 
-  // Determine HRSA sub-type
-  if ((bestId as string).startsWith('hrsa-')) {
-    bestId = detectHrsaSubtype(rawText, bestId);
-  }
+  // At this point, bestId is guaranteed to be a ContentGuideId
+  const resolvedBestId: ContentGuideId = bestId;
 
-  const entry = scoreMap[bestId];
+  // Determine HRSA sub-type
+  const finalBestId: ContentGuideId = resolvedBestId.startsWith('hrsa-')
+    ? detectHrsaSubtype(rawText, resolvedBestId)
+    : resolvedBestId;
+
+  const entry = scoreMap[finalBestId];
   const foundSignals = entry?.signals ?? [];
   const categoryCount = entry?.categoryHits.size ?? 0;
 
@@ -127,7 +130,7 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
 
   const confidence = isHighConfidence ? 'high' : (bestScore > 0 ? 'low' : 'none');
 
-  return { detectedId: bestId, confidence, signals: foundSignals };
+  return { detectedId: finalBestId, confidence, signals: foundSignals };
 }
 
 function detectHrsaSubtype(rawText: string, defaultId: ContentGuideId): ContentGuideId {
