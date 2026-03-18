@@ -115,13 +115,13 @@ export default function DownloadStep({
               : `\u2193 Download ${downloadName}`}
           </button>
 
-          <p className="font-body-xs text-base-dark margin-top-1 margin-bottom-4" style={{ maxWidth: '40rem' }}>
+          <p className="font-body-xs text-base-dark margin-top-1 margin-bottom-4 maxw-tablet">
             Word content controls from your original document are not preserved in the downloaded file.
             This is expected and consistent with how files behave throughout the design process.
             Your original document retains all content controls.
           </p>
 
-          <div className="usa-summary-box margin-bottom-4" style={{ background: '#f0f0f0', borderColor: '#c9c9c9' }}>
+          <div className="usa-summary-box margin-bottom-4 bg-base-lightest border-1px border-base-light">
             <div className="usa-summary-box__body">
               <p className="usa-summary-box__text font-body-sm">
                 If you find issues later, you can re-upload your original document here and run the checks again.
@@ -142,8 +142,7 @@ export default function DownloadStep({
       <button
         type="button"
         onClick={onStartOver}
-        className="usa-link"
-        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}
+        className="usa-button usa-button--unstyled usa-link padding-0"
       >
         {startOverLabel}
       </button>
