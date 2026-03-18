@@ -1,0 +1,199 @@
+import React, { useState, useCallback } from 'react';
+import type { ParsedDocument, ReviewState, AcceptedFix, IssueResolution, Issue, ContentGuideId } from '../types';
+import { content } from '../content';
+import { getCategoryLabel } from '../utils/getCategoryLabel';
+import IssueCard from './IssueCard';
+import ContentGuideBadge from './ContentGuideBadge';
+
+interface ReviewStepProps {
+  doc: ParsedDocument;
+  reviewState: ReviewState;
+  onComplete: (fixes: AcceptedFix[], resolutions: Record<string, IssueResolution>) => void;
+  onGuideChange: (guideId: ContentGuideId) => void;
+}
+
+type SeverityFilter = 'all' | 'error' | 'warning' | 'suggestion';
+
+export default function ReviewStep({
+  doc: _doc,
+  reviewState,
+  onComplete,
+  onGuideChange,
+}: ReviewStepProps): React.ReactElement {
+  const [resolutions, setResolutions] = useState<Record<string, IssueResolution>>(
+    reviewState.resolutions
+  );
+  const [acceptedFixes, setAcceptedFixes] = useState<AcceptedFix[]>([]);
+  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
+
+  const { issues, autoAppliedChanges, activeContentGuide } = reviewState;
+
+  const filteredIssues = issues.filter(issue => {
+    if (severityFilter === 'all') return true;
+    return issue.severity === severityFilter;
+  });
+
+  // Group by category
+  const groupedIssues = groupByCategory(filteredIssues);
+
+  const reviewedCount = Object.values(resolutions).filter(r => r !== 'unreviewed').length;
+  const unreviewedCount = issues.length - reviewedCount;
+
+  const handleAccept = useCallback((fix: AcceptedFix) => {
+    setResolutions(prev => ({ ...prev, [fix.issueId]: 'accepted' }));
+    setAcceptedFixes(prev => {
+      const filtered = prev.filter(f => f.issueId !== fix.issueId);
+      return [...filtered, fix];
+    });
+  }, []);
+
+  const handleSkip = useCallback((issueId: string) => {
+    setResolutions(prev => ({ ...prev, [issueId]: 'skipped' }));
+    setAcceptedFixes(prev => prev.filter(f => f.issueId !== issueId));
+  }, []);
+
+  const handleKeepAsBold = useCallback((issueId: string) => {
+    setResolutions(prev => ({ ...prev, [issueId]: 'keptAsBold' }));
+    setAcceptedFixes(prev => prev.filter(f => f.issueId !== issueId));
+  }, []);
+
+  const handleContinue = useCallback(() => {
+    onComplete(acceptedFixes, resolutions);
+  }, [onComplete, acceptedFixes, resolutions]);
+
+  return (
+    <div className="margin-top-4">
+      <h1 className="usa-h1 margin-bottom-2">{content.steps.review.heading}</h1>
+
+      <p className="usa-intro">{content.review.intro}</p>
+
+      {autoAppliedChanges.length > 0 && (
+        <div className="usa-alert usa-alert--success margin-bottom-4">
+          <div className="usa-alert__body">
+            <h2 className="usa-alert__heading">{content.review.autoApplied.heading}</h2>
+            <p className="usa-alert__text">{content.review.autoApplied.intro}</p>
+            <ul className="usa-list">
+              {autoAppliedChanges.map((change, i) => (
+                <li key={i}>{change.description}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {issues.length === 0 ? (
+        <div className="usa-alert usa-alert--success margin-bottom-4">
+          <div className="usa-alert__body">
+            <h2 className="usa-alert__heading">{content.review.noIssues.heading}</h2>
+            <p className="usa-alert__text">{content.review.noIssues.body}</p>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="display-flex flex-align-center flex-gap-3 margin-bottom-3 flex-wrap">
+            <p className="margin-0 font-body-sm">
+              <strong>{content.review.issueCount(issues.length)}</strong>
+            </p>
+            <p className="margin-0 font-body-sm text-base">
+              {content.review.progress.label(reviewedCount, issues.length)}
+            </p>
+          </div>
+
+          <div className="usa-form-group margin-bottom-4">
+            <fieldset className="usa-fieldset">
+              <legend className="usa-legend usa-legend--large font-body-sm">
+                {content.review.filters.label}
+              </legend>
+              <div className="display-flex flex-gap-2 flex-wrap">
+                {(['all', 'error', 'warning', 'suggestion'] as SeverityFilter[]).map(filter => (
+                  <div key={filter} className="usa-radio display-inline-block">
+                    <input
+                      className="usa-radio__input usa-radio__input--tile"
+                      type="radio"
+                      id={`filter-${filter}`}
+                      name="severity-filter"
+                      value={filter}
+                      checked={severityFilter === filter}
+                      onChange={() => setSeverityFilter(filter)}
+                    />
+                    <label className="usa-radio__label" htmlFor={`filter-${filter}`}>
+                      {filter === 'all'
+                        ? content.review.filters.all
+                        : content.review.filters[filter]}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+
+          {activeContentGuide && (
+            <ContentGuideBadge
+              key={activeContentGuide.id}
+              guide={activeContentGuide}
+              onGuideChange={onGuideChange}
+            />
+          )}
+
+          {Object.entries(groupedIssues).map(([category, categoryIssues]) => (
+            <div key={category} className="margin-bottom-5">
+              <h2 className="usa-h3 border-bottom-1px border-base-light padding-bottom-1">
+                {category}
+                <span className="font-body-xs text-base margin-left-1">
+                  ({categoryIssues.length})
+                </span>
+              </h2>
+
+              {categoryIssues.map(issue => (
+                <IssueCard
+                  key={issue.id}
+                  issue={issue}
+                  resolution={resolutions[issue.id] ?? 'unreviewed'}
+                  onAccept={handleAccept}
+                  onSkip={() => handleSkip(issue.id)}
+                  onKeepAsBold={
+                    issue.ruleId.startsWith('FORMAT-')
+                      ? () => handleKeepAsBold(issue.id)
+                      : undefined
+                  }
+                />
+              ))}
+            </div>
+          ))}
+        </>
+      )}
+
+      <div className="margin-top-4">
+        {unreviewedCount > 0 && (
+          <div className="usa-alert usa-alert--warning usa-alert--slim margin-bottom-2">
+            <div className="usa-alert__body">
+              <p className="usa-alert__text">
+                {content.review.continueWarning(unreviewedCount)}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="usa-button"
+          onClick={handleContinue}
+        >
+          {content.review.continueButton}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function groupByCategory(issues: Issue[]): Record<string, Issue[]> {
+  const groups: Record<string, Issue[]> = {};
+  for (const issue of issues) {
+    const label = getCategoryLabel(issue.ruleId);
+    if (!groups[label]) {
+      groups[label] = [];
+    }
+    groups[label].push(issue);
+  }
+  return groups;
+}

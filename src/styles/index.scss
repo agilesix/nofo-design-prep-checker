@@ -1,0 +1,165 @@
+// Load theme configuration first — this configures uswds-core via @forward
+// before USWDS loads it with default settings.
+@use "./uswds-theme";
+
+// USWDS v3 — full package import. Picks up the pre-configured uswds-core.
+@use "uswds";
+
+// ─── App-specific overrides ────────────────────────────────────────────────
+
+// Prevent the header title from wrapping onto two lines
+.usa-logo__text {
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+// Footer primary link — plain weight, no underline (global link styles
+// apply text-decoration: underline to all <a> tags; override here)
+.usa-footer__primary-link {
+  font-weight: normal;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+// Step indicator — collapse the default margin-top USWDS places on __header
+// so the counter text reads as the label for the bar directly above it,
+// not as a visually disconnected element below.
+.usa-step-indicator__header {
+  margin-top: 0.25rem !important;
+}
+
+// Step indicator — pending segment labels should be muted gray, not primary teal.
+// USWDS segment selectors: --complete and --current are the only modifiers;
+// pending steps have no modifier. Pin their label color explicitly so the
+// mint primary theme doesn't bleed into all segment labels.
+.usa-step-indicator__segment:not(.usa-step-indicator__segment--complete):not(.usa-step-indicator__segment--current) {
+  .usa-step-indicator__segment-label {
+    color: #71767a; // USWDS base-dark (gray-warm-50 approximate)
+  }
+}
+
+// Ensure the app fills the viewport height for footer positioning
+.usa-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.usa-app main {
+  flex: 1;
+}
+
+// Drop zone styling
+.usa-file-input-dropzone {
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+
+  &:focus {
+    outline: 0.25rem solid #2491ff;
+    outline-offset: 0;
+  }
+
+  &[aria-disabled="true"] {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+}
+
+// Ensure code snippets in issue cards don't overflow
+.usa-alert code {
+  word-break: break-all;
+  font-size: 0.85em;
+}
+
+// Flex gap utilities (supplement USWDS utilities)
+.flex-gap-1 { gap: 0.5rem; }
+.flex-gap-2 { gap: 1rem; }
+.flex-gap-3 { gap: 1.5rem; }
+
+// ─── Issue cards — lighter tinted backgrounds ──────────────────────────────
+// USWDS alert backgrounds are visually heavy at scale. These overrides replace
+// the saturated alert tints with very pale tones; severity is communicated
+// primarily by the usa-tag badge on each card, not the background color.
+
+.issue-card {
+  &.usa-alert--error   { background-color: #fef8f7; }
+  &.usa-alert--warning { background-color: #fefdf0; }
+  &.usa-alert--info    { background-color: #f5f8ff; }
+}
+
+// ─── Content guide badge ───────────────────────────────────────────────────
+
+.content-guide-badge {
+  background-color: #f0f0f0; // base-lightest warm gray
+  border: 1px solid #dfe1e2; // base-light
+  border-radius: 2px;
+  padding: 0.75rem 1rem;
+}
+
+// ─── About page ────────────────────────────────────────────────────────────
+
+// Impact stats card block — light blue tint, stacked rows with dividers
+.about-impact-card {
+  background-color: #e8f5fb; // light info-blue tint
+  border: 1px solid #99deea; // info-blue border
+  border-radius: 2px;
+  padding: 0.25rem 0;
+
+  &__row {
+    padding: 1rem 1.25rem;
+
+    &--divided {
+      border-bottom: 1px solid #b8dfe8;
+    }
+  }
+
+  &__headline {
+    font-family: "Public Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-weight: 700;
+    font-size: 1rem;
+    // Color driven by text-primary-darker utility class (mint-60 theme token)
+    margin: 0 0 0.2rem;
+    line-height: 1.3;
+  }
+
+  &__description {
+    font-family: "Newsreader", Georgia, serif;
+    font-size: 0.9375rem;
+    color: #3d4551; // USWDS base-dark approximate
+    margin: 0;
+    line-height: 1.5;
+  }
+}
+
+// About page section dividers — border between each section for visual separation.
+// Sections already alternate white / bg-base-lightest, but the contrast is subtle
+// on some displays. The border adds a definitive visual break.
+.about-main section + section {
+  border-top: 1px solid #dfe1e2; // USWDS base-light (gray-warm-20 approximate)
+}
+
+// Serif body prose — Newsreader (configured as $theme-font-type-serif)
+.about-prose {
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 1.0625rem;
+  line-height: 1.65;
+}
+
+
+// Print styles for summary report
+@media print {
+  .usa-header,
+  .usa-footer,
+  .usa-button,
+  .usa-step-indicator {
+    display: none !important;
+  }
+
+  .grid-container {
+    max-width: 100%;
+    padding: 0;
+  }
+}
