@@ -87,6 +87,8 @@ npm run lint
 
 ## Deployment
 
+**Live URL:** https://nofo-design-prep-checker.pages.dev
+
 The built `dist/` directory can be deployed to any static hosting platform. The project is configured for Cloudflare Pages (see `.github/workflows/ci.yml`).
 
 Security headers are set in `public/_headers`. The `robots.txt` blocks all crawlers.
