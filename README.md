@@ -87,7 +87,9 @@ npm run lint
 
 ## Deployment
 
-The built `dist/` directory can be deployed to any static hosting platform. The project is configured for Cloudflare Pages (see `.github/workflows/ci.yml`).
+This tool is deployed to internal HHS hosting and is not intended for public access. Do not publish or share deployment URLs outside authorized HHS staff and contractors.
+
+The built `dist/` directory can be deployed to an internal static hosting platform. The project is configured for Cloudflare Pages (see `.github/workflows/ci.yml`).
 
 Security headers are set in `public/_headers`. The `robots.txt` blocks all crawlers.
 

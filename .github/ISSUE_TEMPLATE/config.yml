@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Live tool
+    url: https://nofo-design-prep-checker.pages.dev
+    about: Open the NOFO Design Prep Checker (internal-only; access limited to authorized users)

@@ -1,44 +1,68 @@
 import { contentGuides } from '../data/contentGuides';
 import type { ContentGuideDetectionResult, ContentGuideId } from '../types';
 
+// Minimum score required before we'll claim any match at all
+const MIN_SCORE = 5;
+
+// Gap required over second-best to claim "high" confidence
+// (avoids high-confidence when two guides score similarly)
+const MIN_GAP = 3;
+
+// Number of distinct signal categories that must have matched
+const MIN_SIGNAL_CATEGORIES = 2;
+
 export function detectContentGuide(rawText: string): ContentGuideDetectionResult {
   const text = rawText.toLowerCase();
-  const signals: string[] = [];
 
-  // Check for CDC Research first (more specific than CDC)
-  const isCdcResearch =
-    text.includes('era commons') ||
-    text.includes('phs 398') ||
-    text.includes('principal investigator');
+  // Check for CDC Research first (more specific than CDC standard).
+  // Require ≥2 of the 3 research-specific signals plus a CDC identifier.
+  const researchSignals = [
+    text.includes('era commons'),
+    text.includes('phs 398'),
+    text.includes('principal investigator'),
+  ].filter(Boolean).length;
 
-  if (isCdcResearch && (text.includes('centers for disease control') || text.includes(' cdc '))) {
-    signals.push('CDC identifier detected', 'eRA Commons / PHS 398 / principal investigator detected');
-    return { detectedId: 'cdc-research', confidence: 'high', signals };
+  const hasCdcIdentifier =
+    text.includes('centers for disease control') ||
+    /\bcdc\b/i.test(rawText);
+
+  if (researchSignals >= 2 && hasCdcIdentifier) {
+    return {
+      detectedId: 'cdc-research',
+      confidence: 'high',
+      signals: ['CDC identifier detected', 'eRA Commons / PHS 398 / principal investigator detected'],
+    };
   }
 
-  // Check each content guide by detection signals
-  const scoreMap: Record<ContentGuideId, { score: number; signals: string[] }> = {} as Record<
-    ContentGuideId,
-    { score: number; signals: string[] }
-  >;
+  // Score every non-research guide
+  type ScoreEntry = {
+    score: number;
+    signals: string[];
+    categoryHits: Set<string>; // which signal categories fired
+  };
+
+  const scoreMap: Partial<Record<ContentGuideId, ScoreEntry>> = {};
 
   for (const guide of contentGuides) {
-    if (guide.id === 'cdc-research') continue; // handled above
+    if (guide.id === 'cdc-research') continue;
+
     const guideSignals: string[] = [];
     let score = 0;
+    const categoryHits = new Set<string>();
 
     for (const name of guide.detectionSignals.names) {
       if (text.includes(name.toLowerCase())) {
         score += 3;
+        categoryHits.add('name');
         guideSignals.push(`"${name}" detected`);
       }
     }
 
     for (const abbr of guide.detectionSignals.abbreviations) {
-      // Word-boundary check for abbreviations
       const pattern = new RegExp(`\\b${abbr}\\b`, 'i');
       if (pattern.test(rawText)) {
         score += 1;
+        categoryHits.add('abbreviation');
         guideSignals.push(`"${abbr}" abbreviation detected`);
       }
     }
@@ -46,6 +70,7 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
     if (guide.detectionSignals.contactOffice) {
       if (text.includes(guide.detectionSignals.contactOffice.toLowerCase())) {
         score += 2;
+        categoryHits.add('contactOffice');
         guideSignals.push(`Contact office "${guide.detectionSignals.contactOffice}" detected`);
       }
     }
@@ -54,20 +79,21 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
       for (const section of guide.detectionSignals.uniqueSections) {
         if (text.includes(section.toLowerCase())) {
           score += 1;
+          categoryHits.add('uniqueSection');
           guideSignals.push(`Unique section "${section}" detected`);
         }
       }
     }
 
-    scoreMap[guide.id] = { score, signals: guideSignals };
+    scoreMap[guide.id] = { score, signals: guideSignals, categoryHits };
   }
 
-  // Find best match
+  // Find best and second-best scores
   let bestId: ContentGuideId | null = null;
   let bestScore = 0;
   let secondBestScore = 0;
 
-  for (const [id, { score }] of Object.entries(scoreMap) as [ContentGuideId, { score: number; signals: string[] }][]) {
+  for (const [id, { score }] of Object.entries(scoreMap) as [ContentGuideId, ScoreEntry][]) {
     if (score > bestScore) {
       secondBestScore = bestScore;
       bestScore = score;
@@ -81,15 +107,30 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
     return { detectedId: null, confidence: 'none', signals: ['No OpDiv identifiers found'] };
   }
 
-  // Determine HRSA sub-type more specifically
-  if (bestId && (bestId as string).startsWith('hrsa-')) {
-    bestId = detectHrsaSubtype(rawText, bestId);
-  }
+  // At this point, bestId is guaranteed to be a ContentGuideId
+  const resolvedBestId: ContentGuideId = bestId;
 
-  const foundSignals = scoreMap[bestId]?.signals ?? [];
-  const confidence = bestScore >= 3 && bestScore > secondBestScore * 1.5 ? 'high' : 'low';
+  // Determine HRSA sub-type
+  const finalBestId: ContentGuideId = resolvedBestId.startsWith('hrsa-')
+    ? detectHrsaSubtype(rawText, resolvedBestId)
+    : resolvedBestId;
 
-  return { detectedId: bestId, confidence, signals: foundSignals };
+  const entry = scoreMap[finalBestId];
+  const foundSignals = entry?.signals ?? [];
+  const categoryCount = entry?.categoryHits.size ?? 0;
+
+  // High confidence requires:
+  // 1. Score meets minimum threshold
+  // 2. At least 2 distinct signal categories matched
+  // 3. Leads second-best by at least MIN_GAP (handles secondBestScore=0 correctly)
+  const isHighConfidence =
+    bestScore >= MIN_SCORE &&
+    categoryCount >= MIN_SIGNAL_CATEGORIES &&
+    bestScore - secondBestScore >= MIN_GAP;
+
+  const confidence = isHighConfidence ? 'high' : (bestScore > 0 ? 'low' : 'none');
+
+  return { detectedId: finalBestId, confidence, signals: foundSignals };
 }
 
 function detectHrsaSubtype(rawText: string, defaultId: ContentGuideId): ContentGuideId {
