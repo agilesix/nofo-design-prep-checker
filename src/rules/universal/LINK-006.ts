@@ -105,33 +105,15 @@ function findFuzzyMatch(anchor: string, htmlDoc: Document): string | null {
 
   const candidates: { id: string; normalized: string }[] = [];
 
-  // Collect all element IDs that exist in the document
+  // Collect all element IDs that exist in the document. We intentionally do
+  // not synthesize IDs from heading text, to avoid suggesting anchors that
+  // are not actually present in the parsed HTML/Word bookmarks.
   const allIds = Array.from(htmlDoc.querySelectorAll('[id]'))
     .map(el => el.getAttribute('id') ?? '')
     .filter(Boolean);
 
   for (const id of allIds) {
     candidates.push({ id, normalized: normalizeAnchor(id) });
-  }
-
-  // For headings that have no id, also derive a text-based slug as a potential
-  // anchor target (mammoth sometimes generates IDs from heading text).
-  // Skip headings that already have an id — those are already in the candidates
-  // list above, and duplicating them would trigger the ambiguity guard.
-  const headings = Array.from(htmlDoc.querySelectorAll('h1,h2,h3,h4,h5,h6'));
-  for (const h of headings) {
-    if (h.getAttribute('id')) continue; // already captured via [id] scan
-    const text = (h.textContent ?? '').trim();
-    if (text) {
-      const slug = text
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, '')
-        .replace(/\s+/g, '-')
-        .trim();
-      if (slug && !candidates.some(c => c.id === slug)) {
-        candidates.push({ id: slug, normalized: normalizeAnchor(text) });
-      }
-    }
   }
 
   const matches = candidates.filter(c => c.normalized === normalizedAnchor);
