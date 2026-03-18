@@ -33,7 +33,7 @@ describe('high confidence', () => {
     expect(result.confidence).toBe('high');
   });
 
-  it('returns high confidence for CMS when full name + abbreviation present and gap is sufficient', () => {
+  it('returns low confidence for CMS when full name + abbreviation present and gap is sufficient', () => {
     const text = makeText(
       'Centers for Medicare & Medicaid Services',
       'CMS grant',
