@@ -19,6 +19,9 @@ const LINK_006: Rule = {
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
     const bookmarkLinks = Array.from(htmlDoc.querySelectorAll('a[href^="#"]'));
 
+    // Cache fuzzy-match results per anchor to avoid repeating expensive DOM work
+    const fuzzyMatchCache = new Map<string, string | null>();
+
     bookmarkLinks.forEach((link, index) => {
       const href = link.getAttribute('href') ?? '';
       const anchor = href.slice(1); // strip leading #
@@ -28,7 +31,10 @@ const LINK_006: Rule = {
       if (htmlDoc.getElementById(anchor) !== null) return;
 
       // Tier 2: fuzzy match
-      const fuzzy = findFuzzyMatch(anchor, htmlDoc);
+      if (!fuzzyMatchCache.has(anchor)) {
+        fuzzyMatchCache.set(anchor, findFuzzyMatch(anchor, htmlDoc));
+      }
+      const fuzzy = fuzzyMatchCache.get(anchor);
 
       if (fuzzy !== null) {
         const sectionId = findSectionForElement(link, doc);
