@@ -109,11 +109,6 @@ const LINK_006: Rule = {
 
 // ─── OOXML helpers ────────────────────────────────────────────────────────────
 
-function ooxmlBookmarkExists(name: string, xmlDoc: XMLDocument): boolean {
-  return Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))
-    .some(bm => bm.getAttribute('w:name') === name);
-}
-
 const ooxmlBookmarkNamesCache = new WeakMap<XMLDocument, string[]>();
 
 function getOoxmlBookmarkNames(xmlDoc: XMLDocument): string[] {
