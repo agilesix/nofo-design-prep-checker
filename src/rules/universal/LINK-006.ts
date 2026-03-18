@@ -51,6 +51,8 @@ const LINK_006: Rule = {
             prefill: fuzzy,
             prefillNote: 'Matched by normalizing the anchor against heading text in the document. Edit if needed.',
             targetField: `link.bookmark.${anchor}`,
+            validationPattern: '^[^#]*$',
+            validationHint: 'Enter the bookmark ID without the leading "#".',
           },
         } as Issue);
         return;
