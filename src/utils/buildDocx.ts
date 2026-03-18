@@ -159,20 +159,47 @@ async function applyEmailMailtoFixes(zip: JSZip, emails: string[]): Promise<void
   const relsDoc = parser.parseFromString(relsStr, 'application/xml');
   const relsRoot = relsDoc.documentElement;
 
-  // Find max existing numeric rId to avoid collisions
-  const existingIds = Array.from(relsRoot.getElementsByTagNameNS(RELS_NS, 'Relationship'))
-    .map(el => el.getAttribute('Id') ?? '')
-    .map(id => {
-      const m = id.match(/^rId(\d+)$/);
-      return m?.[1] ? parseInt(m[1], 10) : 0;
-    });
-  let nextId = Math.max(0, ...existingIds) + 1;
+  // Find max existing numeric rId to avoid collisions and map existing mailto relationships
+  const existingMailtoRelIds: Map<string, string> = new Map();
+  const existingIds: number[] = [];
+  const existingRelationships = Array.from(
+    relsRoot.getElementsByTagNameNS(RELS_NS, 'Relationship')
+  );
+  for (const el of existingRelationships) {
+    const id = el.getAttribute('Id') ?? '';
+    const m = id.match(/^rId(\d+)$/);
+    if (m?.[1]) {
+      existingIds.push(parseInt(m[1], 10));
+    }
+
+    const typeAttr = el.getAttribute('Type');
+    const targetAttr = el.getAttribute('Target');
+    if (
+      typeAttr === HYPERLINK_TYPE &&
+      targetAttr &&
+      targetAttr.startsWith('mailto:')
+    ) {
+      const email = targetAttr.substring('mailto:'.length);
+      if (email && !existingMailtoRelIds.has(email)) {
+        existingMailtoRelIds.set(email, id);
+      }
+    }
+  }
+  let nextId = Math.max(0, ...existingIds, 0) + 1;
 
   // Map email → relId for use when patching document.xml
   const emailRelIds: Map<string, string> = new Map();
 
   for (const email of emails) {
-    if (emailRelIds.has(email)) continue; // de-duplicate
+    if (emailRelIds.has(email)) continue; // de-duplicate within this run
+
+    // Reuse existing mailto relationship if present
+    const existingRelId = existingMailtoRelIds.get(email);
+    if (existingRelId) {
+      emailRelIds.set(email, existingRelId);
+      continue;
+    }
+
     const relId = `rId${nextId++}`;
     emailRelIds.set(email, relId);
 
