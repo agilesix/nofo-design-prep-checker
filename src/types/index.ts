@@ -100,6 +100,10 @@ export interface Issue {
 export interface AutoAppliedChange {
   ruleId: string;
   description: string;
+  /** Optional: identifies the kind of OOXML patch to apply in buildDocx */
+  targetField?: string;
+  /** Optional: the value to write (e.g. the email address) */
+  value?: string;
 }
 
 export interface AcceptedFix {

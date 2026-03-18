@@ -18,9 +18,7 @@ const LINK_006: Rule = {
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
     const bookmarkLinks = Array.from(htmlDoc.querySelectorAll('a[href^="#"]'));
-
-    // Cache fuzzy-match results per anchor to avoid repeating expensive DOM work
-    const fuzzyMatchCache = new Map<string, string | null>();
+    const fuzzyCache = new Map<string, string | null>();
 
     bookmarkLinks.forEach((link, index) => {
       const href = link.getAttribute('href') ?? '';
@@ -30,11 +28,12 @@ const LINK_006: Rule = {
       // Tier 1: exact match — anchor ID exists in the parsed HTML
       if (htmlDoc.getElementById(anchor) !== null) return;
 
-      // Tier 2: fuzzy match
-      if (!fuzzyMatchCache.has(anchor)) {
-        fuzzyMatchCache.set(anchor, findFuzzyMatch(anchor, htmlDoc));
+      // Tier 2: fuzzy match (cached per anchor)
+      let fuzzy = fuzzyCache.get(anchor);
+      if (fuzzy === undefined) {
+        fuzzy = findFuzzyMatch(anchor, htmlDoc);
+        fuzzyCache.set(anchor, fuzzy);
       }
-      const fuzzy = fuzzyMatchCache.get(anchor);
 
       if (fuzzy !== null) {
         const sectionId = findSectionForElement(link, doc);
@@ -57,8 +56,6 @@ const LINK_006: Rule = {
             prefill: fuzzy,
             prefillNote: 'Matched by normalizing the anchor against heading text in the document. Edit if needed.',
             targetField: `link.bookmark.${anchor}`,
-            validationPattern: '^[^#]*$',
-            validationHint: 'Enter the bookmark ID without the leading "#".',
           },
         } as Issue);
         return;
@@ -108,24 +105,15 @@ function findFuzzyMatch(anchor: string, htmlDoc: Document): string | null {
 
   const candidates: { id: string; normalized: string }[] = [];
 
-  // Collect all element IDs that exist in the document
+  // Collect all element IDs that exist in the document. We intentionally do
+  // not synthesize IDs from heading text, to avoid suggesting anchors that
+  // are not actually present in the parsed HTML/Word bookmarks.
   const allIds = Array.from(htmlDoc.querySelectorAll('[id]'))
     .map(el => el.getAttribute('id') ?? '')
     .filter(Boolean);
 
   for (const id of allIds) {
     candidates.push({ id, normalized: normalizeAnchor(id) });
-  }
-
-  // Also collect heading text mapped to real heading IDs (if present)
-  const headings = Array.from(htmlDoc.querySelectorAll('h1,h2,h3,h4,h5,h6'));
-  for (const h of headings) {
-    const text = (h.textContent ?? '').trim();
-    const headingId = h.getAttribute('id') ?? '';
-    // Only consider headings that already have a real ID; do not synthesize new ones
-    if (text && headingId && !candidates.some(c => c.id === headingId)) {
-      candidates.push({ id: headingId, normalized: normalizeAnchor(text) });
-    }
   }
 
   const matches = candidates.filter(c => c.normalized === normalizedAnchor);
