@@ -46,6 +46,8 @@ export interface ParsedDocument {
   sections: Section[];
   rawText: string;
   zipArchive: JSZip;
+  /** Raw XML of word/document.xml — available synchronously so rules can parse OOXML. */
+  documentXml: string;
   activeContentGuide: ActiveContentGuide | null;
 }
 

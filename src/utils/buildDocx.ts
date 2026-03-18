@@ -5,8 +5,10 @@ export async function buildDocx(
   originalArchive: JSZip,
   acceptedFixes: AcceptedFix[]
 ): Promise<Blob> {
-  // Clone the archive to avoid mutating the original
-  const zip = originalArchive;
+  // Deep-clone the archive: re-serialize to arraybuffer then reload into a fresh
+  // JSZip instance so the original parsedDoc.zipArchive is never mutated.
+  const clonedBuffer = await originalArchive.generateAsync({ type: 'arraybuffer' });
+  const zip = await JSZip.loadAsync(clonedBuffer);
 
   // Separate fixes by type for safe ordering
   const metaFixes = acceptedFixes.filter(f => f.targetField?.startsWith('metadata.'));
@@ -78,17 +80,15 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
   for (const fix of fixes) {
     if (!fix.value) continue;
 
-    if (fix.ruleId === 'IMG-001' && fix.targetField?.startsWith('image.')) {
-      // Update image alt text in docPr elements
-      const docPrElements = xmlDoc.getElementsByTagName('wp:docPr');
-      // Find the right one by matching - simplified approach
-      for (const docPr of Array.from(docPrElements)) {
-        const issueId = fix.targetField.replace('image.', '').replace('.alt', '');
-        const existingDescr = docPr.getAttribute('descr') ?? '';
-        if (!existingDescr && issueId) {
-          docPr.setAttribute('descr', fix.value);
-          break;
-        }
+    if (fix.ruleId === 'IMG-001' && fix.targetField?.startsWith('image.docPr.')) {
+      // targetField is "image.docPr.{id}" where id is the wp:docPr id attribute.
+      // Match by id so we apply alt text to the exact element, not the first
+      // element with an empty descr (which would be wrong for multiple missing images).
+      const docPrId = fix.targetField.replace('image.docPr.', '');
+      const docPrElements = Array.from(xmlDoc.getElementsByTagName('wp:docPr'));
+      const target = docPrElements.find(el => el.getAttribute('id') === docPrId);
+      if (target) {
+        target.setAttribute('descr', fix.value ?? '');
       }
     }
 

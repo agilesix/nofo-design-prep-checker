@@ -4,7 +4,10 @@ import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types
  * LINK-008: Email links without mailto: protocol
  * Flags email addresses that appear as plain text or non-mailto links.
  */
-const EMAIL_PATTERN = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+// No global flag — a regex with /g used in .test() is stateful (advances lastIndex)
+// and produces false negatives on repeated calls against the same pattern instance.
+// For "find all" usage, a new RegExp with the global flag is constructed per call.
+const EMAIL_PATTERN = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
 
 const LINK_008: Rule = {
   id: 'LINK-008',
@@ -33,7 +36,7 @@ const LINK_008: Rule = {
     let issueIndex = 0;
     for (const textNode of textNodes) {
       const text = textNode.textContent ?? '';
-      const matches = text.match(EMAIL_PATTERN);
+      const matches = text.match(new RegExp(EMAIL_PATTERN.source, 'g'));
       if (matches) {
         for (const email of matches) {
           const sectionId = findSectionForNode(textNode, doc);

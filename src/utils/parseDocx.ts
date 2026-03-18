@@ -29,6 +29,10 @@ export async function parseDocx(
   // Load as JSZip for raw XML access
   const zipArchive = await JSZip.loadAsync(arrayBuffer);
 
+  // Read word/document.xml now so rules can parse OOXML synchronously
+  const documentXmlFile = zipArchive.file('word/document.xml');
+  const documentXml = documentXmlFile ? await documentXmlFile.async('string') : '';
+
   // Extract raw text
   const rawText = extractRawText(html);
 
@@ -40,6 +44,7 @@ export async function parseDocx(
     sections,
     rawText,
     zipArchive,
+    documentXml,
     activeContentGuide,
   };
 }

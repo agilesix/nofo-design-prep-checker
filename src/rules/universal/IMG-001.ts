@@ -2,55 +2,64 @@ import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types
 
 /**
  * IMG-001: Images missing alt text
- * Flags <img> elements with no or empty alt attribute.
+ *
+ * Parses word/document.xml (stored on ParsedDocument.documentXml) rather than
+ * the mammoth HTML so we can read the wp:docPr element's `id` attribute — a
+ * stable, unique integer per drawing in the OOXML spec — and store it as the
+ * targetField. buildDocx then finds the exact element by that id instead of
+ * the first element with an empty descr, which would apply alt text to the
+ * wrong image when multiple images are missing alt text.
  */
 const IMG_001: Rule = {
   id: 'IMG-001',
   check(doc: ParsedDocument, _options: RuleRunnerOptions): Issue[] {
-    const issues: Issue[] = [];
+    if (!doc.documentXml) return [];
 
     const parser = new DOMParser();
-    const htmlDoc = parser.parseFromString(doc.html, 'text/html');
-    const images = Array.from(htmlDoc.querySelectorAll('img'));
+    const xmlDoc = parser.parseFromString(doc.documentXml, 'application/xml');
 
-    images.forEach((img, index) => {
-      const alt = img.getAttribute('alt');
-      const src = img.getAttribute('src') ?? '';
+    const issues: Issue[] = [];
+    const docPrElements = Array.from(xmlDoc.getElementsByTagName('wp:docPr'));
 
-      const isMissingAlt = alt === null;
-      const isEmptyAlt = alt !== null && alt.trim() === '';
+    docPrElements.forEach(docPr => {
+      const docPrId = docPr.getAttribute('id');
+      if (!docPrId) return;
+
+      const descr = docPr.getAttribute('descr');
+      const name = docPr.getAttribute('name') ?? `Image ${docPrId}`;
+
+      const isMissingAlt = descr === null;
+      const isEmptyAlt = descr !== null && descr.trim() === '';
+
+      // Determine nearest section by looking for the element in sections' raw text
+      const sectionId = findSectionForDocPrId(docPrId, doc);
 
       if (isMissingAlt) {
-        const sectionId = findSectionForElement(img, doc);
-
         issues.push({
-          id: `IMG-001-${index}`,
+          id: `IMG-001-${docPrId}`,
           ruleId: 'IMG-001',
           title: 'Image is missing alt text',
           severity: 'error',
           sectionId,
-          description: `An image (${src ? `src: "${src.slice(0, 60)}"` : 'no src'}) is missing the alt attribute entirely. All images must have alt text unless they are decorative.`,
-          suggestedFix: 'Add a descriptive alt text to the image in the source document, or mark it as decorative with an empty alt="" if it conveys no information.',
+          description: `"${name}" has no alt text (the descr attribute is absent). All images must have alt text unless they are purely decorative.`,
+          suggestedFix: 'Add descriptive alt text, or set descr="" to mark the image as decorative.',
           inputRequired: {
             type: 'text',
-            label: 'Alt text for this image',
+            label: `Alt text for "${name}"`,
             placeholder: 'Describe what the image shows',
-            hint: 'If the image is decorative (adds no information), leave this blank and check the "decorative" option.',
-            targetField: `image.IMG-001-${index}.alt`,
+            hint: 'Leave blank to mark this image as decorative (sets descr="").',
+            targetField: `image.docPr.${docPrId}`,
             maxLength: 250,
           },
         });
       } else if (isEmptyAlt) {
-        // Empty alt is valid for decorative images, but flag as suggestion to verify
-        const sectionId = findSectionForElement(img, doc);
-
         issues.push({
-          id: `IMG-001-empty-${index}`,
+          id: `IMG-001-empty-${docPrId}`,
           ruleId: 'IMG-001',
           title: 'Image has empty alt text — verify it is decorative',
           severity: 'suggestion',
           sectionId,
-          description: `An image has an empty alt attribute (alt=""). This is correct for decorative images, but if this image conveys information, it needs descriptive alt text.`,
+          description: `"${name}" has an empty alt attribute (descr=""). This is correct for decorative images, but if this image conveys information it needs descriptive alt text.`,
           suggestedFix: 'Verify this image is purely decorative. If it conveys information, add descriptive alt text.',
           instructionOnly: true,
         });
@@ -61,20 +70,13 @@ const IMG_001: Rule = {
   },
 };
 
-function findSectionForElement(el: Element, doc: ParsedDocument): string {
-  // Images may not have text content; try to find by position in document
-  const allImages = new DOMParser()
-    .parseFromString(doc.html, 'text/html')
-    .querySelectorAll('img');
-  const elSrc = el.getAttribute('src') ?? '';
-
+function findSectionForDocPrId(docPrId: string, doc: ParsedDocument): string {
+  // Use the name attribute text as a loose proxy; fall back to first section
   for (const section of doc.sections) {
-    if (elSrc && section.html.includes(elSrc)) {
+    if (section.rawText.includes(docPrId)) {
       return section.id;
     }
   }
-
-  void allImages;
   return doc.sections[0]?.id ?? 'section-preamble';
 }
 

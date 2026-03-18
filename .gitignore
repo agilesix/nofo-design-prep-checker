@@ -15,6 +15,9 @@ dist-ssr/
 # Editor
 .vscode/settings.json
 .idea/
+
+# Claude Code — machine-local config, not for version control
+.claude/settings.local.json
 *.suo
 *.ntvs*
 *.njsproj

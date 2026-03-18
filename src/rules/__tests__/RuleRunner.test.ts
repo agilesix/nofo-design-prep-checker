@@ -18,6 +18,7 @@ function makeMinimalDoc(overrides: Partial<ParsedDocument> = {}): ParsedDocument
     ],
     rawText: 'Test document',
     zipArchive: new JSZip(),
+    documentXml: '',
     activeContentGuide: null,
     ...overrides,
   };
