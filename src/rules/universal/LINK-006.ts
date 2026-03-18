@@ -18,6 +18,7 @@ const LINK_006: Rule = {
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
     const bookmarkLinks = Array.from(htmlDoc.querySelectorAll('a[href^="#"]'));
+    const fuzzyCache = new Map<string, string | null>();
 
     bookmarkLinks.forEach((link, index) => {
       const href = link.getAttribute('href') ?? '';
@@ -27,8 +28,12 @@ const LINK_006: Rule = {
       // Tier 1: exact match — anchor ID exists in the parsed HTML
       if (htmlDoc.getElementById(anchor) !== null) return;
 
-      // Tier 2: fuzzy match
-      const fuzzy = findFuzzyMatch(anchor, htmlDoc);
+      // Tier 2: fuzzy match (cached per anchor)
+      let fuzzy = fuzzyCache.get(anchor);
+      if (fuzzy === undefined) {
+        fuzzy = findFuzzyMatch(anchor, htmlDoc);
+        fuzzyCache.set(anchor, fuzzy);
+      }
 
       if (fuzzy !== null) {
         const sectionId = findSectionForElement(link, doc);
