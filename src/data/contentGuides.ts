@@ -11,7 +11,7 @@ export const contentGuides: ContentGuideEntry[] = [
       names: ['Administration for Children and Families'],
       abbreviations: ['ACF'],
       contactOffice: 'ACF Office of Grants Policy',
-      uniqueSections: ['Step 1', 'Step 2', 'Step 3', 'Step 4', 'Step 5', 'Step 6'],
+      uniqueSections: [],
     },
   },
   {
@@ -23,7 +23,7 @@ export const contentGuides: ContentGuideEntry[] = [
     detectionSignals: {
       names: ['Administration for Community Living'],
       abbreviations: ['ACL'],
-      uniqueSections: ['Step 1', 'Step 2', 'Step 3', 'Step 4', 'Step 5', 'Step 6'],
+      uniqueSections: [],
     },
   },
   {
@@ -37,7 +37,7 @@ export const contentGuides: ContentGuideEntry[] = [
       names: ['Centers for Disease Control and Prevention'],
       abbreviations: ['CDC'],
       contactOffice: 'CDC Office of Grants Services',
-      uniqueSections: ['Step 1', 'Step 2', 'Step 3', 'Step 4', 'Step 5', 'Step 6'],
+      uniqueSections: [],
     },
   },
   {
@@ -63,7 +63,7 @@ export const contentGuides: ContentGuideEntry[] = [
     detectionSignals: {
       names: ['Centers for Medicare & Medicaid Services', 'Centers for Medicare and Medicaid Services'],
       abbreviations: ['CMS'],
-      uniqueSections: ['Step 1', 'Step 2', 'Step 3', 'Step 4', 'Step 5', 'Step 6'],
+      uniqueSections: [],
     },
   },
   {
@@ -75,7 +75,7 @@ export const contentGuides: ContentGuideEntry[] = [
     detectionSignals: {
       names: ['Indian Health Service'],
       abbreviations: ['IHS'],
-      uniqueSections: ['Tribal Resolution', 'Step 1', 'Step 2', 'Step 3', 'Step 4', 'Step 5', 'Step 6'],
+      uniqueSections: ['Tribal Resolution'],
     },
   },
   {
