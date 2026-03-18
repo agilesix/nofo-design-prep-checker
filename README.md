@@ -4,6 +4,38 @@ An internal HHS tool that helps staff and contractors prepare Notice of Funding 
 
 > **Internal tool — not for public distribution.** This tool is for HHS staff and contractors. Do not share this URL publicly.
 
+## Impact
+
+Preparing a NOFO Word document for design has always been a manual, time-intensive process. A coach, grant writer, or designer working carefully through a NOFO — checking metadata fields, verifying 60 to 100+ hyperlinks, reviewing table structures, hunting for footnote and image issues, then fixing each problem found directly in the Word document — typically spent **3 to 4 hours per NOFO**.
+
+This tool automates that process. The same comprehensive review now takes about **10 minutes**.
+
+| Metric | Manual process | With this tool |
+|---|---|---|
+| **Time per NOFO** | 3–4 hours | ~10 minutes |
+| **Staff time saved per NOFO** | — | 2.5–3.5 hours |
+| **Annual savings (300 SimplerNOFOs/year)** | — | 750–1,050 hours returned to program work |
+| **Link coverage** | Often partial or skipped | Every link, every time |
+| **Consistency** | Depends on reviewer's familiarity | Same checks applied to every document |
+
+## What it checks
+
+- **Document metadata** — key fields such as Author, Subject, and Keywords that support accessibility and consistency
+- **Document cleanliness** — common issues like unresolved comments, leftover instruction boxes, and placeholder text
+- **Heading structure** — obvious heading level and tagging inconsistencies that can affect navigation and readability
+- **Links** — internal and external link issues, including non-descriptive link text and basic formatting problems
+- **Tables** — structural issues that can cause accessibility or reading-order problems
+- **Footnotes and endnotes** — basic reference and linking issues
+- **Images** — missing or incomplete alternative text
+- **Application checklists** — formatting issues that make checklist items harder to scan or understand
+- **Text formatting** — common style issues in dates, times, and ranges based on SimplerNOFOs guidance
+
+## Your document stays private
+
+This tool runs entirely in your browser. **Your document is never uploaded to a server, saved, or shared with anyone.** When you close the tab, all data is cleared automatically.
+
+NOFO drafts are pre-decisional, sensitive HHS documents that are not for public release until published on grants.gov. This tool was built with that in mind — there is no backend, no database, and no way for document content to leave your computer.
+
 ## What it does
 
 Upload a NOFO `.docx` file and the tool will:
