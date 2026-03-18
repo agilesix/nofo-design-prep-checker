@@ -5,8 +5,9 @@ import type { Rule, Issue, AutoAppliedChange, ParsedDocument, RuleRunnerOptions 
  *
  * Three-tier resolution:
  *  1. Exact match   — anchor ID exists in the HTML or as an OOXML bookmark → no issue
- *  2. Fuzzy match   — normalized anchor matches exactly one OOXML bookmark name or
- *                     heading text → user-confirmed issue with pre-filled suggestion
+ *  2. Fuzzy match   — normalized anchor matches exactly one OOXML bookmark name,
+ *                     HTML element ID, or heading text → user-confirmed issue with
+ *                     pre-filled suggestion
  *  3. No match      — unresolvable → instructionOnly broken-link issue
  *
  * Fuzzy match candidate sources (in priority order):
@@ -14,8 +15,9 @@ import type { Rule, Issue, AutoAppliedChange, ParsedDocument, RuleRunnerOptions 
  *     — authoritative; returned verbatim as the suggested anchor
  *  b. HTML element IDs — mammoth maps Word bookmarks to id attributes
  *  c. HTML heading text — for documents with no explicit bookmarks;
- *     the suggestion is the anchor with leading underscores stripped
- *     (e.g. _Eligibility → Eligibility, _Maintenance_of_effort → Maintenance_of_effort)
+ *     the suggestion prefers the heading’s own id when present, otherwise the
+ *     anchor with leading underscores stripped (e.g. _Eligibility → Eligibility,
+ *     _Maintenance_of_effort → Maintenance_of_effort)
  */
 const LINK_006: Rule = {
   id: 'LINK-006',
@@ -134,8 +136,9 @@ function normalizeAnchor(value: string): string {
  * Candidate sources tried in order:
  *  1. OOXML bookmark names  — returned verbatim (preserves original casing)
  *  2. HTML element IDs      — returned verbatim
- *  3. HTML heading text     — anchor with leading underscores stripped is returned
- *                             (e.g. _Eligibility → Eligibility)
+ *  3. HTML heading text     — prefers the heading’s own id when present,
+ *                              otherwise returns the anchor with leading
+ *                              underscores stripped (e.g. _Eligibility → Eligibility)
  *
  * If more than one candidate matches the normalized form, returns null to
  * avoid making an ambiguous suggestion.
