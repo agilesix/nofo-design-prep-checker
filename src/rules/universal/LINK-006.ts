@@ -34,6 +34,15 @@ const LINK_006: Rule = {
       ? parser.parseFromString(doc.documentXml, 'application/xml')
       : null;
 
+    // Precompute exact OOXML bookmark names once to avoid O(links × bookmarks) scans
+    const ooxmlBookmarkNames: Set<string> | null = xmlDoc
+      ? new Set(
+          Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))
+            .map((el) => el.getAttribute('w:name'))
+            .filter((name): name is string => !!name)
+        )
+      : null;
+
     // Cache fuzzy results — the same broken anchor may appear in many links
     const fuzzyCache = new Map<string, string | null>();
 
@@ -46,7 +55,7 @@ const LINK_006: Rule = {
       if (htmlDoc.getElementById(anchor) !== null) return;
 
       // Tier 1b: exact match against OOXML bookmark names
-      if (xmlDoc && ooxmlBookmarkExists(anchor, xmlDoc)) return;
+      if (ooxmlBookmarkNames && ooxmlBookmarkNames.has(anchor)) return;
 
       // Tier 2: fuzzy match (result cached per anchor)
       if (!fuzzyCache.has(anchor)) {
