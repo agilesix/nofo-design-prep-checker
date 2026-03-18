@@ -191,7 +191,7 @@ export default function App(): React.ReactElement {
   const mainAppContent = (
     <main id="main-content" className="usa-section">
       <div className="grid-container">
-        {step !== 'parsing' && (
+        {step !== 'parsing' && step !== 'guide-selection' && (
           <StepIndicator currentStep={step} />
         )}
 
