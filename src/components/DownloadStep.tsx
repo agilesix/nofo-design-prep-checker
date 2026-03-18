@@ -23,6 +23,25 @@ export default function DownloadStep({
   const downloadName = fileName;
   const acceptedCount = acceptedFixes.length;
 
+  const strings = (content as any).downloadStep ?? (content as any).download ?? {};
+
+  const headingText: string = strings.headingText ?? 'Download your corrected document';
+  const primaryAlertHeading: string = strings.primaryAlertHeading ?? 'This file is ready for design handoff.';
+  const primaryAlertBody: string =
+    strings.primaryAlertBody ??
+    'Hand it off to your designer or import it directly into NOFO Builder to begin the design process.';
+  const secondaryAlertHeading: string =
+    strings.secondaryAlertHeading ?? 'Your original Word document remains your source of truth.';
+  const secondaryAlertBody: string =
+    strings.secondaryAlertBody ??
+    'Continue using it for internal review, routing, SharePoint uploads, and Grant Solutions. The downloaded file is a design-ready copy — not a replacement for your original content guide document.';
+  const noManualFixesLabel: string = strings.noManualFixesLabel ?? 'No manual fixes accepted';
+  const originalFileLabel: string = strings.originalFileLabel ?? 'Original file:';
+  const downloadAsLabel: string = strings.downloadAsLabel ?? 'Download as:';
+  const downloadedMessageSuffix: string =
+    strings.downloadedMessageSuffix ?? 'has been downloaded to your computer.';
+  const startOverLabel: string = strings.startOverLabel ?? '← Check another document';
+
   const handleDownloadClick = async (): Promise<void> => {
     setIsDownloading(true);
     try {
@@ -41,19 +60,19 @@ export default function DownloadStep({
     if (autoAppliedCount > 0) {
       parts.push(`${autoAppliedCount} change${autoAppliedCount === 1 ? '' : 's'} applied automatically`);
     }
-    if (parts.length === 0) return 'No manual fixes accepted';
+    if (parts.length === 0) return noManualFixesLabel;
     return parts.join(' + ');
   })();
 
   return (
     <div className="margin-top-4">
-      <h1 className="usa-h1">Download your corrected document</h1>
+      <h1 className="usa-h1">{headingText}</h1>
 
       <div className="usa-alert usa-alert--info usa-alert--slim margin-bottom-3">
         <div className="usa-alert__body">
           <p className="usa-alert__text">
-            <strong>This file is ready for design handoff.</strong>{' '}
-            Hand it off to your designer or import it directly into NOFO Builder to begin the design process.
+            <strong>{primaryAlertHeading}</strong>{' '}
+            {primaryAlertBody}
           </p>
         </div>
       </div>
@@ -61,9 +80,8 @@ export default function DownloadStep({
       <div className="usa-alert usa-alert--info usa-alert--slim margin-bottom-4">
         <div className="usa-alert__body">
           <p className="usa-alert__text">
-            <strong>Your original Word document remains your source of truth.</strong>{' '}
-            Continue using it for internal review, routing, SharePoint uploads, and Grant Solutions.
-            The downloaded file is a design-ready copy \u2014 not a replacement for your original content guide document.
+            <strong>{secondaryAlertHeading}</strong>{' '}
+            {secondaryAlertBody}
           </p>
         </div>
       </div>
@@ -73,11 +91,11 @@ export default function DownloadStep({
           {/* File card */}
           <div className="border-1px border-base-light radius-md padding-3 margin-bottom-3 bg-white">
             <div className="display-flex flex-align-center margin-bottom-2">
-              <span className="text-base-dark font-body-sm margin-right-1">Original file:</span>
+              <span className="text-base-dark font-body-sm margin-right-1">{originalFileLabel}</span>
               <span className="font-body-sm text-bold">{fileName}</span>
             </div>
             <div className="bg-blue-5 border-1px border-blue-20 radius-sm padding-2">
-              <span className="font-body-sm text-base-dark">Download as:&nbsp;</span>
+              <span className="font-body-sm text-base-dark">{downloadAsLabel}&nbsp;</span>
               <span className="font-body-sm text-bold">{downloadName}</span>
             </div>
           </div>
@@ -115,7 +133,7 @@ export default function DownloadStep({
         <div className="usa-alert usa-alert--success margin-bottom-4">
           <div className="usa-alert__body">
             <p className="usa-alert__text">
-              <strong>{downloadName}</strong> has been downloaded to your computer.
+              <strong>{downloadName}</strong> {downloadedMessageSuffix}
             </p>
           </div>
         </div>
@@ -127,7 +145,7 @@ export default function DownloadStep({
         className="usa-link"
         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline' }}
       >
-        \u2190 Check another document
+        {startOverLabel}
       </button>
     </div>
   );
