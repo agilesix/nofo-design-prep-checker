@@ -5,17 +5,17 @@ import { Link } from 'react-router-dom';
 
 const IMPACT_STATS: { headline: string; description: string }[] = [
   {
-    headline: '2.5\u20133.5 hrs saved per NOFO',
+    headline: '2.5–3.5 hrs saved per NOFO',
     description: 'of staff time returned to program work',
   },
   {
-    headline: '750\u20131,050 hrs saved annually',
+    headline: '750–1,050 hrs saved annually',
     description: 'across 300 SimplerNOFOs per year',
   },
   {
     headline: 'Every link, every time',
     description:
-      'a typical NOFO has 60\u2013100+ hyperlinks \u2014 the manual check was often done partially or skipped entirely',
+      'a typical NOFO has 60–100+ hyperlinks — the manual check was often done partially or skipped entirely',
   },
   {
     headline: 'Consistent quality',
@@ -25,7 +25,7 @@ const IMPACT_STATS: { headline: string; description: string }[] = [
   {
     headline: 'Less precision-intensive, repetitive work',
     description:
-      'the issue, the reason it matters, and exactly what to do are surfaced together \u2014 no context switching, no hunting through a dense content guide',
+      'the issue, the reason it matters, and exactly what to do are surfaced together — no context switching, no hunting through a dense content guide',
   },
 ];
 

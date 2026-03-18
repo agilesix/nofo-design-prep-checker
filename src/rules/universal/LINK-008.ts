@@ -51,7 +51,7 @@ const LINK_008: Rule = {
         for (const email of matches) {
           results.push({
             ruleId: 'LINK-008',
-            description: `Email address converted to a mailto: link \u2014 ${email}`,
+            description: `Email address converted to a mailto: link — ${email}`,
             targetField: 'email.mailto',
             value: email,
           } satisfies AutoAppliedChange);

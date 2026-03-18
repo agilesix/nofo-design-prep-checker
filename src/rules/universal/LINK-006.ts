@@ -73,9 +73,9 @@ const LINK_006: Rule = {
           sectionId,
           location: href,
           description:
-            `The anchor "#${anchor}" wasn\u2019t found, but a likely match was found: "#${fuzzy}". ` +
+            `The anchor "#${anchor}" wasn't found, but a likely match was found: "#${fuzzy}". ` +
             `Accept to update the link, or skip to leave it unchanged.`,
-          suggestedFix: `Retarget "#${anchor}" \u2192 "#${fuzzy}"`,
+          suggestedFix: `Retarget "#${anchor}" → "#${fuzzy}"`,
           inputRequired: {
             type: 'text',
             label: 'Replacement anchor',
