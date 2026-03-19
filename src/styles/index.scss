@@ -13,19 +13,16 @@
   font-size: 0.9rem;
 }
 
-// Footer primary link — plain weight, no underline, explicit theme link colors.
-// USWDS forces color:#171716 on this element; global a:visited then overrides
-// it with violet-60 (#665190, purple) once the user has visited /about.
-// Pin all four states to the resolved theme link token values so the link
-// behaves predictably regardless of visit history and stays in sync with
-// the configured USWDS theme.
+// Footer primary link — plain weight, no underline, theme link color.
+// Suppress the visited state: for a navigation link the violet visited
+// color (purple) is confusing — keep it mint at all times.
 .usa-footer__primary-link {
   font-weight: normal;
   text-decoration: none;
   color: #286846; // mint-60 — $theme-link-color
 
   &:visited {
-    color: #665190; // violet-60 — $theme-link-visited-color
+    color: #286846; // same as default — no visited distinction for nav links
   }
 
   &:hover {
@@ -38,14 +35,24 @@
   }
 }
 
-// Single "About" nav link — skip the hamburger menu on small screens.
-// On mobile USWDS hides .usa-nav and shows .usa-menu-btn; with only one link
-// there's no need for a drawer, so we keep the link visible at all widths.
+// Single "About" nav link — skip the hamburger menu on all screen sizes.
+// On mobile, USWDS sets .usa-nav-container to block and hides .usa-nav;
+// override both so the About link sits inline with the logo on the same row.
 .usa-menu-btn {
   display: none !important;
 }
 
 @media all and (max-width: 63.99em) {
+  .usa-nav-container {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  .usa-navbar {
+    flex: 1 1 auto !important;
+  }
+
   .usa-nav {
     display: flex !important;
     flex-direction: row !important;
@@ -56,6 +63,7 @@
     overflow-y: visible !important;
     padding: 0 !important;
     width: auto !important;
+    flex: 0 0 auto !important;
     z-index: auto !important;
   }
 
