@@ -8,7 +8,19 @@
       "Bash(node:*)",
       "Bash(npm test:*)",
       "Bash(npx eslint:*)",
-      "WebFetch(domain:www.apache.org)"
+      "WebFetch(domain:www.apache.org)",
+      "Bash(cat /Users/benjaminbrasso/nofo-design-prep-checker/.github/workflows/*.yml)",
+      "Bash(gh repo:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr:*)",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git pull:*)",
+      "Bash(python3:*)",
+      "Bash(git rebase:*)",
+      "Bash(git stash:*)"
     ]
   }
 }
