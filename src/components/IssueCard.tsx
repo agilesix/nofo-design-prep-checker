@@ -218,7 +218,7 @@ export default function IssueCard({
                 role="status"
                 className="display-block font-body-xs text-base margin-top-05"
               >
-                {termCount} of {issue.inputRequired.termCountRange} keywords entered
+                {termCount} of {issue.inputRequired.termCountRange} terms entered
               </span>
             )}
           </div>
