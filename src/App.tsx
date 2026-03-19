@@ -292,39 +292,31 @@ export default function App(): React.ReactElement {
         <Route path="/about" element={<AboutPage />} />
       </Routes>
 
-      <footer className="usa-footer usa-footer--slim" role="contentinfo">
-        <div className="usa-footer__primary-section">
-          <div className="grid-container">
-            <div className="usa-footer__primary-content usa-footer__primary-content--collapsible">
-              <nav className="usa-footer__nav" aria-label="Footer navigation">
-                <ul className="usa-list usa-list--unstyled">
-                  <li>
-                    <Link to="/about" className="usa-footer__primary-link">
-                      About this tool
-                    </Link>
-                  </li>
-                </ul>
-              </nav>
+      <footer role="contentinfo" className="site-footer">
+        {/* ── Upper band: light mint background, brand + nav link ── */}
+        <div className="site-footer__upper">
+          <div className="site-footer__inner">
+            <div className="site-footer__brand">
+              <p className="margin-0 font-body-sm text-bold">SimplerNOFOs</p>
+              <p className="margin-top-05 margin-bottom-0 font-body-xs text-base-dark">
+                A tool for the HHS SimplerNOFOs initiative
+              </p>
             </div>
+            <nav aria-label="Footer navigation">
+              <Link to="/about" className="font-body-sm">About this tool</Link>
+            </nav>
           </div>
         </div>
-        <div className="usa-footer__secondary-section">
-          <div className="grid-container">
-            <div className="grid-row grid-gap-2 flex-align-center">
-              <div className="grid-col-fill">
-                <p className="margin-0 font-body-sm text-base-dark">
-                  <strong>A tool for the HHS SimplerNOFOs initiative</strong>
-                </p>
-                <p className="margin-top-05 margin-bottom-0 font-body-3xs text-base-dark">
-                  {content.app.privacyNoticeFooter}
-                </p>
-              </div>
-              <div className="grid-col-auto">
-                <p className="margin-0 font-body-3xs text-base-dark text-right">
-                  © 2026 SimplerNOFOs — Apache 2.0 License
-                </p>
-              </div>
-            </div>
+
+        {/* ── Lower band: dark forest green, privacy + copyright ── */}
+        <div className="site-footer__lower">
+          <div className="site-footer__inner site-footer__lower-inner">
+            <p className="margin-0 font-body-3xs site-footer__privacy">
+              🔒 {content.app.privacyNoticeFooter}
+            </p>
+            <p className="margin-0 font-body-3xs site-footer__copyright">
+              © 2026 SimplerNOFOs — Apache 2.0 License
+            </p>
           </div>
         </div>
       </footer>
