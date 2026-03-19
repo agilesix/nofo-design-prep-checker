@@ -72,6 +72,10 @@ export interface IssueInputSpec {
   validationPattern?: string;
   validationMessage?: string;
   targetField: string;
+  /** Show a live "N of <range> keywords entered" counter below the field. */
+  termCountRange?: string;
+  /** Minimum comma-separated terms required before Accept is enabled. */
+  minTermCount?: number;
 }
 
 export interface Issue {
