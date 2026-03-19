@@ -41,6 +41,15 @@ export default function IssueCard({
 
   const isResolved = resolution !== 'unreviewed';
 
+  const termCount = issue.inputRequired?.termCountRange !== undefined
+    ? inputValue.split(',').filter(t => t.trim().length > 0).length
+    : null;
+
+  const belowMinTerms =
+    issue.inputRequired?.minTermCount !== undefined &&
+    termCount !== null &&
+    termCount < issue.inputRequired.minTermCount;
+
   function handleAccept(): void {
     if (issue.inputRequired && !issue.instructionOnly) {
       // Validate input
@@ -203,6 +212,15 @@ export default function IssueCard({
                   .join(' ') || undefined}
               />
             )}
+
+            {issue.inputRequired.termCountRange && termCount !== null && (
+              <span
+                role="status"
+                className="display-block font-body-xs text-base margin-top-05"
+              >
+                {termCount} of {issue.inputRequired.termCountRange} keywords entered
+              </span>
+            )}
           </div>
         )}
 
@@ -219,6 +237,7 @@ export default function IssueCard({
                 type="button"
                 className="usa-button usa-button--small"
                 onClick={handleAccept}
+                disabled={belowMinTerms}
               >
                 {content.review.actions.accept}
               </button>
