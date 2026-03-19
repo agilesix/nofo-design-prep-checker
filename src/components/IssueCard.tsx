@@ -9,6 +9,7 @@ interface IssueCardProps {
   onAccept: (fix: AcceptedFix) => void;
   onSkip: () => void;
   onKeepAsBold?: () => void;
+  onUndo: () => void;
 }
 
 const SEVERITY_CLASSES: Record<string, string> = {
@@ -29,6 +30,7 @@ export default function IssueCard({
   onAccept,
   onSkip,
   onKeepAsBold,
+  onUndo,
 }: IssueCardProps): React.ReactElement {
   const [inputValue, setInputValue] = useState(issue.inputRequired?.prefill ?? '');
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -67,9 +69,19 @@ export default function IssueCard({
     });
   }
 
+  const resolvedBgStyle: React.CSSProperties = isResolved
+    ? { backgroundColor: resolution === 'accepted' ? '#ecf3ec' : '#f0f0f0' }
+    : {};
+
+  function handleUndo(): void {
+    setValidationError(null);
+    onUndo();
+  }
+
   return (
     <div
       className={`usa-alert ${alertClass} issue-card margin-bottom-3`}
+      style={resolvedBgStyle}
       aria-labelledby={`issue-title-${issue.id}`}
     >
       <div className="usa-alert__body">
@@ -114,7 +126,7 @@ export default function IssueCard({
           </div>
         )}
 
-        {issue.inputRequired && !issue.instructionOnly && (
+        {issue.inputRequired && !issue.instructionOnly && !isResolved && (
           <div className="usa-form-group margin-top-2">
             <label className="usa-label font-body-sm" htmlFor={inputId}>
               {issue.inputRequired.label}
@@ -194,6 +206,12 @@ export default function IssueCard({
           </div>
         )}
 
+        {isResolved && issue.inputRequired && !issue.instructionOnly && inputValue.trim() && (
+          <p className="font-body-sm margin-top-2" style={{ color: '#2e7d32' }}>
+            ✓ Value recorded: {inputValue.trim()}
+          </p>
+        )}
+
         {!isResolved && (
           <div className="margin-top-3 display-flex flex-gap-2 flex-wrap">
             {!issue.instructionOnly && (
@@ -227,9 +245,15 @@ export default function IssueCard({
         )}
 
         {isResolved && (
-          <p className="font-body-xs text-base margin-top-2">
-            Status: <strong>{content.review.resolution[resolution]}</strong>
-          </p>
+          <div className="margin-top-2">
+            <button
+              type="button"
+              className="usa-button usa-button--unstyled font-body-sm"
+              onClick={handleUndo}
+            >
+              ↩ Undo
+            </button>
+          </div>
         )}
       </div>
     </div>

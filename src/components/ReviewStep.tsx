@@ -57,6 +57,11 @@ export default function ReviewStep({
     setAcceptedFixes(prev => prev.filter(f => f.issueId !== issueId));
   }, []);
 
+  const handleUndo = useCallback((issueId: string) => {
+    setResolutions(prev => ({ ...prev, [issueId]: 'unreviewed' }));
+    setAcceptedFixes(prev => prev.filter(f => f.issueId !== issueId));
+  }, []);
+
   const handleContinue = useCallback(() => {
     onComplete(acceptedFixes, resolutions);
   }, [onComplete, acceptedFixes, resolutions]);
@@ -156,6 +161,7 @@ export default function ReviewStep({
                       ? () => handleKeepAsBold(issue.id)
                       : undefined
                   }
+                  onUndo={() => handleUndo(issue.id)}
                 />
               ))}
             </div>
