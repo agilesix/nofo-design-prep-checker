@@ -13,26 +13,47 @@
   font-size: 0.9rem;
 }
 
-// Footer primary link — plain weight, no underline, theme link color.
-// Suppress the visited state: for a navigation link the violet visited
-// color (purple) is confusing — keep it mint at all times.
-.usa-footer__primary-link {
-  font-weight: normal;
-  text-decoration: none;
-  color: #286846; // mint-60 — $theme-link-color
+// ─── Footer two-band layout ────────────────────────────────────────────────
 
-  &:visited {
-    color: #286846; // same as default — no visited distinction for nav links
-  }
+// Upper band — light mint background with a teal top border
+.site-footer__upper {
+  background-color: #dbf6ed; // mint-5
+  border-top: 3px solid #5abf95; // mint-30
+}
 
-  &:hover {
-    text-decoration: underline;
-    color: #204e34; // mint-70 — $theme-link-hover-color
-  }
+// Lower band — dark forest green (same token as the header identifier)
+.site-footer__lower {
+  background-color: #204e34; // mint-70
+}
 
-  &:active {
-    color: #193324; // mint-80 — $theme-link-active-color
-  }
+// Shared inner container: max-width centered, flex two-column layout
+.site-footer__inner {
+  max-width: 60rem; // 960px
+  margin-left: auto;
+  margin-right: auto;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+// Lower band overrides: vertically centered columns, tighter vertical padding
+.site-footer__lower-inner {
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+// Lower band text — white at reduced opacity
+.site-footer__privacy {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.site-footer__copyright {
+  color: rgba(255, 255, 255, 0.5);
 }
 
 // Single "About" nav link — skip the hamburger menu on all screen sizes.
@@ -231,7 +252,7 @@
 // Print styles for summary report
 @media print {
   .usa-header,
-  .usa-footer,
+  .site-footer,
   .usa-button,
   .usa-step-indicator {
     display: none !important;
