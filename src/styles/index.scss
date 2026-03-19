@@ -13,14 +13,52 @@
   font-size: 0.9rem;
 }
 
-// Footer primary link — plain weight, no underline (global link styles
-// apply text-decoration: underline to all <a> tags; override here)
+// Footer primary link — plain weight, no underline, explicit theme link colors.
+// USWDS sets color:#1b1b1b on this element; global a:visited can override it
+// with violet-60 (purple). Pin all states to the theme link tokens so the link
+// behaves consistently regardless of visit history.
 .usa-footer__primary-link {
   font-weight: normal;
   text-decoration: none;
+  color: #286846; // mint-60 — $theme-link-color
+
+  &:visited {
+    color: #665190; // violet-60 — $theme-link-visited-color
+  }
 
   &:hover {
     text-decoration: underline;
+    color: #204e34; // mint-70 — $theme-link-hover-color
+  }
+
+  &:active {
+    color: #193324; // mint-80 — $theme-link-active-color
+  }
+}
+
+// Single "About" nav link — skip the hamburger menu on small screens.
+// On mobile USWDS hides .usa-nav and shows .usa-menu-btn; with only one link
+// there's no need for a drawer, so we keep the link visible at all widths.
+.usa-menu-btn {
+  display: none !important;
+}
+
+@media all and (max-width: 63.99em) {
+  .usa-nav {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    position: static !important;
+    background-color: transparent !important;
+    border-right: none !important;
+    overflow-y: visible !important;
+    padding: 0 !important;
+    width: auto !important;
+    z-index: auto !important;
+  }
+
+  .usa-nav__close {
+    display: none !important;
   }
 }
 
