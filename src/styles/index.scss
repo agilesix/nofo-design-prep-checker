@@ -88,6 +88,9 @@
   }
 
   // Match desktop nav link appearance: same size, weight, and color.
+  // position:relative is required so the ::after underline bar (from
+  // .usa-header--basic .usa-nav__link:hover:after) has an anchor to
+  // position against — without it the bar renders incorrectly.
   .usa-nav__link {
     font-size: 0.88rem !important;
     font-weight: 700 !important;
@@ -96,6 +99,7 @@
     display: flex !important;
     align-items: center !important;
     padding: 1rem !important;
+    position: relative !important;
   }
 }
 
