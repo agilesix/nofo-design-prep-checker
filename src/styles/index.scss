@@ -20,19 +20,19 @@
 .usa-footer__primary-link {
   font-weight: normal;
   text-decoration: none;
-  color: #286846; // mint-60 — $theme-link-color
+  color: var(--usa-link-color); // mint-60 — $theme-link-color
 
   &:visited {
-    color: #665190; // violet-60 — $theme-link-visited-color
+    color: var(--usa-link-visited-color); // violet-60 — $theme-link-visited-color
   }
 
   &:hover {
     text-decoration: underline;
-    color: #204e34; // mint-70 — $theme-link-hover-color
+    color: var(--usa-link-hover-color); // mint-70 — $theme-link-hover-color
   }
 
   &:active {
-    color: #193324; // mint-80 — $theme-link-active-color
+    color: var(--usa-link-active-color); // mint-80 — $theme-link-active-color
   }
 }
 
