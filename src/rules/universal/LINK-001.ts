@@ -32,18 +32,12 @@ const LINK_001: Rule = {
           id: `LINK-001-${index}`,
           ruleId: 'LINK-001',
           title: 'Raw URL used as link text',
-          severity: 'error',
+          severity: 'warning',
           sectionId,
           description: `A hyperlink uses the raw URL as its display text: "${text.slice(0, 80)}${text.length > 80 ? '…' : ''}". Link text should describe the destination, not show the URL.`,
-          suggestedFix: 'Replace the link text with a descriptive phrase that tells users where the link goes.',
+          suggestedFix: "Update this link's display text in Word to describe where it goes — for example, 'Health IT Standards and Interoperability' instead of the raw URL. Right-click the link in Word → Edit Hyperlink → change the Text to display field.",
           location: href,
-          inputRequired: {
-            type: 'text',
-            label: 'New link text',
-            placeholder: 'Descriptive link text',
-            hint: 'Describe where the link goes. Avoid "click here" or raw URLs.',
-            targetField: `link.LINK-001-${index}.text`,
-          },
+          instructionOnly: true,
         });
       }
     });
