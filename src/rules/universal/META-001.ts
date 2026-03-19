@@ -1,4 +1,5 @@
 import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
+import { contentGuides } from '../../data/contentGuides';
 
 /**
  * META-001: Document Author metadata check
@@ -6,7 +7,7 @@ import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types
  */
 const META_001: Rule = {
   id: 'META-001',
-  check(doc: ParsedDocument, _options: RuleRunnerOptions): Issue[] {
+  check(doc: ParsedDocument, options: RuleRunnerOptions): Issue[] {
     const issues: Issue[] = [];
 
     // Author metadata is checked via the zip archive's docProps/core.xml
@@ -34,6 +35,8 @@ const META_001: Rule = {
     // For now, surface a warning so users know to check it
     void authorPattern; // used in validation
 
+    const prefill = detectAuthorPrefill(doc.rawText, options.contentGuideId);
+
     issues.push({
       id: 'META-001-author',
       ruleId: 'META-001',
@@ -45,16 +48,56 @@ const META_001: Rule = {
       inputRequired: {
         type: 'text',
         label: 'Document author',
-        placeholder: 'Administration for Children and Families (ACF)',
+        placeholder: 'e.g. Centers for Disease Control and Prevention (CDC)',
         hint: 'Use the format: Full OpDiv Name (ABBREVIATION)',
         targetField: 'metadata.author',
         validationPattern: '^.+\\s+\\([A-Z]{2,10}\\)$',
         validationMessage: 'Must match format: Full Name (ABBREVIATION)',
+        prefill: prefill ?? undefined,
+        prefillNote: prefill
+          ? 'Suggested based on your document. Confirm this is correct before accepting.'
+          : undefined,
       },
     });
 
     return issues;
   },
 };
+
+/**
+ * Detect the most likely OpDiv author string from the content guide or document text.
+ * Returns a formatted "Full Name (ABBR)" string, or null if nothing could be detected.
+ */
+function detectAuthorPrefill(rawText: string, contentGuideId: string | null): string | null {
+  // 1. Content guide is the strongest signal — use its OpDiv directly.
+  if (contentGuideId) {
+    const guide = contentGuides.find(g => g.id === contentGuideId);
+    if (guide) {
+      const fullName = guide.detectionSignals.names[0];
+      const abbr = guide.opDiv;
+      if (fullName && abbr) {
+        return `${fullName} (${abbr})`;
+      }
+    }
+  }
+
+  // 2. Fall back to scanning raw document text for known OpDiv signals.
+  for (const guide of contentGuides) {
+    const { names, abbreviations } = guide.detectionSignals;
+    const nameMatch = names.some(name => rawText.includes(name));
+    const abbrMatch = abbreviations.some(abbr =>
+      new RegExp(`\\b${abbr}\\b`).test(rawText)
+    );
+    if (nameMatch || abbrMatch) {
+      const fullName = names[0];
+      const abbr = guide.opDiv;
+      if (fullName && abbr) {
+        return `${fullName} (${abbr})`;
+      }
+    }
+  }
+
+  return null;
+}
 
 export default META_001;
