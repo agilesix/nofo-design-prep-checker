@@ -102,7 +102,7 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
     }
   }
 
-  // 3. Distinctive noun phrases from H2/H3 section headings.
+  // 3. Distinctive noun phrases from H2+ section headings.
   const headingTerms = extractHeadingTerms(doc.sections);
   for (const term of headingTerms) {
     if (keywords.length >= 10) break;
