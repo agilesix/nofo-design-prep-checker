@@ -295,7 +295,7 @@ export default function App(): React.ReactElement {
       <footer role="contentinfo" className="site-footer">
         {/* ── Upper band: light mint background, brand + nav link ── */}
         <div className="site-footer__upper">
-          <div className="site-footer__inner">
+          <div className="site-footer__inner grid-container">
             <div className="site-footer__brand">
               <p className="margin-0 font-body-sm text-bold">SimplerNOFOs</p>
               <p className="margin-top-05 margin-bottom-0 font-body-xs text-base-dark">
@@ -310,7 +310,7 @@ export default function App(): React.ReactElement {
 
         {/* ── Lower band: dark forest green, privacy + copyright ── */}
         <div className="site-footer__lower">
-          <div className="site-footer__inner site-footer__lower-inner">
+          <div className="site-footer__inner site-footer__lower-inner grid-container">
             <p className="margin-0 font-body-3xs site-footer__privacy">
               🔒 {content.app.privacyNoticeFooter}
             </p>
