@@ -43,14 +43,21 @@
 }
 
 @media all and (max-width: 63.99em) {
-  .usa-nav-container {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
+  // .usa-navbar has border-bottom at all sizes; with our flex layout it only
+  // spans the logo area. Move the line to .usa-header so it spans full width.
+  .usa-header {
+    border-bottom: 1px solid #e6e6e2;
   }
 
   .usa-navbar {
     flex: 1 1 auto !important;
+    border-bottom: none !important;
+  }
+
+  .usa-nav-container {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
   }
 
   .usa-nav {
@@ -71,14 +78,24 @@
     display: none !important;
   }
 
-  // Strip mobile drawer styles from the nav item — no top border, no
-  // background-color on hover (the desktop underline bar takes care of hover).
+  // Strip mobile drawer styles — no top border, no background on hover.
   .usa-nav__primary-item {
     border-top: none !important;
   }
 
   .usa-nav__primary a:not(.usa-button):hover {
     background-color: transparent !important;
+  }
+
+  // Match desktop nav link appearance: same size, weight, and color.
+  .usa-nav__link {
+    font-size: 0.88rem !important;
+    font-weight: 700 !important;
+    line-height: 1 !important;
+    color: #76766a !important; // matches desktop usa-nav__link color
+    display: flex !important;
+    align-items: center !important;
+    padding: 1rem !important;
   }
 }
 
