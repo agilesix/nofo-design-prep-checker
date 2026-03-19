@@ -14,25 +14,26 @@
 }
 
 // Footer primary link — plain weight, no underline, explicit theme link colors.
-// USWDS sets color:#1b1b1b on this element; global a:visited can override it
-// with violet-60 (purple). Pin all states to the theme link tokens so the link
-// behaves consistently regardless of visit history.
+// USWDS forces color:#171716 on this element; global a:visited then overrides
+// it with violet-60 (#665190, purple) once the user has visited /about.
+// Pin all four states to the compiled hex values for our theme link tokens so
+// the link behaves predictably regardless of visit history.
 .usa-footer__primary-link {
   font-weight: normal;
   text-decoration: none;
-  color: var(--usa-link-color); // mint-60 — $theme-link-color
+  color: #286846; // mint-60 — $theme-link-color
 
   &:visited {
-    color: var(--usa-link-visited-color); // violet-60 — $theme-link-visited-color
+    color: #665190; // violet-60 — $theme-link-visited-color
   }
 
   &:hover {
     text-decoration: underline;
-    color: var(--usa-link-hover-color); // mint-70 — $theme-link-hover-color
+    color: #204e34; // mint-70 — $theme-link-hover-color
   }
 
   &:active {
-    color: var(--usa-link-active-color); // mint-80 — $theme-link-active-color
+    color: #193324; // mint-80 — $theme-link-active-color
   }
 }
 
