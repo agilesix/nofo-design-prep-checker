@@ -70,6 +70,16 @@
   .usa-nav__close {
     display: none !important;
   }
+
+  // Strip mobile drawer styles from the nav item — no top border, no
+  // background-color on hover (the desktop underline bar takes care of hover).
+  .usa-nav__primary-item {
+    border-top: none !important;
+  }
+
+  .usa-nav__primary a:not(.usa-button):hover {
+    background-color: transparent !important;
+  }
 }
 
 // Step indicator — collapse the default margin-top USWDS places on __header
