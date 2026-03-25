@@ -21,6 +21,9 @@ export async function buildDocx(
   const emailChanges = autoAppliedChanges.filter(
     c => c.targetField === 'email.mailto' && c.value
   );
+  const hasDoublespaceFix = autoAppliedChanges.some(
+    c => c.targetField === 'text.doublespace'
+  );
 
   // Apply metadata patches
   if (metaFixes.length > 0) {
@@ -35,6 +38,11 @@ export async function buildDocx(
   // Apply auto-applied email mailto patches
   if (emailChanges.length > 0) {
     await applyEmailMailtoFixes(zip, emailChanges.map(c => c.value as string));
+  }
+
+  // Apply double-space collapse
+  if (hasDoublespaceFix) {
+    await applyDoublespaceFix(zip);
   }
 
   // Apply note fixes (two-file operation)
@@ -126,6 +134,58 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
 
   const serializer = new XMLSerializer();
   zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+}
+
+/**
+ * CLEAN-004: Collapse runs of two or more spaces to a single space in body text.
+ *
+ * Skips:
+ *  - <w:t> elements inside table cells (<w:tc>)
+ *  - <w:t> elements in paragraphs whose style begins with "Heading" or equals "Title"
+ */
+async function applyDoublespaceFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const wTElements = Array.from(xmlDoc.getElementsByTagName('w:t'));
+  for (const wT of wTElements) {
+    const text = wT.textContent ?? '';
+    if (!/ {2,}/.test(text)) continue;
+
+    // Skip if inside a table cell
+    if (findAncestorByLocalName(wT, 'tc')) continue;
+
+    // Skip if in a heading paragraph
+    const wP = findAncestorByLocalName(wT, 'p');
+    if (wP && isHeadingParagraph(wP)) continue;
+
+    wT.textContent = text.replace(/ {2,}/g, ' ');
+  }
+
+  const serializer = new XMLSerializer();
+  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+}
+
+function findAncestorByLocalName(el: Element, localName: string): Element | null {
+  let current: Element | null = el.parentElement;
+  while (current) {
+    if (current.localName === localName) return current;
+    current = current.parentElement;
+  }
+  return null;
+}
+
+function isHeadingParagraph(wP: Element): boolean {
+  const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
+  if (!pPr) return false;
+  const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+  if (!pStyle) return false;
+  const styleVal = pStyle.getAttribute('w:val') ?? '';
+  return styleVal.startsWith('Heading') || styleVal === 'Title';
 }
 
 async function applyNoteFixes(_zip: JSZip): Promise<void> {
