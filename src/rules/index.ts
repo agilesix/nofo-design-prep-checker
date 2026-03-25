@@ -20,6 +20,7 @@ import NOTE_003 from './universal/NOTE-003';
 import IMG_001 from './universal/IMG-001';
 import LIST_001 from './universal/LIST-001';
 import FORMAT_001 from './universal/FORMAT-001';
+import CLEAN_004 from './universal/CLEAN-004';
 
 // OpDiv-specific rules
 import STRUCT_001 from './opdiv/STRUCT-001';
@@ -47,6 +48,7 @@ import STRUCT_026 from './opdiv/STRUCT-026';
  */
 export const allRules: Rule[] = [
   // Auto-apply rules (run first)
+  CLEAN_004,
   NOTE_003,
   LINK_006,
 
@@ -109,6 +111,7 @@ export {
   IMG_001,
   LIST_001,
   FORMAT_001,
+  CLEAN_004,
   STRUCT_001, STRUCT_002, STRUCT_003, STRUCT_004, STRUCT_005, STRUCT_006,
   STRUCT_007, STRUCT_008, STRUCT_009, STRUCT_010,
   STRUCT_020, STRUCT_021, STRUCT_022, STRUCT_023, STRUCT_024, STRUCT_025, STRUCT_026,
