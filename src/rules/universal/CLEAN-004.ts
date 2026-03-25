@@ -19,8 +19,13 @@ const CLEAN_004: Rule = {
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
 
-    // Guard: createTreeWalker may be absent in non-DOM test environments
-    if (typeof htmlDoc.createTreeWalker !== 'function') return [];
+    // Guard: some runtimes may lack TreeWalker support; log and skip instead of silently succeeding
+    if (typeof htmlDoc.createTreeWalker !== 'function') {
+      console.warn(
+        '[CLEAN-004] Skipping rule: document.createTreeWalker is not available in this runtime; results may be incomplete.'
+      );
+      return [];
+    }
 
     const walker = htmlDoc.createTreeWalker(
       htmlDoc.body ?? htmlDoc,
