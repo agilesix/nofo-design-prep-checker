@@ -143,7 +143,7 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
  *  - <w:t> elements inside table cells (<w:tc>)
  *  - <w:t> elements in heading paragraphs (pStyle starts with "Heading")
  *  - <w:t> elements in code/preformatted paragraphs (pStyle contains "Code",
- *    or equals "Pre" / "Preformatted" / "HTML Preformatted")
+ *    or equals "Pre" / "Preformatted" / "HTMLPreformatted")
  *
  * Note: double spaces spanning adjacent <w:t> node boundaries are not corrected —
  * this is a known limitation of per-run processing.
