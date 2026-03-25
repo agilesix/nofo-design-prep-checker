@@ -8,6 +8,9 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
  *
  * Excludes: headings (h1–h6), table cells (td/th), code/preformatted blocks.
  * Produces no output when zero instances are found.
+ *
+ * Note: double spaces that span adjacent Word runs (<w:t> node boundaries) are
+ * not detected or corrected — this is a known limitation of per-run processing.
  */
 const CLEAN_004: Rule = {
   id: 'CLEAN-004',
@@ -15,6 +18,14 @@ const CLEAN_004: Rule = {
   check(doc: ParsedDocument, _options: RuleRunnerOptions): AutoAppliedChange[] {
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
+
+    // Guard: some runtimes may lack TreeWalker support; log and skip instead of silently succeeding
+    if (typeof htmlDoc.createTreeWalker !== 'function') {
+      console.warn(
+        '[CLEAN-004] Skipping rule: document.createTreeWalker is not available in this runtime; results may be incomplete.'
+      );
+      return [];
+    }
 
     const walker = htmlDoc.createTreeWalker(
       htmlDoc.body ?? htmlDoc,
