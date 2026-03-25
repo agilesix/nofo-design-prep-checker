@@ -139,9 +139,14 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
 /**
  * CLEAN-004: Collapse runs of two or more spaces to a single space in body text.
  *
- * Skips:
+ * Skips (mirroring the HTML-scan exclusions in CLEAN-004.ts):
  *  - <w:t> elements inside table cells (<w:tc>)
- *  - <w:t> elements in paragraphs whose style begins with "Heading" or equals "Title"
+ *  - <w:t> elements in heading paragraphs (pStyle starts with "Heading")
+ *  - <w:t> elements in code/preformatted paragraphs (pStyle contains "Code",
+ *    or equals "Pre" / "Preformatted" / "HTML Preformatted")
+ *
+ * Note: double spaces spanning adjacent <w:t> node boundaries are not corrected —
+ * this is a known limitation of per-run processing.
  */
 async function applyDoublespaceFix(zip: JSZip): Promise<void> {
   const docFile = zip.file('word/document.xml');
@@ -159,9 +164,9 @@ async function applyDoublespaceFix(zip: JSZip): Promise<void> {
     // Skip if inside a table cell
     if (findAncestorByLocalName(wT, 'tc')) continue;
 
-    // Skip if in a heading paragraph
+    // Skip if in an excluded paragraph (heading or code-like style)
     const wP = findAncestorByLocalName(wT, 'p');
-    if (wP && isHeadingParagraph(wP)) continue;
+    if (wP && isExcludedParagraph(wP)) continue;
 
     wT.textContent = text.replace(/ {2,}/g, ' ');
   }
@@ -179,13 +184,22 @@ function findAncestorByLocalName(el: Element, localName: string): Element | null
   return null;
 }
 
-function isHeadingParagraph(wP: Element): boolean {
+function isExcludedParagraph(wP: Element): boolean {
   const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
   if (!pPr) return false;
   const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
   if (!pStyle) return false;
   const styleVal = pStyle.getAttribute('w:val') ?? '';
-  return styleVal.startsWith('Heading') || styleVal === 'Title';
+  // Headings
+  if (styleVal.startsWith('Heading')) return true;
+  // Code / preformatted styles
+  if (
+    styleVal.includes('Code') ||
+    styleVal === 'Pre' ||
+    styleVal === 'Preformatted' ||
+    styleVal === 'HTMLPreformatted'
+  ) return true;
+  return false;
 }
 
 async function applyNoteFixes(_zip: JSZip): Promise<void> {
