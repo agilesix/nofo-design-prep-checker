@@ -54,6 +54,12 @@ Universal rules run on every document regardless of which content guide is selec
 |---------|-------|----------|-------------|
 | LIST-001 | Manual bullet or numbered list | Warning | Consecutive paragraphs use manual bullet characters or numbering instead of proper Word list styles. |
 
+### Document readiness (CLEAN)
+
+| Rule ID | Title | Severity | Description |
+|---------|-------|----------|-------------|
+| CLEAN-004 | Collapse double spaces in body text (auto-apply) | — | Two or more consecutive spaces between words in body paragraphs are silently collapsed to a single space. Excludes headings, table cells, and code/preformatted blocks. |
+
 ### Text formatting (FORMAT)
 
 | Rule ID | Title | Severity | Description |
