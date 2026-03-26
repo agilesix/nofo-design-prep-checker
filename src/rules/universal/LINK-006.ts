@@ -268,7 +268,10 @@ function removeStopWords(text: string): string {
  * Pass 3 — numeric extraction:
  *   For manually-abbreviated bookmarks (e.g. "#Attach8OrgChart") that don't
  *   carry enough text for containment matching, extract all integers from the
- *   original anchor and search headings for `(structural keyword) N` patterns.
+ *   anchor and search headings for `(structural keyword) N` patterns. When
+ *   pass 2 detected and removed a trailing _N suffix, the stripped form is
+ *   used here (rather than the original) so that the suffix digit is not
+ *   extracted as a spurious additional candidate number.
  *   A match sets matchedByNumericExtraction on the result and the Review card
  *   warns the user that confidence is lower.
  */
@@ -391,10 +394,13 @@ function matchByNormalizedValue(
 }
 
 /**
- * Pass 3 fallback: extract all integers from the original (un-normalized)
- * anchor and search headings for `(structural keyword) N` patterns. Returns
- * a lower-confidence single/ambiguous result — sets matchedByNumericExtraction
- * so the Review card can display an appropriate warning.
+ * Pass 3 fallback: extract all integers from the anchor and search headings
+ * for `(structural keyword) N` patterns. The caller passes the stripped anchor
+ * (trailing _N removed) when pass 2 detected a Word numeric suffix, so that
+ * suffix digit is not extracted as an additional candidate number.
+ * Returns a lower-confidence single/ambiguous result — sets
+ * matchedByNumericExtraction so the Review card can display an appropriate
+ * warning.
  *
  * Structural keywords: attachment, section, step, part, appendix, exhibit.
  */
