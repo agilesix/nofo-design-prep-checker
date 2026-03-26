@@ -30,8 +30,8 @@ Universal rules run on every document regardless of which content guide is selec
 
 | Rule ID | Title | Severity | Description |
 |---------|-------|----------|-------------|
-| TABLE-001 | Table missing header row | Error | A table has no `<th>` elements. All tables must have headers for accessibility. |
-| TABLE-002 | Table missing caption | Warning | A table has no caption element. Captions help screen reader users understand table content. |
+| TABLE-001 | Table missing header row | Error | A table has no `<th>` elements in its first row. All multi-row tables must have a header row for accessibility. The issue card includes an estimated page number to help locate the table in Word. |
+| TABLE-002 | Table missing caption | Warning | A table has no caption element. Captions must follow the format `Table: Title of table` in normal (unstyled) text, placed directly above the table with no blank line — a bold line or heading does not count. Exempt table types (application contents, standard forms, application checklist, merit review criteria, reporting) are suppressed automatically where detectable; the issue card notes the exempt categories for cases the rule cannot detect. |
 | TABLE-003 | Table contains merged cells | Warning | A table uses `colspan` or `rowspan`. Merged cells can be difficult for assistive technology to interpret. |
 
 ### Footnotes and endnotes (NOTE)
