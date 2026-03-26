@@ -205,6 +205,57 @@ describe('LINK-006 fuzzy match — heading text', () => {
     const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
     expect(issue.inputRequired?.targetField).toBe('link.bookmark._Award-Info');
   });
+
+  // Issue 1: containment match for short anchors (no OOXML, no heading id)
+  it('matches Attachment_1 to heading "Attachment 1: Accreditation documentation" via containment', () => {
+    const doc = makeDoc(
+      '<h2>Attachment 1: Accreditation documentation</h2>' +
+      '<p><a href="#Attachment_1">See Attachment 1</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    // Slug derived from full heading text; colon+space collapsed to single underscore
+    expect(issue.inputRequired?.prefill).toBe('Attachment_1_Accreditation_documentation');
+    expect(issue.description).toContain('Attachment 1: Accreditation documentation');
+  });
+
+  // Issue 2: slugify preserves structure — colon/slash produce underscores, no chars dropped
+  it('slugifies heading with colon: "Step 3: Build Your Application" → Step_3_Build_Your_Application', () => {
+    const doc = makeDoc(
+      '<h2>Step 3: Build Your Application</h2>' +
+      '<p><a href="#_Step_3">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.inputRequired?.prefill).toBe('Step_3_Build_Your_Application');
+  });
+
+  it('slugifies heading with slash: "Step 3/4: Overview" → Step_3_4_Overview', () => {
+    const doc = makeDoc(
+      '<h2>Step 3/4: Overview</h2>' +
+      '<p><a href="#_Step_3">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.inputRequired?.prefill).toBe('Step_3_4_Overview');
+  });
+
+  // Issue 3: hint is set for heading-derived matches, absent for non-heading matches
+  it('includes a hint about underscores for heading-derived matches (no id)', () => {
+    const doc = makeDoc(
+      '<h2>Maintenance of Effort</h2>' +
+      '<p><a href="#_Maintenance_of_effort">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.inputRequired?.hint).toContain('underscores');
+  });
+
+  it('does not include the underscore hint for OOXML bookmark matches', () => {
+    const doc = makeDoc(
+      '<p><a href="#_Eligibility">link</a></p>',
+      xmlWithBookmarks('Eligibility')
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.inputRequired?.hint).toBeUndefined();
+  });
 });
 
   it('matches via containment when anchor is a subset of heading text', () => {

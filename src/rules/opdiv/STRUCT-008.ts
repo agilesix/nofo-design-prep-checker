@@ -19,9 +19,9 @@ const STRUCT_008: Rule = {
         id: 'STRUCT-008-missing',
         ruleId: 'STRUCT-008',
         title: 'Required "Trainee Eligibility" section not found',
-        severity: 'error',
+        severity: 'warning',
         sectionId: doc.sections[0]?.id ?? 'section-preamble',
-        description: 'This HRSA NOFO should contain a "Trainee Eligibility" section as required by the content guide. This section was not detected.',
+        description: 'This HRSA NOFO should contain a "Trainee Eligibility" section as required by the content guide. This section was not detected. Note: HRSA templates are updated periodically. If your template does not include this section, verify against the most recent version before acting on this warning. This tool may not always reflect the latest HRSA template.',
         suggestedFix: 'Verify that the document contains the Trainee Eligibility section with proper heading styles applied.',
         instructionOnly: true,
       });

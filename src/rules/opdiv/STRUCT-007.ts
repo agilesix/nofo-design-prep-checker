@@ -18,9 +18,9 @@ const STRUCT_007: Rule = {
         id: 'STRUCT-007-missing',
         ruleId: 'STRUCT-007',
         title: 'Required "Before You Begin" section not found',
-        severity: 'error',
+        severity: 'warning',
         sectionId: doc.sections[0]?.id ?? 'section-preamble',
-        description: 'HRSA NOFOs require a "Before You Begin" section at the start of the document. This section was not detected.',
+        description: 'HRSA NOFOs require a "Before You Begin" section at the start of the document. This section was not detected. Note: HRSA templates are updated periodically. If your template does not include this section, verify against the most recent version before acting on this warning. This tool may not always reflect the latest HRSA template.',
         suggestedFix: 'Verify that the document contains a "Before You Begin" section with proper heading styles applied.',
         instructionOnly: true,
       });

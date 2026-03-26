@@ -95,6 +95,9 @@ const LINK_006: Rule = {
             fieldDescription: `Current anchor: #${anchor}`,
             prefill: fuzzy,
             prefillNote,
+            hint: headingText
+              ? 'Note: spaces and punctuation in heading text may be normalized (for example, converted to hyphens or underscores) in anchor links.'
+              : undefined,
             targetField: `link.bookmark.${anchor}`,
           },
         } as Issue);
@@ -156,14 +159,23 @@ function getOoxmlBookmarkNames(xmlDoc: XMLDocument): string[] {
 // ─── Fuzzy matching ───────────────────────────────────────────────────────────
 
 /**
- * Convert a heading's display text to an anchor slug when the heading has no
- * id attribute. Replaces non-alphanumeric runs with underscores, then strips
- * leading/trailing underscores.
- * e.g. "Maintenance of Effort" → "Maintenance_of_Effort"
+ * Convert a heading's display text to an anchor slug, following the same
+ * format NOFO Builder uses for Word bookmark names:
+ *  1. Replace whitespace runs with underscores
+ *  2. Replace any remaining non-alphanumeric characters with underscores
+ *     (colons, slashes, parentheses, etc. — invalid in Word bookmark names)
+ *  3. Collapse consecutive underscores to a single underscore
+ *  4. Strip leading/trailing underscores
+ *
+ * e.g. "Maintenance of Effort"                          → "Maintenance_of_Effort"
+ * e.g. "Attachment 1: Accreditation documentation"      → "Attachment_1_Accreditation_documentation"
+ * e.g. "Step 3/4: Overview"                             → "Step_3_4_Overview"
  */
 function slugifyHeading(text: string): string {
   return text
-    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9_]/g, '_')
+    .replace(/_+/g, '_')
     .replace(/^_+|_+$/g, '');
 }
 
@@ -226,7 +238,11 @@ function findFuzzyMatch(
   if (idMatches.length > 1) return { kind: 'ambiguous' };
 
   // ── Source 3: HTML heading text (containment check) ─────────────────────────
-  // The normalized anchor must be contained within the normalized heading text.
+  // Uses substring matching: the normalized anchor must appear *within* the
+  // normalized heading text, not equal it. This handles short anchors like
+  // "Attachment_1" that target headings like "Attachment 1: Accreditation
+  // documentation" — the anchor normalizes to "attachment 1" and is found
+  // inside "attachment 1 accreditation documentation".
   // The suggested anchor prefers the heading's own id if mammoth assigned one;
   // otherwise derives from the matched heading text via slugifyHeading().
   // headingText is carried through so the Review card can display it for confirmation.

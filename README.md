@@ -23,7 +23,7 @@ This tool automates that process. The same comprehensive review now takes about 
 - **Document metadata** — key fields such as Author, Subject, and Keywords that support accessibility and consistency
 - **Document cleanliness** — common issues like unresolved comments, leftover instruction boxes, and placeholder text
 - **Heading structure** — obvious heading level and tagging inconsistencies that can affect navigation and readability
-- **Links** — internal and external link issues, including non-descriptive link text, basic formatting problems, and broken internal anchors (with fuzzy-match suggestions when a likely target can be found)
+- **Links** — internal and external link issues, including non-descriptive link text, basic formatting problems, and broken internal anchors (with fuzzy-match suggestions when a likely target can be found; suggested anchors are derived from heading text by converting spaces to underscores, normalizing punctuation, and collapsing repeated underscores — e.g. "Attachment 1: Overview" → `Attachment_1_Overview`)
 - **Tables** — structural issues that can cause accessibility or reading-order problems, including missing header rows (with estimated page numbers) and missing captions; captions must follow the `Table: Title of table` format in normal text — standard table types such as application checklists, merit review criteria, and forms are exempt from the caption requirement
 - **Footnotes and endnotes** — basic reference and linking issues
 - **Images** — missing or incomplete alternative text
@@ -48,6 +48,8 @@ Upload a NOFO `.docx` file and the tool will:
 All processing happens entirely in your browser. No file contents are sent to any server.
 
 ## Supported content guides
+
+> **Note on HRSA structural checks:** HRSA templates are updated more frequently than other OpDiv templates. Structural checks for HRSA guides (required sections such as "Before You Begin", "Trainee Eligibility", "Project Description", and "Program Requirements") are reported as **warnings** rather than errors. A missing section may reflect a recent template change rather than a writer error — always verify against the most current HRSA template before acting on these warnings.
 
 | OpDiv | Guide |
 |-------|-------|
