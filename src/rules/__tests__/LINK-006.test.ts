@@ -565,6 +565,58 @@ describe('LINK-006 numeric extraction fallback', () => {
     expect(issue.title).toBe('Internal bookmark link target not found');
   });
 
+  it('does NOT match "Section 3.1: Detail" for extracted number 3 (dotted hierarchical)', () => {
+    const doc = makeDoc(
+      '<h2>Section 3.1: Detail</h2>' +
+      '<p><a href="#Sec3Overview">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal bookmark link target not found');
+  });
+
+  it('does NOT match "Section 3-1: Detail" for extracted number 3 (hyphen hierarchical)', () => {
+    const doc = makeDoc(
+      '<h2>Section 3-1: Detail</h2>' +
+      '<p><a href="#Sec3Overview">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal bookmark link target not found');
+  });
+
+  it('does NOT match "Section 3/1: Detail" for extracted number 3 (slash hierarchical)', () => {
+    const doc = makeDoc(
+      '<h2>Section 3/1: Detail</h2>' +
+      '<p><a href="#Sec3Overview">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal bookmark link target not found');
+  });
+
+  it('still matches "Section 3: Background" for extracted number 3 (standalone)', () => {
+    const doc = makeDoc(
+      '<h2>Section 3: Background</h2>' +
+      '<p><a href="#Sec3Overview">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.description).toContain('Section 3');
+  });
+
+  it('does NOT extract Word suffix digit when pass 2 stripped it (Attach8OrgChart_1)', () => {
+    // Without the fix, pass 3 would receive "Attach8OrgChart_1" and extract
+    // both 8 and 1, matching both headings and returning ambiguous.
+    // With the fix, pass 3 receives "Attach8OrgChart" (suffix stripped) and
+    // extracts only 8, returning a single match.
+    const doc = makeDoc(
+      '<h2>Attachment 1: Something</h2>' +
+      '<h2>Attachment 8: Target</h2>' +
+      '<p><a href="#Attach8OrgChart_1">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.description).toContain('Attachment 8');
+  });
+
   it('does NOT use numeric extraction when pass 1 already resolved the anchor', () => {
     // Attachment_8 → "attachment 8" IS contained in "attachment 8 non duplication..."
     // so pass 1 should resolve it and pass 3 should never run
