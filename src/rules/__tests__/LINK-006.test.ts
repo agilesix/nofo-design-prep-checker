@@ -258,6 +258,96 @@ describe('LINK-006 fuzzy match — heading text', () => {
   });
 });
 
+// ─── Numeric suffix stripping (Word duplicate-heading anchors) ────────────────
+
+describe('LINK-006 numeric suffix stripping', () => {
+  it('matches _Project_narrative_1 → Project_narrative via OOXML bookmark after stripping _1', () => {
+    // First pass: "project narrative 1" ≠ "project narrative" → no match
+    // Second pass (strip _1): "project narrative" === "project narrative" → match
+    const doc = makeDoc(
+      '<p><a href="#_Project_narrative_1">link</a></p>',
+      xmlWithBookmarks('Project_narrative')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const issue = results[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.inputRequired?.prefill).toBe('Project_narrative');
+    expect(issue.inputRequired?.targetField).toBe('link.bookmark._Project_narrative_1');
+  });
+
+  it('includes a numeric suffix warning in prefillNote when suffix was stripped', () => {
+    const doc = makeDoc(
+      '<p><a href="#_Project_narrative_1">link</a></p>',
+      xmlWithBookmarks('Project_narrative')
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.inputRequired?.prefillNote).toContain('trailing numeric suffix');
+    expect(issue.inputRequired?.prefillNote).toContain('multiple headings');
+  });
+
+  it('matches _Project_narrative_2 → Project_narrative (higher suffix value)', () => {
+    const doc = makeDoc(
+      '<p><a href="#_Project_narrative_2">link</a></p>',
+      xmlWithBookmarks('Project_narrative')
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.inputRequired?.prefill).toBe('Project_narrative');
+    expect(issue.inputRequired?.targetField).toBe('link.bookmark._Project_narrative_2');
+  });
+
+  it('matches _Step_3_1 → Step_3 via OOXML bookmark after stripping _1', () => {
+    const doc = makeDoc(
+      '<p><a href="#_Step_3_1">link</a></p>',
+      xmlWithBookmarks('Step_3')
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.inputRequired?.prefill).toBe('Step_3');
+  });
+
+  it('returns ambiguous when stripped anchor matches multiple OOXML bookmarks', () => {
+    // After stripping _1, "project narrative" matches both bookmarks
+    const doc = makeDoc(
+      '<p><a href="#_Project_narrative_1">link</a></p>',
+      xmlWithBookmarks('Project_narrative', 'project_narrative')
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor is ambiguous');
+    expect(issue.instructionOnly).toBe(true);
+  });
+
+  it('does NOT strip suffix when first-pass already matches (Attachment_1 existing behaviour)', () => {
+    // Attachment_1 → "attachment 1" is contained in "attachment 1 accreditation documentation"
+    // so the first pass matches — no stripping needed, no numeric suffix warning
+    const doc = makeDoc(
+      '<h2>Attachment 1: Accreditation documentation</h2>' +
+      '<p><a href="#Attachment_1">See Attachment 1</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.inputRequired?.prefillNote).not.toContain('trailing numeric suffix');
+  });
+
+  it('does NOT include numeric suffix warning when no suffix was stripped', () => {
+    const doc = makeDoc(
+      '<p><a href="#_Eligibility">link</a></p>',
+      xmlWithBookmarks('Eligibility')
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.inputRequired?.prefillNote).not.toContain('trailing numeric suffix');
+  });
+
+  it('falls through to broken-link when stripped anchor still has no match', () => {
+    const doc = makeDoc(
+      '<p><a href="#_Ghost_section_1">link</a></p>',
+      xmlWithBookmarks('Unrelated_bookmark')
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal bookmark link target not found');
+    expect(issue.instructionOnly).toBe(true);
+  });
+});
+
   it('matches via containment when anchor is a subset of heading text', () => {
     // "Attachment_1" normalizes to "attachment 1", which is contained in
     // "attachment 1 instructions for applicants"
