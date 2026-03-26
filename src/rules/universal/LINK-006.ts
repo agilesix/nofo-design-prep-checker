@@ -19,10 +19,18 @@ import type { Rule, Issue, AutoAppliedChange, ParsedDocument, RuleRunnerOptions 
  *  c. HTML heading text — containment check: the normalized anchor must appear
  *     within the normalized heading text (e.g. "attachment 1" is found within
  *     "attachment 1 instructions for applicants")
+ *
+ * Numeric-suffix handling (Word duplicate-heading anchors):
+ *  Word appends _1, _2, _3, … to anchor slugs when multiple headings share the
+ *  same text (e.g. "#_Project_narrative_1"). Fuzzy matching uses a two-pass
+ *  strategy: first attempt uses the anchor as-is; if that yields no match, a
+ *  second attempt strips the trailing _N suffix before normalizing. When the
+ *  second pass finds a match, hadNumericSuffix is set on the result so the
+ *  Review card can warn the user that multiple headings with this name may exist.
  */
 
 type FuzzyMatchResult =
-  | { kind: 'single'; anchor: string; headingText?: string }
+  | { kind: 'single'; anchor: string; headingText?: string; hadNumericSuffix?: boolean }
   | { kind: 'ambiguous' }
   | { kind: 'none' };
 
@@ -77,9 +85,12 @@ const LINK_006: Rule = {
         const description = headingText
           ? `The anchor "#${anchor}" wasn't found, but a likely match was found via heading "${headingText}": "#${fuzzy}". Accept to update the link, or skip to leave it unchanged.`
           : `The anchor "#${anchor}" wasn't found, but a likely match was found: "#${fuzzy}". Accept to update the link, or skip to leave it unchanged.`;
+        const numericSuffixWarning = fuzzyResult.hadNumericSuffix
+          ? ' The trailing numeric suffix on the original anchor was stripped during matching — there may be multiple headings with this name in the document. Verify you are targeting the correct one.'
+          : '';
         const prefillNote = headingText
-          ? `Matched via heading text: "${headingText}". Confirm this is the correct heading before accepting.`
-          : 'Matched by normalizing the anchor against content in the document (e.g., bookmarks, IDs, or headings). Edit if needed.';
+          ? `Matched via heading text: "${headingText}". Confirm this is the correct heading before accepting.${numericSuffixWarning}`
+          : `Matched by normalizing the anchor against content in the document (e.g., bookmarks, IDs, or headings). Edit if needed.${numericSuffixWarning}`;
         results.push({
           id: `LINK-006-${index}`,
           ruleId: 'LINK-006',
@@ -196,21 +207,19 @@ function normalizeAnchor(value: string): string {
 }
 
 /**
- * Return a FuzzyMatchResult for `anchor`:
- *  - { kind: 'single', anchor } if exactly one candidate matches
- *  - { kind: 'ambiguous' } if more than one candidate matches
- *  - { kind: 'none' } if no candidates match
+ * Return a FuzzyMatchResult for `anchor`.
  *
- * Candidate sources tried in order:
- *  1. OOXML bookmark names  — exact equality after normalization
- *  2. HTML element IDs      — exact equality after normalization
- *  3. HTML heading text     — containment: normalized anchor must appear within
- *                              the normalized heading text (e.g. "attachment 1"
- *                              is found inside "attachment 1 background")
+ * Uses a two-pass strategy to handle Word's auto-generated numeric suffixes:
  *
- * For heading matches, the suggestion is the heading's own id when present,
- * otherwise derived from the heading text via slugifyHeading(). The matched
- * heading text is included as `headingText` so the Review card can display it.
+ * Pass 1 — anchor as-is:
+ *   Normalize the anchor and run it through all three candidate sources.
+ *   Return immediately if any source produces a match.
+ *
+ * Pass 2 — strip trailing _N suffix:
+ *   Word appends _1, _2, … to bookmark slugs when multiple headings share the
+ *   same text. If pass 1 found nothing and the anchor ends with _\d+, strip the
+ *   suffix (e.g. "_Project_narrative_1" → "_Project_narrative") and retry. A
+ *   match here sets hadNumericSuffix so the Review card can warn the user.
  */
 function findFuzzyMatch(
   anchor: string,
@@ -220,6 +229,48 @@ function findFuzzyMatch(
   const normalizedAnchor = normalizeAnchor(anchor);
   if (!normalizedAnchor) return { kind: 'none' };
 
+  // Pass 1: try the anchor as-is
+  const firstPass = matchByNormalizedValue(normalizedAnchor, htmlDoc, xmlDoc);
+  if (firstPass.kind !== 'none') return firstPass;
+
+  // Pass 2: strip Word's trailing numeric suffix and retry
+  const strippedAnchor = anchor.replace(/_\d+$/, '');
+  if (strippedAnchor !== anchor) {
+    const strippedNorm = normalizeAnchor(strippedAnchor);
+    if (strippedNorm) {
+      const secondPass = matchByNormalizedValue(strippedNorm, htmlDoc, xmlDoc);
+      if (secondPass.kind === 'single') {
+        return { ...secondPass, hadNumericSuffix: true };
+      }
+      if (secondPass.kind === 'ambiguous') {
+        return { kind: 'ambiguous' };
+      }
+    }
+  }
+
+  return { kind: 'none' };
+}
+
+/**
+ * Core matching logic: given an already-normalized anchor string, search all
+ * three candidate sources and return the first conclusive result.
+ *
+ * Candidate sources tried in order:
+ *  1. OOXML bookmark names  — exact equality after normalization
+ *  2. HTML element IDs      — exact equality after normalization
+ *  3. HTML heading text     — containment: normalizedAnchor must appear within
+ *                              the normalized heading text (e.g. "attachment 1"
+ *                              is found inside "attachment 1 background")
+ *
+ * For heading matches, the suggestion is the heading's own id when present,
+ * otherwise derived from the heading text via slugifyHeading(). The matched
+ * heading text is included as `headingText` so the Review card can display it.
+ */
+function matchByNormalizedValue(
+  normalizedAnchor: string,
+  htmlDoc: Document,
+  xmlDoc: XMLDocument | null
+): FuzzyMatchResult {
   // ── Source 1: OOXML bookmark names ─────────────────────────────────────────
   if (xmlDoc) {
     const names = getOoxmlBookmarkNames(xmlDoc);
