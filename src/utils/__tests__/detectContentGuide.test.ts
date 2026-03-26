@@ -183,6 +183,7 @@ describe('CDC/DGHT detection', () => {
     const text = makeText(
       'Centers for Disease Control and Prevention',
       'CDC Office of Grants Services',
+      'DGHT program',
     );
     const result = detectContentGuide(text);
     // Falls through to general scoring → cdc
