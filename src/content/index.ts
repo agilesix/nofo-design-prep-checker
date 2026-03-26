@@ -151,6 +151,7 @@ export const content = {
       label: (reviewed: number, total: number): string => `${reviewed} of ${total} reviewed`,
     },
     continueButton: 'Continue to summary',
+    startOverButton: 'Start over',
     continueWarning: (unreviewed: number): string =>
       `${unreviewed} issue${unreviewed === 1 ? '' : 's'} not yet reviewed. You can continue, but unreviewed issues will not have fixes applied.`,
   },

@@ -10,6 +10,7 @@ interface ReviewStepProps {
   reviewState: ReviewState;
   onComplete: (fixes: AcceptedFix[], resolutions: Record<string, IssueResolution>) => void;
   onGuideChange: (guideId: ContentGuideId) => void;
+  onStartOver: () => void;
 }
 
 type SeverityFilter = 'all' | 'error' | 'warning' | 'suggestion';
@@ -19,6 +20,7 @@ export default function ReviewStep({
   reviewState,
   onComplete,
   onGuideChange,
+  onStartOver,
 }: ReviewStepProps): React.ReactElement {
   const [resolutions, setResolutions] = useState<Record<string, IssueResolution>>(
     reviewState.resolutions
@@ -180,13 +182,22 @@ export default function ReviewStep({
           </div>
         )}
 
-        <button
-          type="button"
-          className="usa-button"
-          onClick={handleContinue}
-        >
-          {content.review.continueButton}
-        </button>
+        <div className="display-flex flex-gap-2 flex-align-center flex-wrap">
+          <button
+            type="button"
+            className="usa-button"
+            onClick={handleContinue}
+          >
+            {content.review.continueButton}
+          </button>
+          <button
+            type="button"
+            className="usa-button usa-button--unstyled"
+            onClick={onStartOver}
+          >
+            {content.review.startOverButton}
+          </button>
+        </div>
       </div>
     </div>
   );
