@@ -229,6 +229,7 @@ export default function App(): React.ReactElement {
             reviewState={reviewState}
             onComplete={handleReviewComplete}
             onGuideChange={handleGuideChangeFromReview}
+            onStartOver={handleStartOver}
           />
         )}
 
