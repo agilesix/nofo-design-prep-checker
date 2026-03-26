@@ -196,7 +196,7 @@ const STOP_WORDS = new Set(['and', 'or', 'the', 'of', 'a', 'an', 'in', 'to', 'fo
 /**
  * Structural heading keywords used by the numeric extraction fallback (pass 3).
  * A heading matches a number N if it contains one of these keywords immediately
- * followed by the standalone number N (word-boundary match on the normalized text).
+ * followed by the standalone number N in the heading text (word-boundary match).
  */
 const STRUCTURAL_KEYWORDS = ['attachment', 'section', 'step', 'part', 'appendix', 'exhibit'];
 
