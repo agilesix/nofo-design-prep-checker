@@ -166,7 +166,7 @@ describe('LINK-006 fuzzy match — heading text', () => {
     expect(results).toHaveLength(1);
     const issue = results[0] as Issue;
     expect(issue.title).toBe('Internal link anchor may need updating');
-    // No id on heading → suggestion is anchor with leading _ stripped
+    // No id on heading → suggestion is slugified from heading text
     expect(issue.inputRequired?.prefill).toBe('Eligibility');
     expect(issue.inputRequired?.targetField).toBe('link.bookmark._Eligibility');
   });
@@ -178,8 +178,8 @@ describe('LINK-006 fuzzy match — heading text', () => {
     );
     const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
     expect(issue.title).toBe('Internal link anchor may need updating');
-    // Suggestion: leading _ stripped from original anchor
-    expect(issue.inputRequired?.prefill).toBe('Maintenance_of_effort');
+    // Suggestion: slugified from matched heading text, not stripped from broken anchor
+    expect(issue.inputRequired?.prefill).toBe('Maintenance_of_Effort');
   });
 
   it('uses heading id as suggestion when heading has an id attribute', () => {

@@ -22,7 +22,7 @@ import type { Rule, Issue, AutoAppliedChange, ParsedDocument, RuleRunnerOptions 
  */
 
 type FuzzyMatchResult =
-  | { kind: 'single'; anchor: string }
+  | { kind: 'single'; anchor: string; headingText?: string }
   | { kind: 'ambiguous' }
   | { kind: 'none' };
 
@@ -72,7 +72,14 @@ const LINK_006: Rule = {
 
       if (fuzzyResult.kind === 'single') {
         const fuzzy = fuzzyResult.anchor;
+        const headingText = fuzzyResult.headingText;
         const sectionId = findSectionForElement(link, doc);
+        const description = headingText
+          ? `The anchor "#${anchor}" wasn't found, but a likely match was found via heading "${headingText}": "#${fuzzy}". Accept to update the link, or skip to leave it unchanged.`
+          : `The anchor "#${anchor}" wasn't found, but a likely match was found: "#${fuzzy}". Accept to update the link, or skip to leave it unchanged.`;
+        const prefillNote = headingText
+          ? `Matched via heading text: "${headingText}". Confirm this is the correct heading before accepting.`
+          : 'Matched by normalizing the anchor against content in the document (e.g., bookmarks, IDs, or headings). Edit if needed.';
         results.push({
           id: `LINK-006-${index}`,
           ruleId: 'LINK-006',
@@ -80,16 +87,14 @@ const LINK_006: Rule = {
           severity: 'warning',
           sectionId,
           location: href,
-          description:
-            `The anchor "#${anchor}" wasn't found, but a likely match was found: "#${fuzzy}". ` +
-            `Accept to update the link, or skip to leave it unchanged.`,
+          description,
           suggestedFix: `Retarget "#${anchor}" → "#${fuzzy}"`,
           inputRequired: {
             type: 'text',
             label: 'Replacement anchor',
             fieldDescription: `Current anchor: #${anchor}`,
             prefill: fuzzy,
-            prefillNote: 'Matched by normalizing the anchor against content in the document (e.g., bookmarks, IDs, or headings). Edit if needed.',
+            prefillNote,
             targetField: `link.bookmark.${anchor}`,
           },
         } as Issue);
@@ -151,6 +156,18 @@ function getOoxmlBookmarkNames(xmlDoc: XMLDocument): string[] {
 // ─── Fuzzy matching ───────────────────────────────────────────────────────────
 
 /**
+ * Convert a heading's display text to an anchor slug when the heading has no
+ * id attribute. Replaces non-alphanumeric runs with underscores, then strips
+ * leading/trailing underscores.
+ * e.g. "Maintenance of Effort" → "Maintenance_of_Effort"
+ */
+function slugifyHeading(text: string): string {
+  return text
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+/**
  * Normalize an anchor slug or heading text for fuzzy comparison:
  *  1. Lowercase
  *  2. Replace underscores and hyphens with spaces
@@ -180,7 +197,8 @@ function normalizeAnchor(value: string): string {
  *                              is found inside "attachment 1 background")
  *
  * For heading matches, the suggestion is the heading's own id when present,
- * otherwise the original anchor with leading underscores stripped.
+ * otherwise derived from the heading text via slugifyHeading(). The matched
+ * heading text is included as `headingText` so the Review card can display it.
  */
 function findFuzzyMatch(
   anchor: string,
@@ -210,21 +228,24 @@ function findFuzzyMatch(
   // ── Source 3: HTML heading text (containment check) ─────────────────────────
   // The normalized anchor must be contained within the normalized heading text.
   // The suggested anchor prefers the heading's own id if mammoth assigned one;
-  // otherwise falls back to the original anchor with leading underscores stripped.
+  // otherwise derives from the matched heading text via slugifyHeading().
+  // headingText is carried through so the Review card can display it for confirmation.
   const headings = Array.from(htmlDoc.querySelectorAll('h1,h2,h3,h4,h5,h6'));
-  const headingMatches: string[] = [];
+  const headingMatches: { anchor: string; headingText: string }[] = [];
   for (const h of headings) {
     const text = (h.textContent ?? '').trim();
     if (!text) continue;
     if (!normalizeAnchor(text).includes(normalizedAnchor)) continue;
 
-    const suggestion = h.getAttribute('id') ?? anchor.replace(/^_+/, '');
-    if (!headingMatches.includes(suggestion)) {
-      headingMatches.push(suggestion);
+    const suggestion = h.getAttribute('id') ?? slugifyHeading(text);
+    if (!headingMatches.some(m => m.anchor === suggestion)) {
+      headingMatches.push({ anchor: suggestion, headingText: text });
     }
   }
 
-  if (headingMatches.length === 1) return { kind: 'single', anchor: headingMatches[0]! };
+  if (headingMatches.length === 1) {
+    return { kind: 'single', anchor: headingMatches[0]!.anchor, headingText: headingMatches[0]!.headingText };
+  }
   if (headingMatches.length > 1) return { kind: 'ambiguous' };
 
   return { kind: 'none' };
