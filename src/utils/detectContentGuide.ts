@@ -24,9 +24,9 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
 
   if (hasDght && hasCdcIdentifier) {
     const hasCompetitiveSignal =
-      text.includes('competitive') || text.includes('build your application');
+      /\bcompetitive\b/i.test(rawText) || text.includes('build your application');
     const hasSsjSignal =
-      text.includes('ssj') || text.includes('prepare your application');
+      /\bssj\b/i.test(rawText) || text.includes('prepare your application');
 
     if (hasCompetitiveSignal) {
       return {
