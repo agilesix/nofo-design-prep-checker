@@ -6,6 +6,8 @@ export type ContentGuideId =
   | 'acl'
   | 'cdc'
   | 'cdc-research'
+  | 'cdc-dght-ssj'
+  | 'cdc-dght-competitive'
   | 'cms'
   | 'ihs'
   | 'hrsa-bhw'

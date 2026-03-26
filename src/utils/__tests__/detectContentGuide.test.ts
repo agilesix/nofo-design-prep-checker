@@ -114,6 +114,84 @@ describe('no match', () => {
   });
 });
 
+// ─── CDC/DGHT fast-path ───────────────────────────────────────────────────────
+
+describe('CDC/DGHT detection', () => {
+  it('detects cdc-dght-competitive when DGHT + competitive signal + CDC identifier present', () => {
+    const text = makeText(
+      'Centers for Disease Control and Prevention',
+      'DGHT funding opportunity',
+      'This is a competitive grant.',
+    );
+    const result = detectContentGuide(text);
+    expect(result.detectedId).toBe('cdc-dght-competitive');
+    expect(result.confidence).toBe('high');
+  });
+
+  it('detects cdc-dght-competitive when DGHT + "Build Your Application" + CDC identifier present', () => {
+    const text = makeText(
+      'CDC grant announcement',
+      'DGHT program',
+      'Build Your Application',
+    );
+    const result = detectContentGuide(text);
+    expect(result.detectedId).toBe('cdc-dght-competitive');
+    expect(result.confidence).toBe('high');
+  });
+
+  it('detects cdc-dght-ssj when DGHT + SSJ + CDC identifier present', () => {
+    const text = makeText(
+      'Centers for Disease Control and Prevention',
+      'DGHT SSJ program',
+    );
+    const result = detectContentGuide(text);
+    expect(result.detectedId).toBe('cdc-dght-ssj');
+    expect(result.confidence).toBe('high');
+  });
+
+  it('detects cdc-dght-ssj when DGHT + "Prepare Your Application" + CDC identifier present', () => {
+    const text = makeText(
+      'CDC DGHT program',
+      'Prepare Your Application',
+    );
+    const result = detectContentGuide(text);
+    expect(result.detectedId).toBe('cdc-dght-ssj');
+    expect(result.confidence).toBe('high');
+  });
+
+  it('prefers cdc-dght-competitive over cdc-dght-ssj when both signals present', () => {
+    const text = makeText(
+      'Centers for Disease Control and Prevention',
+      'DGHT competitive and SSJ program',
+      'Prepare Your Application or Build Your Application',
+    );
+    const result = detectContentGuide(text);
+    expect(result.detectedId).toBe('cdc-dght-competitive');
+  });
+
+  it('does NOT detect a DGHT guide without a CDC identifier', () => {
+    const text = makeText(
+      'Administration for Children and Families',
+      'DGHT SSJ program',
+    );
+    const result = detectContentGuide(text);
+    expect(result.detectedId).not.toBe('cdc-dght-ssj');
+    expect(result.detectedId).not.toBe('cdc-dght-competitive');
+  });
+
+  it('does NOT detect a DGHT guide with CDC identifier but no DGHT/SSJ/competitive signal', () => {
+    const text = makeText(
+      'Centers for Disease Control and Prevention',
+      'CDC Office of Grants Services',
+      'DGHT program',
+    );
+    const result = detectContentGuide(text);
+    // Falls through to general scoring → cdc
+    expect(result.detectedId).not.toBe('cdc-dght-ssj');
+    expect(result.detectedId).not.toBe('cdc-dght-competitive');
+  });
+});
+
 // ─── CDC Research fast-path ───────────────────────────────────────────────────
 
 describe('CDC Research detection', () => {

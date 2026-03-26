@@ -13,7 +13,7 @@ const REQUIRED_HEADINGS = [
 
 const STRUCT_004: Rule = {
   id: 'STRUCT-004',
-  contentGuideIds: ['acf', 'acl', 'cdc', 'cms', 'ihs'],
+  contentGuideIds: ['acf', 'acl', 'cdc', 'cdc-dght-ssj', 'cdc-dght-competitive', 'cms', 'ihs'],
   check(doc: ParsedDocument, _options: RuleRunnerOptions): Issue[] {
     const issues: Issue[] = [];
 

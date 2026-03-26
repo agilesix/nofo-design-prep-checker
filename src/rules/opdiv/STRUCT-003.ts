@@ -9,11 +9,13 @@ const REQUIRED_HEADINGS = [
   'Section III',
   'Eligible applicants',
   'Eligible organizations',
+  'Build Your Application',
+  'Prepare Your Application',
 ];
 
 const STRUCT_003: Rule = {
   id: 'STRUCT-003',
-  contentGuideIds: ['acf', 'acl', 'cdc', 'cms', 'ihs'],
+  contentGuideIds: ['acf', 'acl', 'cdc', 'cdc-dght-ssj', 'cdc-dght-competitive', 'cms', 'ihs'],
   check(doc: ParsedDocument, _options: RuleRunnerOptions): Issue[] {
     const issues: Issue[] = [];
 

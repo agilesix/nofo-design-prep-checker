@@ -95,6 +95,8 @@ export const content = {
       acl: 'ACL Content Guide',
       cdc: 'CDC Content Guide (Standard)',
       'cdc-research': 'CDC Content Guide (Research)',
+      'cdc-dght-ssj': 'CDC/DGHT SSJ Content Guide',
+      'cdc-dght-competitive': 'CDC/DGHT Competitive Content Guide',
       cms: 'CMS Content Guide',
       ihs: 'IHS Content Guide',
       'hrsa-bhw': 'HRSA BHW R&R Content Guide',
