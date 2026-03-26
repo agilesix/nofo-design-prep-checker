@@ -1,4 +1,5 @@
 import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
+import { HRSA_TEMPLATE_CAVEAT } from './hrsaNotes';
 
 /**
  * STRUCT-008: Required "Trainee Eligibility" section (HRSA BHW, MCHB, RR guides)
@@ -21,7 +22,7 @@ const STRUCT_008: Rule = {
         title: 'Required "Trainee Eligibility" section not found',
         severity: 'warning',
         sectionId: doc.sections[0]?.id ?? 'section-preamble',
-        description: 'This HRSA NOFO should contain a "Trainee Eligibility" section as required by the content guide. This section was not detected. Note: HRSA templates are updated periodically. If your template does not include this section, verify against the most recent version before acting on this warning. This tool may not always reflect the latest HRSA template.',
+        description: `This HRSA NOFO should contain a "Trainee Eligibility" section as required by the content guide. This section was not detected. ${HRSA_TEMPLATE_CAVEAT}`,
         suggestedFix: 'Verify that the document contains the Trainee Eligibility section with proper heading styles applied.',
         instructionOnly: true,
       });
