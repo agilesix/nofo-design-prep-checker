@@ -8,14 +8,12 @@ interface SummaryReportProps {
   reviewState: ReviewState;
   acceptedFixes: AcceptedFix[];
   onProceedToDownload: () => void;
-  onStartOver: () => void;
 }
 
 export default function SummaryReport({
   reviewState,
   acceptedFixes,
   onProceedToDownload,
-  onStartOver,
 }: SummaryReportProps): React.ReactElement {
   const { issues, autoAppliedChanges, resolutions, activeContentGuide } = reviewState;
 
