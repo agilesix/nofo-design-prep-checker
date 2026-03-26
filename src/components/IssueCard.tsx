@@ -124,6 +124,12 @@ export default function IssueCard({
           </p>
         )}
 
+        {issue.page != null && (
+          <p className="font-body-xs text-base margin-top-1">
+            📄 Page {issue.page}
+          </p>
+        )}
+
         {issue.headingCard && (
           <HeadingCard headingCard={issue.headingCard} />
         )}
@@ -252,13 +258,15 @@ export default function IssueCard({
                 {content.review.actions.keepAsBold}
               </button>
             )}
-
+              {issue.instructionOnly
+                ? (content.review.actions.instructionOnlySkip || "I'll do it later")
+                : content.review.actions.skip}
             <button
               type="button"
               className="usa-button usa-button--unstyled usa-button--small"
               onClick={onSkip}
             >
-              {issue.instructionOnly ? 'Mark reviewed' : content.review.actions.skip}
+              {issue.instructionOnly ? "I'll do it later" : content.review.actions.skip}
             </button>
           </div>
         )}

@@ -132,6 +132,7 @@ export const content = {
     actions: {
       accept: 'Accept fix',
       skip: 'Skip',
+      instructionOnlySkip: "I'll do it later",
       keepAsBold: 'Keep as bold',
       edit: 'Edit value',
     },
