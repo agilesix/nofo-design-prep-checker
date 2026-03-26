@@ -1,4 +1,4 @@
-import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
+import type { Rule, Issue, ParsedDocument, RuleRunnerOptions, Section } from '../../types';
 
 /**
  * TABLE-001: Tables missing header row
@@ -24,7 +24,9 @@ const TABLE_001: Rule = {
       const firstRowText = firstRow.textContent?.trim().slice(0, 60) ?? '';
 
       if (!firstRowHasTh) {
-        const sectionId = findSectionForElement(table, doc);
+        const section = findSectionForElement(table, doc);
+        const sectionId = section?.id ?? doc.sections[0]?.id ?? 'section-preamble';
+        const page = section?.startPage ?? null;
 
         issues.push({
           id: `TABLE-001-${index}`,
@@ -32,6 +34,7 @@ const TABLE_001: Rule = {
           title: 'Table is missing a header row',
           severity: 'error',
           sectionId,
+          page,
           description: `A table${caption ? ` ("${caption}")` : firstRowText ? ` starting with "${firstRowText}…"` : ''} has no header row (<th> elements). Tables with two or more rows must have a header row for accessibility. Single-row tables are treated as callout boxes and are not required to have headers.`,
           suggestedFix: 'In the source document, format the first row of the table as a Header Row using the Table Design options in Word.',
           instructionOnly: true,
@@ -43,14 +46,9 @@ const TABLE_001: Rule = {
   },
 };
 
-function findSectionForElement(el: Element, doc: ParsedDocument): string {
+function findSectionForElement(el: Element, doc: ParsedDocument): Section | undefined {
   const text = (el.textContent ?? '').slice(0, 50);
-  for (const section of doc.sections) {
-    if (section.rawText.includes(text)) {
-      return section.id;
-    }
-  }
-  return doc.sections[0]?.id ?? 'section-preamble';
+  return doc.sections.find(section => section.rawText.includes(text));
 }
 
 export default TABLE_001;

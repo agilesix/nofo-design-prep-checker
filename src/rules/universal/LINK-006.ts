@@ -160,7 +160,7 @@ function getOoxmlBookmarkNames(xmlDoc: XMLDocument): string[] {
 function normalizeAnchor(value: string): string {
   return value
     .toLowerCase()
-    .replace(/[_\-]/g, ' ')
+    .replace(/[_-]/g, ' ')
     .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
