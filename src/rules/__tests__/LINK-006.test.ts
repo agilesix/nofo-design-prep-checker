@@ -192,7 +192,7 @@ describe('LINK-006 fuzzy match — heading text', () => {
     );
     const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
     expect(issue.inputRequired?.prefill).toBe('award-info'); // heading's own id
-    // When the heading has an id, headingText is not set — messaging uses the generic note
+    // For matches resolved via the heading's HTML id (tier 2b), headingText is not set — messaging uses the generic note
     expect(issue.description).not.toContain('via heading');
     expect(issue.inputRequired?.prefillNote).not.toContain('Award Info');
   });
