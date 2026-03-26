@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { ReviewState, AcceptedFix } from '../types';
 import { content } from '../content';
 import { getCategoryLabel } from '../utils/getCategoryLabel';
@@ -23,6 +23,10 @@ export default function SummaryReport({
   const unreviewedIssues = issues.filter(i => resolutions[i.id] === 'unreviewed');
 
   const totalFixed = acceptedFixes.length + autoAppliedChanges.length;
+
+  const [unreviewedOpen, setUnreviewedOpen] = useState(false);
+  const [skippedOpen, setSkippedOpen] = useState(false);
+  const [keptAsBoldOpen, setKeptAsBoldOpen] = useState(false);
 
   return (
     <div className="margin-top-4">
@@ -108,13 +112,26 @@ export default function SummaryReport({
       {skippedIssues.length > 0 && (
         <div className="margin-bottom-4">
           <h2 className="usa-h3">{content.summary.sections.skipped}</h2>
-          <ul className="usa-list">
-            {skippedIssues.map(issue => (
-              <li key={issue.id}>
-                <strong>{issue.title}</strong> — {getCategoryLabel(issue.ruleId)}
-              </li>
-            ))}
-          </ul>
+          <p className="font-body-sm margin-bottom-1">
+            {skippedIssues.length} issue{skippedIssues.length === 1 ? '' : 's'} skipped — no fixes will be applied.
+          </p>
+          <button
+            type="button"
+            className="usa-button usa-button--unstyled font-body-sm"
+            onClick={() => setSkippedOpen(o => !o)}
+            aria-expanded={skippedOpen}
+          >
+            {skippedOpen ? 'Hide issues ▴' : 'Show issues ▾'}
+          </button>
+          {skippedOpen && (
+            <ul className="usa-list margin-top-1">
+              {skippedIssues.map(issue => (
+                <li key={issue.id}>
+                  <strong>{issue.title}</strong> — {getCategoryLabel(issue.ruleId)}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
@@ -122,11 +139,24 @@ export default function SummaryReport({
       {keptAsBoldIssues.length > 0 && (
         <div className="margin-bottom-4">
           <h2 className="usa-h3">Kept as bold</h2>
-          <ul className="usa-list">
-            {keptAsBoldIssues.map(issue => (
-              <li key={issue.id}>{issue.title}</li>
-            ))}
-          </ul>
+          <p className="font-body-sm margin-bottom-1">
+            {keptAsBoldIssues.length} issue{keptAsBoldIssues.length === 1 ? '' : 's'} kept as bold.
+          </p>
+          <button
+            type="button"
+            className="usa-button usa-button--unstyled font-body-sm"
+            onClick={() => setKeptAsBoldOpen(o => !o)}
+            aria-expanded={keptAsBoldOpen}
+          >
+            {keptAsBoldOpen ? 'Hide issues ▴' : 'Show issues ▾'}
+          </button>
+          {keptAsBoldOpen && (
+            <ul className="usa-list margin-top-1">
+              {keptAsBoldIssues.map(issue => (
+                <li key={issue.id}>{issue.title}</li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
@@ -138,11 +168,21 @@ export default function SummaryReport({
             <p className="usa-alert__text">
               {unreviewedIssues.length} issue{unreviewedIssues.length === 1 ? '' : 's'} were not reviewed and will not have fixes applied.
             </p>
-            <ul className="usa-list">
-              {unreviewedIssues.map(issue => (
-                <li key={issue.id}>{issue.title}</li>
-              ))}
-            </ul>
+            <button
+              type="button"
+              className="usa-button usa-button--unstyled font-body-sm"
+              onClick={() => setUnreviewedOpen(o => !o)}
+              aria-expanded={unreviewedOpen}
+            >
+              {unreviewedOpen ? 'Hide issues ▴' : 'Show issues ▾'}
+            </button>
+            {unreviewedOpen && (
+              <ul className="usa-list margin-top-1">
+                {unreviewedIssues.map(issue => (
+                  <li key={issue.id}>{issue.title}</li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}

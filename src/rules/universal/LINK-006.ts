@@ -16,21 +16,32 @@ import type { Rule, Issue, AutoAppliedChange, ParsedDocument, RuleRunnerOptions 
  *  a. OOXML <w:bookmarkStart w:name="..."> entries from doc.documentXml
  *     — authoritative; returned verbatim as the suggested anchor
  *  b. HTML element IDs — mammoth maps Word bookmarks to id attributes
- *  c. HTML heading text — containment check: the normalized anchor must appear
- *     within the normalized heading text (e.g. "attachment 1" is found within
- *     "attachment 1 instructions for applicants")
+ *  c. HTML heading text — two checks applied in sequence per heading:
+ *       i.  Direct containment: normalized anchor is a substring of normalized heading
+ *       ii. Stop-word containment: both sides have common stop words removed, then
+ *           the cleaned anchor is checked as a substring of the cleaned heading.
+ *           Handles slugs where Word drops words like "and"/"or"/"the" (e.g.
+ *           "#Program_requirements_expectations" → "Program requirements and expectations")
  *
- * Numeric-suffix handling (Word duplicate-heading anchors):
- *  Word appends _1, _2, _3, … to anchor slugs when multiple headings share the
- *  same text (e.g. "#_Project_narrative_1"). Fuzzy matching uses a two-pass
- *  strategy: first attempt uses the anchor as-is; if that yields no match, a
- *  second attempt strips the trailing _N suffix before normalizing. When the
- *  second pass finds a match, hadNumericSuffix is set on the result so the
- *  Review card can warn the user that multiple headings with this name may exist.
+ * Fuzzy matching passes (applied in order, return on first conclusive result):
+ *  Pass 1 — anchor as-is through Sources a–c
+ *  Pass 2 — strip Word's trailing _N suffix (duplicate-heading disambiguation),
+ *            then Sources a–c again. Match sets hadNumericSuffix on the result.
+ *  Pass 3 — numeric extraction fallback: extract integers from the anchor and
+ *            find headings containing those integers preceded by a structural
+ *            keyword (Attachment, Section, Step, …). Handles manually-created
+ *            abbreviation bookmarks like "#Attach8OrgChart". Match sets
+ *            matchedByNumericExtraction on the result.
  */
 
 type FuzzyMatchResult =
-  | { kind: 'single'; anchor: string; headingText?: string; hadNumericSuffix?: boolean }
+  | {
+      kind: 'single';
+      anchor: string;
+      headingText?: string;
+      hadNumericSuffix?: boolean;
+      matchedByNumericExtraction?: boolean;
+    }
   | { kind: 'ambiguous' }
   | { kind: 'none' };
 
@@ -82,15 +93,22 @@ const LINK_006: Rule = {
         const fuzzy = fuzzyResult.anchor;
         const headingText = fuzzyResult.headingText;
         const sectionId = findSectionForElement(link, doc);
+        // Lower-confidence numeric-extraction matches get "possible" rather than "likely"
+        const confidence = fuzzyResult.matchedByNumericExtraction ? 'possible' : 'likely';
         const description = headingText
-          ? `The anchor "#${anchor}" wasn't found, but a likely match was found via heading "${headingText}": "#${fuzzy}". Accept to update the link, or skip to leave it unchanged.`
-          : `The anchor "#${anchor}" wasn't found, but a likely match was found: "#${fuzzy}". Accept to update the link, or skip to leave it unchanged.`;
+          ? `The anchor "#${anchor}" wasn't found, but a ${confidence} match was found via heading "${headingText}": "#${fuzzy}". Accept to update the link, or skip to leave it unchanged.`
+          : `The anchor "#${anchor}" wasn't found, but a ${confidence} match was found: "#${fuzzy}". Accept to update the link, or skip to leave it unchanged.`;
         const numericSuffixWarning = fuzzyResult.hadNumericSuffix
           ? ' The trailing numeric suffix on the original anchor was stripped during matching — there may be multiple headings with this name in the document. Verify you are targeting the correct one.'
           : '';
-        const prefillNote = headingText
-          ? `Matched via heading text: "${headingText}". Confirm this is the correct heading before accepting.${numericSuffixWarning}`
-          : `Matched by normalizing the anchor against content in the document (e.g., bookmarks, IDs, or headings). Edit if needed.${numericSuffixWarning}`;
+        let prefillNote: string;
+        if (fuzzyResult.matchedByNumericExtraction) {
+          prefillNote = `Matched by number extraction — a number in the anchor was found in a structural heading ("${headingText ?? ''}"). This is a lower-confidence match; verify this is the correct target before accepting.`;
+        } else {
+          prefillNote = headingText
+            ? `Matched via heading text: "${headingText}". Confirm this is the correct heading before accepting.${numericSuffixWarning}`
+            : `Matched by normalizing the anchor against content in the document (e.g., bookmarks, IDs, or headings). Edit if needed.${numericSuffixWarning}`;
+        }
         results.push({
           id: `LINK-006-${index}`,
           ruleId: 'LINK-006',
@@ -170,6 +188,19 @@ function getOoxmlBookmarkNames(xmlDoc: XMLDocument): string[] {
 // ─── Fuzzy matching ───────────────────────────────────────────────────────────
 
 /**
+ * Common stop words stripped from both anchor and heading when performing the
+ * stop-word containment check (pass 1/2, Source 3, second sub-check).
+ */
+const STOP_WORDS = new Set(['and', 'or', 'the', 'of', 'a', 'an', 'in', 'to', 'for', 'with']);
+
+/**
+ * Structural heading keywords used by the numeric extraction fallback (pass 3).
+ * A heading matches a number N if it contains one of these keywords immediately
+ * followed by the standalone number N in the heading text (word-boundary match).
+ */
+const STRUCTURAL_KEYWORDS = ['attachment', 'section', 'step', 'part', 'appendix', 'exhibit'];
+
+/**
  * Convert a heading's display text to an anchor slug, following the same
  * format NOFO Builder uses for Word bookmark names:
  *  1. Replace whitespace runs with underscores
@@ -207,19 +238,39 @@ function normalizeAnchor(value: string): string {
 }
 
 /**
- * Return a FuzzyMatchResult for `anchor`.
+ * Remove common stop words from an already-normalized (lowercase, spaces only)
+ * string. Used in the bidirectional heading containment check to match anchors
+ * where Word has dropped connecting words like "and" or "of".
  *
- * Uses a two-pass strategy to handle Word's auto-generated numeric suffixes:
+ * e.g. "program requirements and expectations" → "program requirements expectations"
+ */
+function removeStopWords(text: string): string {
+  return text
+    .split(' ')
+    .filter(w => w.length > 0 && !STOP_WORDS.has(w))
+    .join(' ');
+}
+
+/**
+ * Return a FuzzyMatchResult for `anchor` using a three-pass strategy.
  *
  * Pass 1 — anchor as-is:
- *   Normalize the anchor and run it through all three candidate sources.
+ *   Normalize the anchor and run it through all candidate sources (OOXML
+ *   bookmarks, HTML IDs, heading text with direct + stop-word containment).
  *   Return immediately if any source produces a match.
  *
  * Pass 2 — strip trailing _N suffix:
  *   Word appends _1, _2, … to bookmark slugs when multiple headings share the
  *   same text. If pass 1 found nothing and the anchor ends with _\d+, strip the
- *   suffix (e.g. "_Project_narrative_1" → "_Project_narrative") and retry. A
- *   match here sets hadNumericSuffix so the Review card can warn the user.
+ *   suffix (e.g. "_Project_narrative_1" → "_Project_narrative") and retry
+ *   Sources a–c. A match sets hadNumericSuffix on the result.
+ *
+ * Pass 3 — numeric extraction:
+ *   For manually-abbreviated bookmarks (e.g. "#Attach8OrgChart") that don't
+ *   carry enough text for containment matching, extract all integers from the
+ *   original anchor and search headings for `(structural keyword) N` patterns.
+ *   A match sets matchedByNumericExtraction on the result and the Review card
+ *   warns the user that confidence is lower.
  */
 function findFuzzyMatch(
   anchor: string,
@@ -248,7 +299,8 @@ function findFuzzyMatch(
     }
   }
 
-  return { kind: 'none' };
+  // Pass 3: numeric extraction fallback
+  return matchByNumericExtraction(anchor, htmlDoc);
 }
 
 /**
@@ -258,9 +310,13 @@ function findFuzzyMatch(
  * Candidate sources tried in order:
  *  1. OOXML bookmark names  — exact equality after normalization
  *  2. HTML element IDs      — exact equality after normalization
- *  3. HTML heading text     — containment: normalizedAnchor must appear within
- *                              the normalized heading text (e.g. "attachment 1"
- *                              is found inside "attachment 1 background")
+ *  3. HTML heading text     — two sub-checks per heading:
+ *       a. Direct containment: normalizedAnchor is a substring of normalized heading
+ *       b. Stop-word containment: both sides stripped of common stop words
+ *          (and, or, the, of, a, an, in, to, for, with), then containment
+ *          retried. Handles slugs where Word dropped connective words, e.g.
+ *          "program requirements expectations" matches
+ *          "program requirements and expectations".
  *
  * For heading matches, the suggestion is the heading's own id when present,
  * otherwise derived from the heading text via slugifyHeading(). The matched
@@ -288,21 +344,33 @@ function matchByNormalizedValue(
   if (idMatches.length === 1) return { kind: 'single', anchor: idMatches[0]! };
   if (idMatches.length > 1) return { kind: 'ambiguous' };
 
-  // ── Source 3: HTML heading text (containment check) ─────────────────────────
-  // Uses substring matching: the normalized anchor must appear *within* the
-  // normalized heading text, not equal it. This handles short anchors like
-  // "Attachment_1" that target headings like "Attachment 1: Accreditation
-  // documentation" — the anchor normalizes to "attachment 1" and is found
-  // inside "attachment 1 accreditation documentation".
+  // ── Source 3: HTML heading text ──────────────────────────────────────────────
+  // Sub-check a (direct containment): the normalized anchor must appear *within*
+  // the normalized heading text. This handles short anchors like "Attachment_1"
+  // that target headings like "Attachment 1: Accreditation documentation".
+  //
+  // Sub-check b (stop-word containment): if direct containment fails, strip
+  // STOP_WORDS from both the anchor and the heading, then retry. This handles
+  // slugs where Word dropped connective words from the heading text, e.g.
+  // "#Program_requirements_expectations" for heading "Program requirements
+  // and expectations".
+  //
   // The suggested anchor prefers the heading's own id if mammoth assigned one;
   // otherwise derives from the matched heading text via slugifyHeading().
-  // headingText is carried through so the Review card can display it for confirmation.
+  // headingText is carried through so the Review card can display it.
+  const cleanAnchor = removeStopWords(normalizedAnchor);
   const headings = Array.from(htmlDoc.querySelectorAll('h1,h2,h3,h4,h5,h6'));
   const headingMatches: { anchor: string; headingText: string }[] = [];
   for (const h of headings) {
     const text = (h.textContent ?? '').trim();
     if (!text) continue;
-    if (!normalizeAnchor(text).includes(normalizedAnchor)) continue;
+    const normHeading = normalizeAnchor(text);
+    const directMatch = normHeading.includes(normalizedAnchor);
+    const stopWordMatch =
+      !directMatch &&
+      cleanAnchor.length > 0 &&
+      removeStopWords(normHeading).includes(cleanAnchor);
+    if (!directMatch && !stopWordMatch) continue;
 
     const suggestion = h.getAttribute('id') ?? slugifyHeading(text);
     if (!headingMatches.some(m => m.anchor === suggestion)) {
@@ -315,6 +383,54 @@ function matchByNormalizedValue(
   }
   if (headingMatches.length > 1) return { kind: 'ambiguous' };
 
+  return { kind: 'none' };
+}
+
+/**
+ * Pass 3 fallback: extract all integers from the original (un-normalized)
+ * anchor and search headings for `(structural keyword) N` patterns. Returns
+ * a lower-confidence single/ambiguous result — sets matchedByNumericExtraction
+ * so the Review card can display an appropriate warning.
+ *
+ * Structural keywords: attachment, section, step, part, appendix, exhibit.
+ */
+function matchByNumericExtraction(
+  anchor: string,
+  htmlDoc: Document
+): FuzzyMatchResult {
+  // Extract unique integers from the anchor (e.g. "Attach8OrgChart" → [8])
+  const numbers = [...new Set((anchor.match(/\d+/g) ?? []).map(Number))];
+  if (numbers.length === 0) return { kind: 'none' };
+
+  const headings = Array.from(htmlDoc.querySelectorAll('h1,h2,h3,h4,h5,h6'));
+  const headingMatches: { anchor: string; headingText: string }[] = [];
+
+  for (const num of numbers) {
+    // Pattern: structural keyword immediately followed by the exact number
+    // (word-boundary ensures "8" doesn't match "18" or "80")
+    const pattern = new RegExp(
+      `\\b(${STRUCTURAL_KEYWORDS.join('|')})\\s+${num}\\b`,
+      'i'
+    );
+    for (const h of headings) {
+      const text = (h.textContent ?? '').trim();
+      if (!text || !pattern.test(text)) continue;
+      const suggestion = h.getAttribute('id') ?? slugifyHeading(text);
+      if (!headingMatches.some(m => m.anchor === suggestion)) {
+        headingMatches.push({ anchor: suggestion, headingText: text });
+      }
+    }
+  }
+
+  if (headingMatches.length === 1) {
+    return {
+      kind: 'single',
+      anchor: headingMatches[0]!.anchor,
+      headingText: headingMatches[0]!.headingText,
+      matchedByNumericExtraction: true,
+    };
+  }
+  if (headingMatches.length > 1) return { kind: 'ambiguous' };
   return { kind: 'none' };
 }
 

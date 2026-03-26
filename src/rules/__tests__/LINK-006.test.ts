@@ -374,6 +374,211 @@ describe('LINK-006 numeric suffix stripping', () => {
     expect(issue.inputRequired).toBeUndefined();
   });
 
+// ─── Stop-word bidirectional containment ─────────────────────────────────────
+
+describe('LINK-006 stop-word bidirectional match', () => {
+  it('matches #Program_requirements_expectations to "Program requirements and expectations"', () => {
+    // Direct containment fails: "program requirements expectations" ⊄ "program requirements and expectations"
+    // Stop-word match: both de-stopped → "program requirements expectations" ⊆ "program requirements expectations"
+    const doc = makeDoc(
+      '<h2>Program requirements and expectations</h2>' +
+      '<p><a href="#Program_requirements_expectations">link</a></p>'
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const issue = results[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.inputRequired?.prefill).toBe('Program_requirements_and_expectations');
+    expect(issue.description).toContain('Program requirements and expectations');
+  });
+
+  it('stop-word match uses heading id when present', () => {
+    const doc = makeDoc(
+      '<h2 id="prog-req-and-exp">Program requirements and expectations</h2>' +
+      '<p><a href="#Program_requirements_expectations">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.inputRequired?.prefill).toBe('prog-req-and-exp');
+  });
+
+  it('matches anchor missing "or" against heading "Steps or requirements"', () => {
+    const doc = makeDoc(
+      '<h2>Steps or requirements</h2>' +
+      '<p><a href="#Steps_requirements">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.description).toContain('Steps or requirements');
+  });
+
+  it('matches anchor missing "of" against heading "Overview of the program"', () => {
+    const doc = makeDoc(
+      '<h2>Overview of the program</h2>' +
+      '<p><a href="#Overview_program">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+  });
+
+  it('returns ambiguous when multiple headings match after stop-word removal', () => {
+    // Anchor "requirements expectations" de-stops to "requirements expectations".
+    // Both headings de-stop to something that contains "requirements expectations",
+    // so two distinct heading suggestions are produced → ambiguous.
+    const doc = makeDoc(
+      '<h2 id="req-and-exp-overview">Requirements and expectations overview</h2>' +
+      '<h2 id="req-or-exp-summary">Requirements or expectations summary</h2>' +
+      '<p><a href="#Requirements_expectations">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor is ambiguous');
+    expect(issue.instructionOnly).toBe(true);
+  });
+
+  it('does NOT use stop-word match when direct containment already succeeds', () => {
+    // "attachment 1" IS directly contained in "attachment 1 accreditation documentation"
+    // so the stop-word path should never be reached
+    const doc = makeDoc(
+      '<h2>Attachment 1: Accreditation documentation</h2>' +
+      '<p><a href="#Attachment_1">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    // Standard heading-text note — not a stop-word note
+    expect(issue.inputRequired?.prefillNote).toContain('Matched via heading text');
+  });
+
+  it('falls through to broken-link when stop-word removal leaves no match', () => {
+    const doc = makeDoc(
+      '<h2>Completely unrelated heading</h2>' +
+      '<p><a href="#Program_requirements_expectations">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal bookmark link target not found');
+    expect(issue.instructionOnly).toBe(true);
+  });
+});
+
+// ─── Numeric extraction fallback (pass 3) ────────────────────────────────────
+
+describe('LINK-006 numeric extraction fallback', () => {
+  it('matches Attach8OrgChart to "Attachment 8: Non-duplication of federal funding"', () => {
+    const doc = makeDoc(
+      '<h2>Attachment 8: Non-duplication of federal funding</h2>' +
+      '<p><a href="#Attach8OrgChart">link</a></p>'
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const issue = results[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.inputRequired?.prefill).toBe('Attachment_8_Non_duplication_of_federal_funding');
+    expect(issue.inputRequired?.targetField).toBe('link.bookmark.Attach8OrgChart');
+  });
+
+  it('description uses "possible match" for numeric extraction (lower confidence)', () => {
+    const doc = makeDoc(
+      '<h2>Attachment 8: Overview</h2>' +
+      '<p><a href="#Attach8OrgChart">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.description).toContain('possible match');
+    expect(issue.description).not.toContain('likely match');
+  });
+
+  it('prefillNote contains "number extraction" warning', () => {
+    const doc = makeDoc(
+      '<h2>Attachment 8: Overview</h2>' +
+      '<p><a href="#Attach8OrgChart">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.inputRequired?.prefillNote).toContain('number extraction');
+    expect(issue.inputRequired?.prefillNote).toContain('lower-confidence');
+  });
+
+  it('matches Sec3Overview to "Section 3: Background and Need"', () => {
+    const doc = makeDoc(
+      '<h2>Section 3: Background and Need</h2>' +
+      '<p><a href="#Sec3Overview">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.description).toContain('Section 3');
+  });
+
+  it('matches Step2Plan to "Step 2: Planning" (Step keyword)', () => {
+    const doc = makeDoc(
+      '<h2>Step 2: Planning</h2>' +
+      '<p><a href="#Step2Plan">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.description).toContain('Step 2');
+  });
+
+  it('uses heading id as suggestion when heading has an id attribute', () => {
+    const doc = makeDoc(
+      '<h2 id="attachment-8-nondup">Attachment 8: Non-duplication</h2>' +
+      '<p><a href="#Attach8OrgChart">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.inputRequired?.prefill).toBe('attachment-8-nondup');
+  });
+
+  it('returns ambiguous when two structural headings share the extracted number', () => {
+    // Both headings contain a structural keyword + 8 → ambiguous
+    const doc = makeDoc(
+      '<h2>Attachment 8: Non-duplication</h2>' +
+      '<h2>Section 8: Something else</h2>' +
+      '<p><a href="#Attach8OrgChart">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor is ambiguous');
+    expect(issue.instructionOnly).toBe(true);
+  });
+
+  it('does NOT trigger for anchors with no numbers', () => {
+    const doc = makeDoc(
+      '<h2>Attachment 8: Something</h2>' +
+      '<p><a href="#CompletelyTextual">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    // No numeric match possible — falls to broken-link
+    expect(issue.title).toBe('Internal bookmark link target not found');
+    expect(issue.instructionOnly).toBe(true);
+  });
+
+  it('does NOT match when heading has the number but no structural keyword', () => {
+    // "Overview 8: Something" has no structural keyword → no match
+    const doc = makeDoc(
+      '<h2>Overview 8: Something</h2>' +
+      '<p><a href="#Attach8OrgChart">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal bookmark link target not found');
+  });
+
+  it('number 8 does NOT match heading "Attachment 18: Something" (word boundary)', () => {
+    const doc = makeDoc(
+      '<h2>Attachment 18: Something</h2>' +
+      '<p><a href="#Attach8OrgChart">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal bookmark link target not found');
+  });
+
+  it('does NOT use numeric extraction when pass 1 already resolved the anchor', () => {
+    // Attachment_8 → "attachment 8" IS contained in "attachment 8 non duplication..."
+    // so pass 1 should resolve it and pass 3 should never run
+    const doc = makeDoc(
+      '<h2>Attachment 8: Non-duplication</h2>' +
+      '<p><a href="#Attachment_8">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    // Pass 1 (heading containment) — not numeric extraction
+    expect(issue.inputRequired?.prefillNote).not.toContain('number extraction');
+  });
+});
+
 // ─── Tier 3: No match (broken link) ──────────────────────────────────────────
 
 describe('LINK-006 no match (broken link)', () => {

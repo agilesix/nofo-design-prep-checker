@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Routes, Route, Link } from 'react-router-dom';
 import type {
   AppStep,
@@ -31,6 +31,10 @@ export default function App(): React.ReactElement {
   const [acceptedFixes, setAcceptedFixes] = useState<AcceptedFix[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [step]);
 
   const handleFileSelected = useCallback(async (file: File) => {
     setUploadedFile(file);
