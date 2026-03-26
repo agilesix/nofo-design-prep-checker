@@ -258,7 +258,9 @@ export default function IssueCard({
                 {content.review.actions.keepAsBold}
               </button>
             )}
-
+              {issue.instructionOnly
+                ? (content.review.actions.instructionOnlySkip || "I'll do it later")
+                : content.review.actions.skip}
             <button
               type="button"
               className="usa-button usa-button--unstyled usa-button--small"
