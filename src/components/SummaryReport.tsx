@@ -8,14 +8,12 @@ interface SummaryReportProps {
   reviewState: ReviewState;
   acceptedFixes: AcceptedFix[];
   onProceedToDownload: () => void;
-  onStartOver: () => void;
 }
 
 export default function SummaryReport({
   reviewState,
   acceptedFixes,
   onProceedToDownload,
-  onStartOver,
 }: SummaryReportProps): React.ReactElement {
   const { issues, autoAppliedChanges, resolutions, activeContentGuide } = reviewState;
 
@@ -149,27 +147,13 @@ export default function SummaryReport({
         </div>
       )}
 
-      <div className="margin-top-4 display-flex flex-gap-2 flex-wrap">
+      <div className="margin-top-4">
         <button
           type="button"
           className="usa-button"
           onClick={onProceedToDownload}
         >
           {content.summary.downloadButton}
-        </button>
-        <button
-          type="button"
-          className="usa-button usa-button--outline"
-          onClick={() => window.print()}
-        >
-          {content.summary.printButton}
-        </button>
-        <button
-          type="button"
-          className="usa-button usa-button--unstyled"
-          onClick={onStartOver}
-        >
-          {content.summary.startOverButton}
         </button>
       </div>
     </div>
