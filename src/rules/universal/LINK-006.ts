@@ -96,7 +96,7 @@ const LINK_006: Rule = {
             prefill: fuzzy,
             prefillNote,
             hint: headingText
-              ? 'Note: spaces in heading text are converted to underscores in anchor links.'
+              ? 'Note: spaces and punctuation in heading text may be normalized (for example, converted to hyphens or underscores) in anchor links.'
               : undefined,
             targetField: `link.bookmark.${anchor}`,
           },
