@@ -124,6 +124,12 @@ export default function IssueCard({
           </p>
         )}
 
+        {issue.page != null && (
+          <p className="font-body-xs text-base margin-top-1">
+            📄 Page {issue.page}
+          </p>
+        )}
+
         {issue.headingCard && (
           <HeadingCard headingCard={issue.headingCard} />
         )}
