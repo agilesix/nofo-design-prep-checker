@@ -24,7 +24,7 @@ This tool automates that process. The same comprehensive review now takes about 
 - **Document cleanliness** — common issues like unresolved comments, leftover instruction boxes, and placeholder text
 - **Heading structure** — obvious heading level and tagging inconsistencies that can affect navigation and readability
 - **Links** — internal and external link issues, including non-descriptive link text, basic formatting problems, and broken internal anchors (with fuzzy-match suggestions when a likely target can be found)
-- **Tables** — structural issues that can cause accessibility or reading-order problems
+- **Tables** — structural issues that can cause accessibility or reading-order problems, including missing header rows (with estimated page numbers) and missing captions; captions must follow the `Table: Title of table` format in normal text — standard table types such as application checklists, merit review criteria, and forms are exempt from the caption requirement
 - **Footnotes and endnotes** — basic reference and linking issues
 - **Images** — missing or incomplete alternative text
 - **Application checklists** — formatting issues that make checklist items harder to scan or understand
@@ -67,7 +67,7 @@ All processing happens entirely in your browser. No file contents are sent to an
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 20.19+
 - npm 10+
 
 ### Installation
