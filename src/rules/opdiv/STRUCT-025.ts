@@ -20,7 +20,7 @@ const STRUCT_025: Rule = {
         title: 'Application guide reference not found',
         severity: 'warning',
         sectionId: doc.sections[0]?.id ?? 'section-preamble',
-        description: 'HRSA NOFOs typically reference the HRSA Application Guide (or R&R Application Guide). This reference was not detected.',
+        description: 'HRSA NOFOs typically reference the HRSA Application Guide (or R&R Application Guide). This reference was not detected. Note: HRSA templates are updated periodically. If your template does not include this section, verify against the most recent version before acting on this warning. This tool may not always reflect the latest HRSA template.',
         suggestedFix: 'Verify that the appropriate HRSA Application Guide is referenced in the document.',
         instructionOnly: true,
       });
