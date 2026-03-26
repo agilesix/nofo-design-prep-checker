@@ -258,7 +258,7 @@ export default function IssueCard({
               className="usa-button usa-button--unstyled usa-button--small"
               onClick={onSkip}
             >
-              {issue.instructionOnly ? 'Mark reviewed' : content.review.actions.skip}
+              {issue.instructionOnly ? "I'll do it later" : content.review.actions.skip}
             </button>
           </div>
         )}

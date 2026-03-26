@@ -115,12 +115,13 @@ describe('LINK-006 fuzzy match — OOXML bookmarks', () => {
     expect(issue.instructionOnly).toBe(true); // falls to tier 3
   });
 
-  it('falls to broken-link when two OOXML bookmarks normalize identically (ambiguous)', () => {
+  it('surfaces an ambiguous-anchor card when two OOXML bookmarks normalize identically', () => {
     const doc = makeDoc(
       '<p><a href="#_Eligibility">link</a></p>',
       xmlWithBookmarks('Eligibility', 'eligibility') // both → 'eligibility'
     );
     const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor is ambiguous');
     expect(issue.instructionOnly).toBe(true);
     expect(issue.inputRequired).toBeUndefined();
   });
@@ -199,6 +200,32 @@ describe('LINK-006 fuzzy match — heading text', () => {
     expect(issue.inputRequired?.targetField).toBe('link.bookmark._Award-Info');
   });
 });
+
+  it('matches via containment when anchor is a subset of heading text', () => {
+    // "Attachment_1" normalizes to "attachment 1", which is contained in
+    // "attachment 1 instructions for applicants"
+    const doc = makeDoc(
+      '<h2 id="attachment-1-instructions-for-applicants">Attachment 1: Instructions for Applicants</h2>' +
+      '<p><a href="#Attachment_1">See Attachment 1</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.inputRequired?.prefill).toBe('attachment-1-instructions-for-applicants');
+  });
+
+  it('surfaces an ambiguous-anchor card when multiple headings contain the anchor text', () => {
+    // Both headings contain "attachment 1" and have distinct ids, so two different
+    // suggestions are produced — the result is ambiguous, no fix is applied.
+    const doc = makeDoc(
+      '<h2 id="attachment-1-overview">Attachment 1: Overview</h2>' +
+      '<h2 id="attachment-1-instructions">Attachment 1: Instructions</h2>' +
+      '<p><a href="#Attachment_1">See Attachment 1</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor is ambiguous');
+    expect(issue.instructionOnly).toBe(true);
+    expect(issue.inputRequired).toBeUndefined();
+  });
 
 // ─── Tier 3: No match (broken link) ──────────────────────────────────────────
 

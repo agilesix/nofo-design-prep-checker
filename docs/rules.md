@@ -23,7 +23,7 @@ Universal rules run on every document regardless of which content guide is selec
 | LINK-003 | Missing protocol in URL | Error | A link's `href` is missing `http://` or `https://`. |
 | LINK-004 | Malformed URL | Error | A link's URL is malformed and may not resolve correctly. |
 | LINK-005 | Same text, different destinations | Warning | The same link text points to different URLs. May confuse screen reader users. |
-| LINK-006 | Internal bookmark not found | Warning | An internal anchor link (`#bookmark`) points to a target that was not found in the document. Fuzzy-matched anchors are surfaced with a pre-filled suggestion; unresolvable anchors are flagged as instruction-only. |
+| LINK-006 | Internal bookmark not found | Warning | An internal anchor link (`#bookmark`) points to a target that was not found in the document. The rule attempts a normalize-and-compare fuzzy match (lowercase, underscores/hyphens → spaces, punctuation stripped) against OOXML bookmarks, HTML element IDs, and heading text before giving up. A single heading match surfaces a Review card with a pre-filled suggestion the user can confirm or edit; multiple matches surface an ambiguous-anchor card with no auto-fix; no matches fall through to a broken-link warning. |
 | LINK-008 | Email address mailto enforcement (auto-apply) | Error | Plain-text email addresses are automatically converted to `mailto:` hyperlinks. Links whose `href` contains an email address but is missing the `mailto:` protocol are flagged as errors for manual correction. |
 
 ### Tables (TABLE)

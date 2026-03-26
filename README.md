@@ -23,7 +23,7 @@ This tool automates that process. The same comprehensive review now takes about 
 - **Document metadata** — key fields such as Author, Subject, and Keywords that support accessibility and consistency
 - **Document cleanliness** — common issues like unresolved comments, leftover instruction boxes, and placeholder text
 - **Heading structure** — obvious heading level and tagging inconsistencies that can affect navigation and readability
-- **Links** — internal and external link issues, including non-descriptive link text and basic formatting problems
+- **Links** — internal and external link issues, including non-descriptive link text, basic formatting problems, and broken internal anchors (with fuzzy-match suggestions when a likely target can be found)
 - **Tables** — structural issues that can cause accessibility or reading-order problems
 - **Footnotes and endnotes** — basic reference and linking issues
 - **Images** — missing or incomplete alternative text
