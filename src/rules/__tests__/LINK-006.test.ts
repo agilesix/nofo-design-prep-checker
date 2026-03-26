@@ -180,6 +180,9 @@ describe('LINK-006 fuzzy match — heading text', () => {
     expect(issue.title).toBe('Internal link anchor may need updating');
     // Suggestion: slugified from matched heading text, not stripped from broken anchor
     expect(issue.inputRequired?.prefill).toBe('Maintenance_of_Effort');
+    // Review card UX: heading text appears in description and prefillNote
+    expect(issue.description).toContain('Maintenance of Effort');
+    expect(issue.inputRequired?.prefillNote).toContain('Maintenance of Effort');
   });
 
   it('uses heading id as suggestion when heading has an id attribute', () => {
@@ -189,6 +192,9 @@ describe('LINK-006 fuzzy match — heading text', () => {
     );
     const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
     expect(issue.inputRequired?.prefill).toBe('award-info'); // heading's own id
+    // For matches resolved via the heading's HTML id (tier 2b), headingText is not set — messaging uses the generic note
+    expect(issue.description).not.toContain('via heading');
+    expect(issue.inputRequired?.prefillNote).not.toContain('Award Info');
   });
 
   it('encodes the old anchor verbatim in targetField', () => {
