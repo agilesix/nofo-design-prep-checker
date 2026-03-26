@@ -299,8 +299,12 @@ function findFuzzyMatch(
     }
   }
 
-  // Pass 3: numeric extraction fallback
-  return matchByNumericExtraction(anchor, htmlDoc);
+  // Pass 3: numeric extraction fallback.
+  // When pass 2 stripped a Word trailing-suffix (e.g. "Attach8OrgChart_1" →
+  // "Attach8OrgChart"), use the stripped form so the suffix digit is not
+  // extracted as an additional candidate number and cause false ambiguity.
+  const anchorForPass3 = strippedAnchor !== anchor ? strippedAnchor : anchor;
+  return matchByNumericExtraction(anchorForPass3, htmlDoc);
 }
 
 /**
@@ -406,10 +410,13 @@ function matchByNumericExtraction(
   const headingMatches: { anchor: string; headingText: string }[] = [];
 
   for (const num of numbers) {
-    // Pattern: structural keyword immediately followed by the exact number
-    // (word-boundary ensures "8" doesn't match "18" or "80")
+    // Pattern: structural keyword immediately followed by the exact number.
+    // \b before the number ensures "8" doesn't match "18" or "80".
+    // Negative lookahead (?![./\-]\d) prevents matching hierarchical/decimal
+    // headings like "Section 3.1" or "Section 3/1" where the number is not
+    // truly standalone.
     const pattern = new RegExp(
-      `\\b(${STRUCTURAL_KEYWORDS.join('|')})\\s+${num}\\b`,
+      `\\b(${STRUCTURAL_KEYWORDS.join('|')})\\s+${num}(?![./\\-]\\d)\\b`,
       'i'
     );
     for (const h of headings) {
