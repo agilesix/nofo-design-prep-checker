@@ -55,6 +55,8 @@ All processing happens entirely in your browser. No file contents are sent to an
 | ACL | ACL Content Guide |
 | CDC | CDC Content Guide (Standard) |
 | CDC | CDC Content Guide (Research) |
+| CDC | CDC/DGHT SSJ Content Guide |
+| CDC | CDC/DGHT Competitive Content Guide |
 | CMS | CMS Content Guide |
 | IHS | IHS Content Guide |
 | HRSA | HRSA BHW R&R Content Guide |

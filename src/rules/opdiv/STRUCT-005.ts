@@ -10,11 +10,13 @@ const REQUIRED_HEADINGS = [
   'Review criteria',
   'Selection criteria',
   'Merit review',
+  'Application submission and deadlines',
+  'Submission requirements and deadlines',
 ];
 
 const STRUCT_005: Rule = {
   id: 'STRUCT-005',
-  contentGuideIds: ['acf', 'acl', 'cdc', 'cms', 'ihs'],
+  contentGuideIds: ['acf', 'acl', 'cdc', 'cdc-dght-ssj', 'cdc-dght-competitive', 'cms', 'ihs'],
   check(doc: ParsedDocument, _options: RuleRunnerOptions): Issue[] {
     const issues: Issue[] = [];
 

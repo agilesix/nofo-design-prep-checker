@@ -180,9 +180,9 @@ describe('getCategoryLabel utility', () => {
 });
 
 describe('contentGuides data', () => {
-  it('exports all 11 content guides', async () => {
+  it('exports all 13 content guides', async () => {
     const { contentGuides } = await import('../../data/contentGuides');
-    expect(contentGuides).toHaveLength(11);
+    expect(contentGuides).toHaveLength(13);
   });
 
   it('all content guides have required fields', async () => {

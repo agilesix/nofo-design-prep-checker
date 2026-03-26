@@ -14,17 +14,43 @@ const MIN_SIGNAL_CATEGORIES = 2;
 export function detectContentGuide(rawText: string): ContentGuideDetectionResult {
   const text = rawText.toLowerCase();
 
-  // Check for CDC Research first (more specific than CDC standard).
+  const hasCdcIdentifier =
+    text.includes('centers for disease control') ||
+    /\bcdc\b/i.test(rawText);
+
+  // Check for CDC/DGHT variants first (more specific than CDC standard or Research).
+  // Prefer cdc-dght-competitive when both competitive and SSJ signals are present.
+  const hasDght = /\bdght\b/i.test(rawText);
+
+  if (hasDght && hasCdcIdentifier) {
+    const hasCompetitiveSignal =
+      text.includes('competitive') || text.includes('build your application');
+    const hasSsjSignal =
+      text.includes('ssj') || text.includes('prepare your application');
+
+    if (hasCompetitiveSignal) {
+      return {
+        detectedId: 'cdc-dght-competitive',
+        confidence: 'high',
+        signals: ['CDC identifier detected', 'DGHT identifier detected', 'Competitive/Build Your Application signal detected'],
+      };
+    }
+    if (hasSsjSignal) {
+      return {
+        detectedId: 'cdc-dght-ssj',
+        confidence: 'high',
+        signals: ['CDC identifier detected', 'DGHT identifier detected', 'SSJ/Prepare Your Application signal detected'],
+      };
+    }
+  }
+
+  // Check for CDC Research (more specific than CDC standard).
   // Require ≥2 of the 3 research-specific signals plus a CDC identifier.
   const researchSignals = [
     text.includes('era commons'),
     text.includes('phs 398'),
     text.includes('principal investigator'),
   ].filter(Boolean).length;
-
-  const hasCdcIdentifier =
-    text.includes('centers for disease control') ||
-    /\bcdc\b/i.test(rawText);
 
   if (researchSignals >= 2 && hasCdcIdentifier) {
     return {
@@ -34,7 +60,7 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
     };
   }
 
-  // Score every non-research guide
+  // Score every non-fast-path guide
   type ScoreEntry = {
     score: number;
     signals: string[];
@@ -45,6 +71,8 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
 
   for (const guide of contentGuides) {
     if (guide.id === 'cdc-research') continue;
+    if (guide.id === 'cdc-dght-ssj') continue;
+    if (guide.id === 'cdc-dght-competitive') continue;
 
     const guideSignals: string[] = [];
     let score = 0;

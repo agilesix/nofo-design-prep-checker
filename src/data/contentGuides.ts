@@ -55,6 +55,32 @@ export const contentGuides: ContentGuideEntry[] = [
     },
   },
   {
+    id: 'cdc-dght-ssj',
+    displayName: 'CDC/DGHT SSJ Content Guide',
+    opDiv: 'CDC',
+    subType: 'DGHT SSJ',
+    version: 'FY26',
+    updatedAt: '2026-01-01',
+    detectionSignals: {
+      names: ['Centers for Disease Control and Prevention'],
+      abbreviations: ['CDC', 'DGHT'],
+      uniqueSections: ['SSJ', 'Prepare Your Application'],
+    },
+  },
+  {
+    id: 'cdc-dght-competitive',
+    displayName: 'CDC/DGHT Competitive Content Guide',
+    opDiv: 'CDC',
+    subType: 'DGHT Competitive',
+    version: 'FY26',
+    updatedAt: '2026-01-01',
+    detectionSignals: {
+      names: ['Centers for Disease Control and Prevention'],
+      abbreviations: ['CDC', 'DGHT'],
+      uniqueSections: ['Build Your Application'],
+    },
+  },
+  {
     id: 'cms',
     displayName: 'CMS Content Guide',
     opDiv: 'CMS',
