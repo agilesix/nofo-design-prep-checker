@@ -234,7 +234,8 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
   }
 
   // Max character length for a single extracted keyword phrase (opp name / tagline).
-  // A ≤3-word phrase should never exceed this; anything longer is a parsing artifact.
+  // Heuristic guardrail: most ≤3-word phrases should fall under this; much longer ones are
+  // likely parsing artifacts rather than meaningful keywords.
   const MAX_KEYWORD_CHARS = 60;
 
   // 2. Opportunity name — include directly if ≤ 3 words; otherwise derive a
