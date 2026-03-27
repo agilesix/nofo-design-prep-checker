@@ -1,4 +1,5 @@
 import type { Rule, Issue, ParsedDocument, RuleRunnerOptions, Section } from '../../types';
+import { buildLocationLookup } from '../../utils/locationContext';
 
 /**
  * TABLE-001: Tables missing header row
@@ -13,6 +14,7 @@ const TABLE_001: Rule = {
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
     const tables = Array.from(htmlDoc.querySelectorAll('table'));
+    const getContext = buildLocationLookup(htmlDoc);
 
     tables.forEach((table, index) => {
       const rows = Array.from(table.querySelectorAll('tr'));
@@ -27,6 +29,7 @@ const TABLE_001: Rule = {
         const section = findSectionForElement(table, doc);
         const sectionId = section?.id ?? doc.sections[0]?.id ?? 'section-preamble';
         const page = section?.startPage ?? null;
+        const { nearestHeading } = getContext(table);
 
         issues.push({
           id: `TABLE-001-${index}`,
@@ -34,6 +37,7 @@ const TABLE_001: Rule = {
           title: 'Table is missing a header row',
           severity: 'error',
           sectionId,
+          nearestHeading,
           page,
           description: `A table${caption ? ` ("${caption}")` : firstRowText ? ` starting with "${firstRowText}…"` : ''} has no header row (<th> elements). Tables with two or more rows must have a header row for accessibility. Single-row tables are treated as callout boxes and are not required to have headers.`,
           suggestedFix: 'In the source document, format the first row of the table as a Header Row using the Table Design options in Word.',

@@ -1,4 +1,5 @@
 import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
+import { buildLocationLookup } from '../../utils/locationContext';
 
 /**
  * LINK-004: Malformed URL check
@@ -12,6 +13,7 @@ const LINK_004: Rule = {
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
     const links = Array.from(htmlDoc.querySelectorAll('a[href]'));
+    const getContext = buildLocationLookup(htmlDoc);
 
     links.forEach((link, index) => {
       const href = (link.getAttribute('href') ?? '').trim();
@@ -43,6 +45,7 @@ const LINK_004: Rule = {
 
       if (!isValid) {
         const sectionId = findSectionForElement(link, doc);
+        const { nearestHeading, page } = getContext(link);
 
         issues.push({
           id: `LINK-004-${index}`,
@@ -50,6 +53,8 @@ const LINK_004: Rule = {
           title: 'Malformed link URL',
           severity: 'error',
           sectionId,
+          nearestHeading,
+          page,
           description: `The link "${text}" has a URL that appears to be malformed: "${href}". This link may not work correctly.`,
           suggestedFix: 'Verify and correct the URL.',
           location: href,

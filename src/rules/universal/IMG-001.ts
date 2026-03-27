@@ -32,7 +32,12 @@ const IMG_001: Rule = {
       const isEmptyAlt = descr !== null && descr.trim() === '';
 
       // Determine nearest section by looking for the element in sections' raw text
-      const sectionId = findSectionForDocPrId(docPrId, doc);
+      const section = doc.sections.find(s => s.rawText.includes(docPrId));
+      const sectionId = section?.id ?? doc.sections[0]?.id ?? 'section-preamble';
+      // Use section heading and startPage as location context (image position from OOXML,
+      // no HTML element available for a more precise lookup).
+      const nearestHeading = section && section.headingLevel > 0 ? section.heading : null;
+      const page = section?.startPage ?? null;
 
       if (isMissingAlt) {
         issues.push({
@@ -41,6 +46,8 @@ const IMG_001: Rule = {
           title: 'Image is missing alt text',
           severity: 'error',
           sectionId,
+          nearestHeading,
+          page,
           description: `"${name}" has no alt text (the descr attribute is absent). All images must have alt text unless they are purely decorative.`,
           suggestedFix: 'Add descriptive alt text, or set descr="" to mark the image as decorative.',
           inputRequired: {
@@ -69,15 +76,5 @@ const IMG_001: Rule = {
     return issues;
   },
 };
-
-function findSectionForDocPrId(docPrId: string, doc: ParsedDocument): string {
-  // Use the name attribute text as a loose proxy; fall back to first section
-  for (const section of doc.sections) {
-    if (section.rawText.includes(docPrId)) {
-      return section.id;
-    }
-  }
-  return doc.sections[0]?.id ?? 'section-preamble';
-}
 
 export default IMG_001;

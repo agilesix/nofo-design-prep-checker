@@ -1,4 +1,5 @@
 import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
+import { buildLocationLookup } from '../../utils/locationContext';
 
 /**
  * LIST-001: Fake lists using manual bullets or dashes
@@ -15,6 +16,7 @@ const LIST_001: Rule = {
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
     const paragraphs = Array.from(htmlDoc.querySelectorAll('p'));
+    const getContext = buildLocationLookup(htmlDoc);
 
     // Find consecutive paragraphs that look like list items
     const fakeBulletGroups: { start: number; end: number; type: 'bullet' | 'numbered' }[] = [];
@@ -54,6 +56,7 @@ const LIST_001: Rule = {
       const text = (firstPara?.textContent ?? '').trim().slice(0, 60);
       const count = group.end - group.start + 1;
       const sectionId = firstPara ? findSectionForElement(firstPara, doc) : (doc.sections[0]?.id ?? 'section-preamble');
+      const { nearestHeading, page } = firstPara ? getContext(firstPara) : { nearestHeading: null, page: 1 };
 
       issues.push({
         id: `LIST-001-${index}`,
@@ -61,6 +64,8 @@ const LIST_001: Rule = {
         title: `Manual ${group.type === 'bullet' ? 'bullet' : 'numbered'} list detected`,
         severity: 'warning',
         sectionId,
+        nearestHeading,
+        page,
         description: `${count} consecutive paragraphs starting near "${text}…" appear to use manual ${group.type === 'bullet' ? 'bullet characters' : 'numbering'} instead of proper Word list formatting. This may not convert correctly to accessible HTML.`,
         suggestedFix: `Select these paragraphs in the source document and apply the proper ${group.type === 'bullet' ? 'bulleted' : 'numbered'} list style from the Word paragraph formatting options.`,
         instructionOnly: true,
