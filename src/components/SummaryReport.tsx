@@ -96,18 +96,7 @@ export default function SummaryReport({
         if (severityIssues.length === 0) return null;
         return (
           <div key={severity} className="margin-bottom-4">
-            <h2
-              style={{
-                background: '#f0f0f0',
-                borderLeft: '3px solid #adadad',
-                padding: '8px 14px',
-                fontFamily: 'sans-serif',
-                fontSize: '14px',
-                fontWeight: 700,
-                color: '#454545',
-                margin: 0,
-              }}
-            >
+            <h2 className="bg-base-lightest border-left-05 border-base-light padding-y-1 padding-x-2 font-sans text-bold text-base-darker margin-0">
               {SEVERITY_LABELS[severity]} ({severityIssues.length})
             </h2>
             <table className="usa-table usa-table--borderless width-full">
