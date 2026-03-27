@@ -380,12 +380,13 @@ describe('LINK-006 stop-word bidirectional match', () => {
   it('matches #Program_requirements_expectations to "Program requirements and expectations"', () => {
     // Direct containment fails: "program requirements expectations" ⊄ "program requirements and expectations"
     // Stop-word match: both de-stopped → "program requirements expectations" ⊆ "program requirements expectations"
+    // A link-text suggestion is also emitted because link text "link" doesn't reference the heading.
     const doc = makeDoc(
       '<h2>Program requirements and expectations</h2>' +
       '<p><a href="#Program_requirements_expectations">link</a></p>'
     );
     const results = LINK_006.check(doc, OPTIONS);
-    expect(results).toHaveLength(1);
+    expect(results).toHaveLength(2);
     const issue = results[0] as Issue;
     expect(issue.title).toBe('Internal link anchor may need updating');
     expect(issue.inputRequired?.prefill).toBe('Program_requirements_and_expectations');
@@ -462,12 +463,13 @@ describe('LINK-006 stop-word bidirectional match', () => {
 
 describe('LINK-006 numeric extraction fallback', () => {
   it('matches Attach8OrgChart to "Attachment 8: Non-duplication of federal funding"', () => {
+    // A link-text suggestion is also emitted because link text "link" doesn't reference the heading.
     const doc = makeDoc(
       '<h2>Attachment 8: Non-duplication of federal funding</h2>' +
       '<p><a href="#Attach8OrgChart">link</a></p>'
     );
     const results = LINK_006.check(doc, OPTIONS);
-    expect(results).toHaveLength(1);
+    expect(results).toHaveLength(2);
     const issue = results[0] as Issue;
     expect(issue.title).toBe('Internal link anchor may need updating');
     expect(issue.inputRequired?.prefill).toBe('Attachment_8_Non_duplication_of_federal_funding');
