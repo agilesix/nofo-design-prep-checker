@@ -190,8 +190,8 @@ export default function App(): React.ReactElement {
   const handleBack = useCallback(() => {
     if (step === 'download') setStep('summary');
     else if (step === 'summary') setStep('review');
-    else if (step === 'review') setStep(parsedDoc ? 'guide-selection' : 'upload');
-  }, [step, parsedDoc]);
+    else if (step === 'review') setStep('upload');
+  }, [step]);
 
   const handleStartOver = useCallback(() => {
     setStep('upload');
