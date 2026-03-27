@@ -148,7 +148,7 @@ function getRowStyle(resolution: IssueResolution | null): React.CSSProperties {
 
 function getLocationText(issue: Issue): string {
   const parts: string[] = [];
-  if (issue.page) parts.push(`Page ${issue.page}`);
+  if (issue.page != null) parts.push(`Page ${issue.page}`);
   if (issue.nearestHeading) parts.push(issue.nearestHeading);
   return parts.length > 0 ? parts.join(' \u2014 ') : '\u2014';
 }
