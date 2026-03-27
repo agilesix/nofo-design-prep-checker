@@ -138,8 +138,8 @@ function sanitizeKeywordCandidate(raw: string): string | null {
   // Strip leading content-control artifact: [1], [2], (1), 1., 2., 1), 1:
   let s = raw.replace(/^\s*(?:\[\d+\]|\(\d+\)|\d+[.):\]]\s*)/, '').trim();
   // Strip leading / trailing special characters
-  s = s.replace(/^[[\](){}*#@!»«·•–—/\\|<>]+/, '')
-       .replace(/[[\](){}*#@!»«·•–—/\\|<>]+$/, '')
+  s = s.replace(/^[\[\](){}*#@!»«·•–—\/\\|<>\]]+/, '')
+       .replace(/[\[\](){}*#@!»«·•–—\/\\|<>\]]+$/, '')
        .trim();
   if (!s) return null;
   if (s.split(/\s+/).filter(Boolean).length > 3) return null;
