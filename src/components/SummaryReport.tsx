@@ -81,10 +81,7 @@ export default function SummaryReport({
             </p>
             <ul className="usa-list margin-top-2">
               {autoAppliedChanges.map((change, i) => (
-                <li
-                  key={i}
-                  className="border-left-2 border-success padding-left-2 margin-bottom-1"
-                >
+                <li key={i}>
                   <strong>{getCategoryLabel(change.ruleId)}</strong> &mdash; {change.description}
                 </li>
               ))}
@@ -99,8 +96,16 @@ export default function SummaryReport({
         if (severityIssues.length === 0) return null;
         return (
           <div key={severity} className="margin-bottom-4">
-            <h2 className="usa-h2">{SEVERITY_LABELS[severity]} ({severityIssues.length})</h2>
+            <h2 className="bg-base-lightest border-left-05 border-base-light padding-y-1 padding-x-2 font-sans text-bold text-base-darker margin-0">
+              {SEVERITY_LABELS[severity]} ({severityIssues.length})
+            </h2>
             <table className="usa-table usa-table--borderless width-full">
+              <colgroup>
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '45%' }} />
+                <col style={{ width: '15%' }} />
+                <col style={{ width: '20%' }} />
+              </colgroup>
               <thead>
                 <tr>
                   <th scope="col">Category</th>
@@ -156,7 +161,7 @@ function getLocationText(issue: Issue): string {
 function getStatusDisplay(resolution: IssueResolution | null, instructionOnly?: boolean): React.ReactElement {
   switch (resolution) {
     case 'accepted':
-      return <span style={{ color: '#1a7a1a', fontWeight: 'bold' }}>\u2713 Accepted</span>;
+      return <span style={{ color: '#1a7a1a', fontWeight: 'bold' }}>✓ Accepted</span>;
     case 'keptAsBold':
       return <span style={{ color: '#71767a' }}>Kept as bold text</span>;
     case 'skipped':
