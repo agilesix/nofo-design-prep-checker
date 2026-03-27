@@ -47,7 +47,7 @@ const LINK_005: Rule = {
       .join(', ');
 
     const description =
-      `${offenders.length} link text${offenders.length === 1 ? '' : 's'} point to different URLs: ` +
+      `${offenders.length} link text${offenders.length === 1 ? ' points' : 's point'} to different URLs: ` +
       exampleList +
       (remaining > 0 ? `, and ${remaining} more` : '') +
       '. Screen reader users may find this confusing.';
@@ -56,7 +56,7 @@ const LINK_005: Rule = {
       {
         id: 'LINK-005-0',
         ruleId: 'LINK-005',
-        title: `${offenders.length} link text${offenders.length === 1 ? '' : 's'} point to different URLs`,
+        title: `${offenders.length} link text${offenders.length === 1 ? ' points' : 's point'} to different URLs`,
         severity: 'warning',
         sectionId: doc.sections[0]?.id ?? 'section-preamble',
         description,
