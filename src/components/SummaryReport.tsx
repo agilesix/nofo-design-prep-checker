@@ -83,7 +83,7 @@ export default function SummaryReport({
               {autoAppliedChanges.map((change, i) => (
                 <li
                   key={i}
-                  style={{ borderLeft: '2px solid #00a91c', paddingLeft: '0.75rem', marginBottom: '0.5rem' }}
+                  className="border-left-2 border-success padding-left-2 margin-bottom-1"
                 >
                   <strong>{getCategoryLabel(change.ruleId)}</strong> &mdash; {change.description}
                 </li>
