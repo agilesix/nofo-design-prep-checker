@@ -134,7 +134,8 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
           // Write the new text into the first run's <w:t>, preserving its
           // <w:rPr> (hyperlink style, bold, etc.).
           const firstRun = runs[0]!;
-          let wT = firstRun.getElementsByTagName('w:t')[0];
+          const allWTs = Array.from(firstRun.getElementsByTagName('w:t'));
+          let wT = allWTs[0];
           if (!wT) {
             wT = xmlDoc.createElementNS(W, 'w:t');
             firstRun.appendChild(wT);
@@ -146,6 +147,11 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
             wT.setAttribute('xml:space', 'preserve');
           } else {
             wT.removeAttribute('xml:space');
+          }
+          // Remove any additional <w:t> nodes within the same run so the run
+          // contains exactly one text node — the accepted replacement text.
+          for (let i = 1; i < allWTs.length; i++) {
+            allWTs[i]!.parentNode?.removeChild(allWTs[i]!);
           }
 
           // Remove the remaining runs entirely rather than zeroing their text,

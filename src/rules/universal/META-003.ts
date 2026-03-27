@@ -45,6 +45,12 @@ const META_003: Rule = {
   },
 };
 
+// ─── Keyword suggestion helpers ───────────────────────────────────────────────
+
+/**
+ * Words that, on their own, are too generic to serve as keywords.
+ * Headings that consist entirely of these words are excluded.
+ */
 const GENERIC_TERMS = new Set([
   'grant', 'grants', 'federal', 'notice', 'funding', 'opportunity', 'application',
   'program', 'nofo', 'hhs', 'award', 'awards', 'eligible', 'eligibility',
@@ -53,6 +59,130 @@ const GENERIC_TERMS = new Set([
   'section', 'period', 'fiscal', 'year', 'plan', 'report', 'review',
   'contact', 'submission', 'deadline', 'announcement',
 ]);
+
+/**
+ * Stop words removed when extracting a short representative phrase from a
+ * longer text (e.g. opportunity name, tagline).
+ */
+const PHRASE_STOP_WORDS = new Set([
+  'a', 'an', 'the', 'of', 'for', 'and', 'or', 'in', 'to', 'on', 'at', 'by', 'with',
+]);
+
+/**
+ * Structural and navigational section headings that should never appear as
+ * keyword suggestions regardless of word count.
+ */
+const SKIP_HEADINGS = new Set([
+  // Standard NOFO structural sections
+  'before you begin',
+  'basic information',
+  'funding details',
+  'program description',
+  'eligibility',
+  'eligibility requirements',
+  'eligibility information',
+  'application and submission information',
+  'application submission information',
+  'submission information',
+  'review information',
+  'review process',
+  'review criteria',
+  'evaluation criteria',
+  'selection criteria',
+  'award administration information',
+  'award information',
+  'contacts and support',
+  'contact information',
+  'other information',
+  // Generic orientation headings
+  'overview',
+  'summary',
+  'introduction',
+  'background',
+  'about this notice',
+  'about this opportunity',
+  'about the program',
+  'about this program',
+  'how to apply',
+  'how to get help',
+  'resources and support',
+  'next steps',
+  'timeline',
+  'key dates',
+  'important dates',
+  // Content-control field labels (visible after artifact stripping)
+  'funding opportunity title',
+  'opportunity title',
+  'opportunity name',
+  'program name',
+  'cfda number',
+  'opportunity number',
+  'assistance listing',
+  // Document-structure headings
+  'table of contents',
+  'appendix',
+  'attachments',
+]);
+
+/**
+ * Strip content-control artifact prefixes and leading/trailing special
+ * characters from a keyword candidate, then reject it if it exceeds 3 words.
+ *
+ * Artifacts stripped:
+ *  - Leading numeric/bracket patterns: [1], [2], (1), 1., 2., 1:, 1)
+ *  - Leading and trailing punctuation: [ ] ( ) { } * # @ ! » « · • – — / \ | < >
+ *
+ * Returns the cleaned string, or null if the candidate should be discarded.
+ */
+function sanitizeKeywordCandidate(raw: string): string | null {
+  // Strip leading content-control artifact: [1], [2], (1), 1., 2., 1), 1:
+  let s = raw.replace(/^\s*(?:\[\d+\]|\(\d+\)|\d+[.):\]]\s*)/, '').trim();
+  // Strip leading / trailing special characters
+  s = s.replace(/^[[\](){}*#@!»«·•–—/\\|<>]+/, '')
+       .replace(/[[\](){}*#@!»«·•–—/\\|<>]+$/, '')
+       .trim();
+  if (!s) return null;
+  if (s.split(/\s+/).filter(Boolean).length > 3) return null;
+  return s;
+}
+
+/**
+ * Extract up to `maxWords` non-stop-word tokens from `text` and join them.
+ * Used to derive a short representative keyword phrase when the source text
+ * (e.g. opportunity name) is too long to include verbatim.
+ *
+ * Example: "Maternal and Child Health Title V Performance"
+ *          → "Maternal Child Health"  (maxWords = 3)
+ */
+function shortFormOf(text: string, maxWords: number): string | null {
+  const result: string[] = [];
+  for (const word of text.split(/\s+/)) {
+    const lower = word.toLowerCase().replace(/[^a-z]/g, '');
+    if (lower.length > 1 && !PHRASE_STOP_WORDS.has(lower)) {
+      result.push(word);
+      if (result.length >= maxWords) break;
+    }
+  }
+  return result.length > 0 ? result.join(' ') : null;
+}
+
+/**
+ * Returns true for headings that are navigational or structural and should
+ * never appear as keyword suggestions.
+ *
+ * In addition to the explicit SKIP_HEADINGS set, headings that begin with
+ * Step / Part / Section / Appendix / Attachment / Exhibit / Tab followed by
+ * an alphanumeric character are treated as structural navigation.
+ */
+function isNavigationalHeading(heading: string): boolean {
+  if (SKIP_HEADINGS.has(heading.toLowerCase().trim())) return true;
+  return /^(step|part|section|appendix|attachment|exhibit|tab)\s+[\dA-Za-z]/i.test(heading);
+}
+
+function isDuplicate(term: string, existing: string[]): boolean {
+  const lower = term.toLowerCase();
+  return existing.some(k => k.toLowerCase() === lower);
+}
 
 function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | null): string | null {
   const keywords: string[] = [];
@@ -78,7 +208,8 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
       keywords.push(guide.subType?.includes('R&R') ? 'R&R Application Guide' : 'Application Guide');
     }
 
-    // Full OpDiv name and abbreviation.
+    // Full OpDiv name and abbreviation — authoritative identifiers, not
+    // subject to the 3-word limit applied to content-extracted keywords.
     const fullName = guide.detectionSignals.names[0];
     if (fullName) keywords.push(fullName);
     keywords.push(guide.opDiv);
@@ -93,16 +224,31 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
     }
   }
 
-  // 2. Opportunity name — look for "Opportunity name:" near the top of the document.
+  // 2. Opportunity name — include directly if ≤ 3 words; otherwise derive a
+  //    short representative phrase so the program area is still represented.
   const oppNameMatch = doc.rawText.match(/opportunity\s+name\s*:?\s*(.+?)(?:\n|$)/i);
   if (oppNameMatch?.[1]) {
-    const oppName = oppNameMatch[1].trim().replace(/\s+/g, ' ');
-    if (oppName && oppName.length <= 120 && !isDuplicate(oppName, keywords)) {
-      keywords.push(oppName);
+    const oppNameRaw = oppNameMatch[1].trim().replace(/\s+/g, ' ');
+    const sanitized = sanitizeKeywordCandidate(oppNameRaw);
+    const candidate = sanitized ?? shortFormOf(oppNameRaw, 3);
+    if (candidate && !isDuplicate(candidate, keywords)) {
+      keywords.push(candidate);
     }
   }
 
-  // 3. Distinctive noun phrases from H2+ section headings.
+  // 3. Tagline — "Tagline:" field when present in the document.
+  const taglineMatch = doc.rawText.match(/tagline\s*:?\s*(.+?)(?:\n|$)/i);
+  if (taglineMatch?.[1]) {
+    const taglineRaw = taglineMatch[1].trim().replace(/\s+/g, ' ');
+    const sanitized = sanitizeKeywordCandidate(taglineRaw);
+    const candidate = sanitized ?? shortFormOf(taglineRaw, 3);
+    if (candidate && !isDuplicate(candidate, keywords)) {
+      keywords.push(candidate);
+    }
+  }
+
+  // 4. Distinctive heading terms — subject-matter headings from the document,
+  //    with structural / navigational headings excluded.
   const headingTerms = extractHeadingTerms(doc.sections);
   for (const term of headingTerms) {
     if (keywords.length >= 10) break;
@@ -111,52 +257,40 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
 
   if (keywords.length === 0) return null;
 
-  // Deduplicate, clean, cap at 10.
+  // Deduplicate, trim, cap at 10.
   const unique = [...new Set(keywords.map(k => k.trim()).filter(Boolean))].slice(0, 10);
   return unique.join(', ');
 }
 
-function isDuplicate(term: string, existing: string[]): boolean {
-  const lower = term.toLowerCase();
-  return existing.some(k => k.toLowerCase() === lower);
-}
-
-const SKIP_HEADINGS = new Set([
-  'before you begin',
-  'program description',
-  'eligibility',
-  'application and submission information',
-  'review information',
-  'award administration information',
-  'contacts and support',
-  'other information',
-  'overview',
-  'summary',
-  'introduction',
-  'background',
-]);
-
+/**
+ * Extract up to 6 keyword candidates from document section headings.
+ *
+ * Each candidate must:
+ *  - Come from an h2+ heading
+ *  - Pass sanitizeKeywordCandidate (no artifact prefixes; ≤ 3 words after cleaning)
+ *  - Not be a navigational / structural heading (SKIP_HEADINGS or Step/Part/... pattern)
+ *  - Contain at least one word that is not in GENERIC_TERMS
+ */
 function extractHeadingTerms(sections: Section[]): string[] {
   const terms: string[] = [];
 
   for (const section of sections) {
     if (section.headingLevel < 2) continue;
-    const heading = section.heading.trim();
-    if (!heading) continue;
-    if (SKIP_HEADINGS.has(heading.toLowerCase())) continue;
 
-    // Use the full heading if it's short enough and has specific content.
-    const words = heading.split(/\s+/).filter(w => {
+    const sanitized = sanitizeKeywordCandidate(section.heading);
+    if (!sanitized) continue;
+
+    if (isNavigationalHeading(sanitized)) continue;
+
+    // Require at least one non-generic word so pure boilerplate headings
+    // ("Program Requirements", "Review Criteria") are excluded.
+    const meaningfulWords = sanitized.split(/\s+/).filter(w => {
       const lower = w.toLowerCase().replace(/[^a-z]/g, '');
-      return lower.length > 3 && !GENERIC_TERMS.has(lower);
+      return lower.length > 2 && !GENERIC_TERMS.has(lower);
     });
+    if (meaningfulWords.length === 0) continue;
 
-    if (words.length === 0) continue;
-
-    // Short headings: use as-is. Long headings: take first 4 meaningful words.
-    const term = words.length <= 5 ? heading : words.slice(0, 4).join(' ');
-    terms.push(term);
-
+    terms.push(sanitized);
     if (terms.length >= 6) break;
   }
 
