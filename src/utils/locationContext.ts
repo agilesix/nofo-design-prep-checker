@@ -49,12 +49,20 @@ export function buildLocationLookup(
     } else {
       const el = node as Element;
       if (/^h[1-4]$/i.test(el.tagName)) {
-        currentHeading = (el.textContent ?? '').trim() || null;
+        const headingText = (el.textContent ?? '').trim() || null;
+        // For heading elements, nearestHeading should be the *preceding* heading,
+        // so record the context using the currentHeading before updating it.
+        map.set(el, {
+          nearestHeading: currentHeading,
+          page: Math.floor(charCount / CHARS_PER_PAGE) + 1,
+        });
+        currentHeading = headingText;
+      } else {
+        map.set(el, {
+          nearestHeading: currentHeading,
+          page: Math.floor(charCount / CHARS_PER_PAGE) + 1,
+        });
       }
-      map.set(el, {
-        nearestHeading: currentHeading,
-        page: Math.floor(charCount / CHARS_PER_PAGE) + 1,
-      });
     }
     node = walker.nextNode();
   }
