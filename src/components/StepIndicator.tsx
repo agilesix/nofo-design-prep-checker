@@ -79,23 +79,21 @@ export default function StepIndicator({ currentStep, onBack }: StepIndicatorProp
           );
         })}
       </ol>
-      <div
-        className={
-          `usa-step-indicator__header` +
-          (showBack ? ' display-flex flex-align-center flex-gap-2' : '')
-        }
-      >
-        {showBack && (
-          <button
-            type="button"
-            className="usa-button usa-button--unstyled"
-            onClick={onBack}
-          >
-            &larr; Back
-          </button>
-        )}
+      <div className="usa-step-indicator__header">
         <h2 className="usa-step-indicator__heading">
-          <span className="usa-step-indicator__heading-counter">
+          <span
+            className="usa-step-indicator__heading-counter"
+            style={showBack ? { display: 'inline-flex', alignItems: 'center', gap: '0.5rem' } : undefined}
+          >
+            {showBack && (
+              <button
+                type="button"
+                className="usa-button usa-button--unstyled"
+                onClick={onBack}
+              >
+                &larr; Back
+              </button>
+            )}
             <span className="usa-sr-only">Step </span>
             <span className="usa-step-indicator__current-step">{currentStepNumber}</span>
             <span className="usa-step-indicator__total-steps"> of {STEPS.length}</span>
