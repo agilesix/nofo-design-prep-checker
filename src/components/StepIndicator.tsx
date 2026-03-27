@@ -80,8 +80,10 @@ export default function StepIndicator({ currentStep, onBack }: StepIndicatorProp
         })}
       </ol>
       <div
-        className="usa-step-indicator__header"
-        style={showBack ? { display: 'flex', alignItems: 'center', gap: '1rem' } : undefined}
+        className={
+          `usa-step-indicator__header` +
+          (showBack ? ' display-flex flex-align-center flex-gap-2' : '')
+        }
       >
         {showBack && (
           <button
