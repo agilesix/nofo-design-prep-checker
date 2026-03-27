@@ -187,6 +187,12 @@ export default function App(): React.ReactElement {
     URL.revokeObjectURL(url);
   }, [parsedDoc, acceptedFixes, reviewState, uploadedFile]);
 
+  const handleBack = useCallback(() => {
+    if (step === 'download') setStep('summary');
+    else if (step === 'summary') setStep('review');
+    else if (step === 'review') setStep('upload');
+  }, [step]);
+
   const handleStartOver = useCallback(() => {
     setStep('upload');
     setUploadedFile(null);
@@ -200,7 +206,7 @@ export default function App(): React.ReactElement {
     <main id="main-content" className="usa-section">
       <div className="grid-container">
         {step !== 'parsing' && step !== 'guide-selection' && (
-          <StepIndicator currentStep={step} />
+          <StepIndicator currentStep={step} onBack={handleBack} />
         )}
 
         {step === 'upload' && (

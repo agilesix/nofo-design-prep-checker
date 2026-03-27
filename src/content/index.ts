@@ -160,7 +160,7 @@ export const content = {
 
   summary: {
     heading: 'Summary report',
-    intro: 'Review the results of your document check.',
+    intro: "Errors are most likely to cause problems when importing into NOFO Builder or generating the PDF. Skipped issues and items marked 'I'll do it later' are not fixed in your download.",
     sections: {
       accepted: 'Fixes accepted',
       skipped: 'Issues skipped',
