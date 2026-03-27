@@ -28,8 +28,7 @@ const TABLE_001: Rule = {
       if (!firstRowHasTh) {
         const section = findSectionForElement(table, doc);
         const sectionId = section?.id ?? doc.sections[0]?.id ?? 'section-preamble';
-        const page = section?.startPage ?? null;
-        const { nearestHeading } = getContext(table);
+        const { nearestHeading, page } = getContext(table);
 
         issues.push({
           id: `TABLE-001-${index}`,
