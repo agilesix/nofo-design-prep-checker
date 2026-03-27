@@ -126,11 +126,25 @@ const SKIP_HEADINGS = new Set([
 
 /**
  * Strip content-control artifact prefixes and leading/trailing special
- * characters from a keyword candidate, then reject it if it exceeds 3 words.
+ * characters from a raw string. Does not enforce a word-count limit.
  *
  * Artifacts stripped:
  *  - Leading numeric/bracket patterns: [1], [2], (1), 1., 2., 1:, 1)
  *  - Leading and trailing punctuation: [ ] ( ) { } * # @ ! » « · • – — / \ | < >
+ */
+function stripArtifacts(raw: string): string {
+  let s = raw.replace(/^\s*(?:\[\d+\]|\(\d+\)|\d+[.):\]]\s*)/, '').trim();
+  s = s.replace(/^[[\](){}*#@!»«·•–—/\\|<>\]]+/, '')
+       .replace(/[[\](){}*#@!»«·•–—/\\|<>\]]+$/, '')
+       .trim();
+  // Collapse embedded newlines and repeated spaces to a single space.
+  s = s.replace(/\s+/g, ' ');
+  return s;
+}
+
+/**
+ * Strip content-control artifact prefixes and leading/trailing special
+ * characters from a keyword candidate, then reject it if it exceeds 3 words.
  *
  * Returns the cleaned string, or null if the candidate should be discarded.
  */
@@ -141,6 +155,7 @@ function sanitizeKeywordCandidate(raw: string): string | null {
   s = s.replace(/^[\[\](){}*#@!»«·•–—\/\\|<>\]]+/, '')
        .replace(/[\[\](){}*#@!»«·•–—\/\\|<>\]]+$/, '')
        .trim();
+  const s = stripArtifacts(raw);
   if (!s) return null;
   if (s.split(/\s+/).filter(Boolean).length > 3) return null;
   return s;
@@ -224,14 +239,19 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
     }
   }
 
+  // Max character length for a single extracted keyword phrase (opp name / tagline).
+  // Heuristic guardrail: most ≤3-word phrases should fall under this; much longer ones are
+  // likely parsing artifacts rather than meaningful keywords.
+  const MAX_KEYWORD_CHARS = 60;
+
   // 2. Opportunity name — include directly if ≤ 3 words; otherwise derive a
   //    short representative phrase so the program area is still represented.
   const oppNameMatch = doc.rawText.match(/opportunity\s+name\s*:?\s*(.+?)(?:\n|$)/i);
   if (oppNameMatch?.[1]) {
     const oppNameRaw = oppNameMatch[1].trim().replace(/\s+/g, ' ');
     const sanitized = sanitizeKeywordCandidate(oppNameRaw);
-    const candidate = sanitized ?? shortFormOf(oppNameRaw, 3);
-    if (candidate && !isDuplicate(candidate, keywords)) {
+    const candidate = sanitized ?? shortFormOf(stripArtifacts(oppNameRaw), 3);
+    if (candidate && candidate.length <= MAX_KEYWORD_CHARS && !isDuplicate(candidate, keywords)) {
       keywords.push(candidate);
     }
   }
@@ -241,8 +261,8 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
   if (taglineMatch?.[1]) {
     const taglineRaw = taglineMatch[1].trim().replace(/\s+/g, ' ');
     const sanitized = sanitizeKeywordCandidate(taglineRaw);
-    const candidate = sanitized ?? shortFormOf(taglineRaw, 3);
-    if (candidate && !isDuplicate(candidate, keywords)) {
+    const candidate = sanitized ?? shortFormOf(stripArtifacts(taglineRaw), 3);
+    if (candidate && candidate.length <= MAX_KEYWORD_CHARS && !isDuplicate(candidate, keywords)) {
       keywords.push(candidate);
     }
   }
