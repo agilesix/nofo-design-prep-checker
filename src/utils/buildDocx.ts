@@ -93,6 +93,7 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
   const xmlStr = await docFile.async('string');
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
   for (const fix of fixes) {
     if (!fix.value) continue;
@@ -111,20 +112,47 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
 
     // LINK-006: update link display text
     // targetField: "link.text.{anchor}", value: "{new link text}"
+    // Trim is used only to validate non-emptiness; the original value is written
+    // to OOXML so the user's accepted text (including any intentional spacing) is
+    // preserved verbatim.
     if (fix.ruleId === 'LINK-006' && fix.targetField?.startsWith('link.text.')) {
       const anchor = fix.targetField.replace('link.text.', '');
-      const newText = fix.value?.trim();
-      if (anchor && newText) {
+      const newText = fix.value;
+      if (anchor && newText?.trim()) {
         const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
         for (const el of hyperlinks) {
-          if (el.getAttribute('w:anchor') === anchor) {
-            const wTElements = Array.from(el.getElementsByTagName('w:t'));
-            if (wTElements.length > 0) {
-              wTElements[0]!.textContent = newText;
-              for (let i = 1; i < wTElements.length; i++) {
-                wTElements[i]!.textContent = '';
-              }
-            }
+          if (el.getAttribute('w:anchor') !== anchor) continue;
+
+          // Collect only the direct-child <w:r> runs of this hyperlink (bookmarks
+          // and other sibling nodes are left untouched).
+          const runs = Array.from(el.childNodes).filter(
+            (n): n is Element =>
+              n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'r'
+          );
+          if (runs.length === 0) continue;
+
+          // Write the new text into the first run's <w:t>, preserving its
+          // <w:rPr> (hyperlink style, bold, etc.).
+          const firstRun = runs[0]!;
+          let wT = firstRun.getElementsByTagName('w:t')[0];
+          if (!wT) {
+            wT = xmlDoc.createElementNS(W, 'w:t');
+            firstRun.appendChild(wT);
+          }
+          wT.textContent = newText;
+          // xml:space="preserve" is required by the OOXML spec when the text
+          // node contains leading or trailing whitespace characters.
+          if (newText !== newText.trim()) {
+            wT.setAttribute('xml:space', 'preserve');
+          } else {
+            wT.removeAttribute('xml:space');
+          }
+
+          // Remove the remaining runs entirely rather than zeroing their text,
+          // so no empty <w:r> elements remain to cause spacing/formatting
+          // artifacts in Word.
+          for (let i = 1; i < runs.length; i++) {
+            el.removeChild(runs[i]!);
           }
         }
       }

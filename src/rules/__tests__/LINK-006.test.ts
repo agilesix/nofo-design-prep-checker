@@ -391,6 +391,13 @@ describe('LINK-006 stop-word bidirectional match', () => {
     expect(issue.title).toBe('Internal link anchor may need updating');
     expect(issue.inputRequired?.prefill).toBe('Program_requirements_and_expectations');
     expect(issue.description).toContain('Program requirements and expectations');
+
+    // Second result: link-text improvement suggestion
+    const suggestion = results[1] as Issue;
+    expect(suggestion.severity).toBe('suggestion');
+    expect(suggestion.title).toBe('Consider adding destination heading name to link text');
+    expect(suggestion.inputRequired?.targetField).toBe('link.text.Program_requirements_expectations');
+    expect(suggestion.inputRequired?.prefill).toBe('link (see Program requirements and expectations)');
   });
 
   it('stop-word match uses heading id when present', () => {
@@ -474,6 +481,13 @@ describe('LINK-006 numeric extraction fallback', () => {
     expect(issue.title).toBe('Internal link anchor may need updating');
     expect(issue.inputRequired?.prefill).toBe('Attachment_8_Non_duplication_of_federal_funding');
     expect(issue.inputRequired?.targetField).toBe('link.bookmark.Attach8OrgChart');
+
+    // Second result: link-text improvement suggestion
+    const suggestion = results[1] as Issue;
+    expect(suggestion.severity).toBe('suggestion');
+    expect(suggestion.title).toBe('Consider adding destination heading name to link text');
+    expect(suggestion.inputRequired?.targetField).toBe('link.text.Attach8OrgChart');
+    expect(suggestion.inputRequired?.prefill).toBe('link (see Attachment 8: Non-duplication of federal funding)');
   });
 
   it('description uses "possible match" for numeric extraction (lower confidence)', () => {
