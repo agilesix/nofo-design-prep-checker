@@ -134,8 +134,8 @@ const SKIP_HEADINGS = new Set([
  */
 function stripArtifacts(raw: string): string {
   let s = raw.replace(/^\s*(?:\[\d+\]|\(\d+\)|\d+[.):\]]\s*)/, '').trim();
-  s = s.replace(/^[[\](){}*#@!»«·•–—/\\|<>]+/, '')
-       .replace(/[[\](){}*#@!»«·•–—/\\|<>]+$/, '')
+  s = s.replace(/^[[\](){}*#@!»«·•–—/\\|<>\]]+/, '')
+       .replace(/[[\](){}*#@!»«·•–—/\\|<>\]]+$/, '')
        .trim();
   return s;
 }
