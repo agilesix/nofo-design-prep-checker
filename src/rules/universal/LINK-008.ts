@@ -1,4 +1,5 @@
 import type { Rule, Issue, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from '../../types';
+import { buildLocationLookup } from '../../utils/locationContext';
 
 /**
  * LINK-008: Email address mailto: enforcement
@@ -61,16 +62,20 @@ const LINK_008: Rule = {
 
     // ── href with email but missing mailto: protocol → user-confirmed issue ──
     const links = Array.from(htmlDoc.querySelectorAll('a[href]'));
+    const getContext = buildLocationLookup(htmlDoc);
     links.forEach((link, index) => {
       const href = link.getAttribute('href') ?? '';
       if (EMAIL_PATTERN.test(href) && !href.startsWith('mailto:')) {
         const sectionId = findSectionForElement(link, doc);
+        const { nearestHeading, page } = getContext(link);
         results.push({
           id: `LINK-008-href-${index}`,
           ruleId: 'LINK-008',
           title: 'Email link missing mailto: protocol',
           severity: 'error',
           sectionId,
+          nearestHeading,
+          page,
           description: `A link appears to point to an email address but is missing the "mailto:" protocol: "${href}"`,
           suggestedFix: `Change the href to "mailto:${href}"`,
           location: href,

@@ -1,4 +1,5 @@
 import type { Rule, Issue, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from '../../types';
+import { buildLocationLookup } from '../../utils/locationContext';
 
 /**
  * LINK-006: Internal bookmark links
@@ -71,14 +72,28 @@ const LINK_006: Rule = {
 
     // Cache fuzzy results — the same broken anchor may appear in many links
     const fuzzyCache = new Map<string, FuzzyMatchResult>();
+    const getContext = buildLocationLookup(htmlDoc);
 
     bookmarkLinks.forEach((link, index) => {
       const href = link.getAttribute('href') ?? '';
       const anchor = href.slice(1); // strip leading #
       const linkText = (link.textContent ?? '').trim();
+      const { nearestHeading: linkNearestHeading, page: linkPage } = getContext(link);
 
       // Tier 1a: exact match — anchor ID exists in the parsed HTML
-      if (htmlDoc.getElementById(anchor) !== null) return;
+      const exactEl = htmlDoc.getElementById(anchor);
+      if (exactEl !== null) {
+        // If the matched element is a heading and the link text doesn't already
+        // mention the heading name, surface a link-text improvement suggestion.
+        if (/^h[1-6]$/i.test(exactEl.tagName)) {
+          const headingText = (exactEl.textContent ?? '').trim();
+          if (headingText && !linkTextContainsHeading(linkText, headingText)) {
+            const sectionId = findSectionForElement(link, doc);
+            results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, linkPage));
+          }
+        }
+        return;
+      }
 
       // Tier 1b: exact match against OOXML bookmark names
       if (ooxmlBookmarkNames && ooxmlBookmarkNames.has(anchor)) return;
@@ -115,6 +130,8 @@ const LINK_006: Rule = {
           title: 'Internal link anchor may need updating',
           severity: 'warning',
           sectionId,
+          nearestHeading: linkNearestHeading,
+          page: linkPage,
           location: href,
           description,
           suggestedFix: `Retarget "#${anchor}" → "#${fuzzy}"`,
@@ -130,6 +147,14 @@ const LINK_006: Rule = {
             targetField: `link.bookmark.${anchor}`,
           },
         } as Issue);
+
+        // If the anchor resolved to a heading via fuzzy text matching, also
+        // surface a link-text suggestion when the link text doesn't already
+        // reference that heading by name.
+        if (headingText && !linkTextContainsHeading(linkText, headingText)) {
+          results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, linkPage));
+        }
+
         return;
       }
 
@@ -141,6 +166,8 @@ const LINK_006: Rule = {
           title: 'Internal link anchor is ambiguous',
           severity: 'warning',
           sectionId,
+          nearestHeading: linkNearestHeading,
+          page: linkPage,
           location: href,
           description: `The anchor "#${anchor}" wasn't found, and multiple possible matches exist in the document. Resolve this link manually in Word before handoff.`,
           instructionOnly: true,
@@ -156,6 +183,8 @@ const LINK_006: Rule = {
         title: 'Internal bookmark link target not found',
         severity: 'warning',
         sectionId,
+        nearestHeading: linkNearestHeading,
+        page: linkPage,
         description: `The link "${linkText}" points to "#${anchor}" but no matching anchor was found in the document. This link may be broken.`,
         suggestedFix: 'Verify the bookmark exists in the document, or update the link to point to the correct section.',
         location: href,
@@ -448,6 +477,69 @@ function matchByNumericExtraction(
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Returns true when the link text already contains the heading name (or a
+ * recognisable abbreviation of it), so the link-text suggestion is suppressed.
+ *
+ * Two checks:
+ *  1. Exact containment — the full normalised heading appears in the normalised
+ *     link text.  Handles "See Appendix A" when heading is "Appendix A".
+ *  2. Reverse containment — the normalised link text (≥ 5 chars) appears in the
+ *     normalised heading.  Handles link text like "Appendix A" when heading is
+ *     "Appendix A: Full title".
+ */
+function linkTextContainsHeading(linkText: string, headingText: string): boolean {
+  if (!headingText || !linkText) return false;
+  const normLink = normalizeAnchor(linkText);
+  const normHeading = normalizeAnchor(headingText);
+  if (!normHeading) return true;
+  if (normLink.includes(normHeading)) return true;
+  if (normLink.length >= 5 && normHeading.includes(normLink)) return true;
+  return false;
+}
+
+/**
+ * Build a 'suggestion' severity Issue prompting the author to add the
+ * destination heading name to the link text.  The inputRequired field is
+ * pre-filled with "<linkText> (see <headingText>)" and uses the targetField
+ * "link.text.<anchor>" so buildDocx can patch the OOXML when the fix is
+ * accepted.
+ */
+function makeLinkTextSuggestion(
+  id: string,
+  linkText: string,
+  headingText: string,
+  href: string,
+  anchor: string,
+  sectionId: string,
+  nearestHeading: string | null,
+  page: number
+): Issue {
+  const suggestedText = `${linkText} (see ${headingText})`;
+  return {
+    id,
+    ruleId: 'LINK-006',
+    title: 'Consider adding destination heading name to link text',
+    severity: 'suggestion',
+    sectionId,
+    nearestHeading,
+    page,
+    location: href,
+    description:
+      `Adding the destination heading name to the link text helps readers understand where the link goes — especially useful for appendix and section references. ` +
+      `The link "${linkText}" targets "${headingText}".`,
+    inputRequired: {
+      type: 'text',
+      label: 'Suggested link text',
+      fieldDescription: `Current link text: "${linkText}"`,
+      prefill: suggestedText,
+      prefillNote:
+        'Edit the suggested text as needed. Accepting will update the link text in the downloaded document and record your preferred wording.',
+      targetField: `link.text.${anchor}`,
+    },
+  } as Issue;
+}
 
 function findSectionForElement(el: Element, doc: ParsedDocument): string {
   const text = el.textContent ?? '';

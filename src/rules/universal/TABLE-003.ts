@@ -1,4 +1,5 @@
 import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
+import { buildLocationLookup } from '../../utils/locationContext';
 
 /**
  * TABLE-003: Merged cells in tables
@@ -12,6 +13,7 @@ const TABLE_003: Rule = {
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
     const tables = Array.from(htmlDoc.querySelectorAll('table'));
+    const getContext = buildLocationLookup(htmlDoc);
 
     tables.forEach((table, index) => {
       const mergedCells = Array.from(table.querySelectorAll('[colspan],[rowspan]')).filter(cell => {
@@ -24,6 +26,7 @@ const TABLE_003: Rule = {
         const caption = table.querySelector('caption')?.textContent?.trim() ?? '';
         const firstRowText = table.querySelector('tr')?.textContent?.trim().slice(0, 60) ?? '';
         const sectionId = findSectionForElement(table, doc);
+        const { nearestHeading, page } = getContext(table);
 
         issues.push({
           id: `TABLE-003-${index}`,
@@ -31,6 +34,8 @@ const TABLE_003: Rule = {
           title: 'Table contains merged cells',
           severity: 'warning',
           sectionId,
+          nearestHeading,
+          page,
           description: `A table${caption ? ` ("${caption}")` : firstRowText ? ` starting with "${firstRowText}…"` : ''} contains ${mergedCells.length} merged cell${mergedCells.length === 1 ? '' : 's'} (colspan/rowspan). Merged cells can be difficult for screen readers to interpret correctly.`,
           suggestedFix: 'If possible, restructure the table to avoid merged cells. If merging is necessary, ensure the table has a clear, consistent structure.',
           instructionOnly: true,

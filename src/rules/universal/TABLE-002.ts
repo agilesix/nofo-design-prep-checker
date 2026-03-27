@@ -1,4 +1,5 @@
 import type { Rule, Issue, ParsedDocument, RuleRunnerOptions, Section } from '../../types';
+import { buildLocationLookup } from '../../utils/locationContext';
 
 /**
  * TABLE-002: Tables missing a caption
@@ -21,6 +22,7 @@ const TABLE_002: Rule = {
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
     const tables = Array.from(htmlDoc.querySelectorAll('table'));
+    const getContext = buildLocationLookup(htmlDoc);
 
     tables.forEach((table, index) => {
       const caption = table.querySelector('caption');
@@ -34,6 +36,7 @@ const TABLE_002: Rule = {
       if (isExemptFromCaption(table, sectionHeading)) return;
 
       const sectionId = section?.id ?? doc.sections[0]?.id ?? 'section-preamble';
+      const { nearestHeading, page } = getContext(table);
 
       issues.push({
         id: `TABLE-002-${index}`,
@@ -41,6 +44,8 @@ const TABLE_002: Rule = {
         title: 'Table is missing a caption',
         severity: 'warning',
         sectionId,
+        nearestHeading,
+        page,
         description:
           `A table${firstRowText ? ` starting with "${firstRowText}\u2026"` : ''} does not have a caption. ` +
           `Per the SimplerNOFOs style guide, captions must follow the format \u201cTable: Title of table\u201d ` +

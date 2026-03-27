@@ -1,4 +1,5 @@
 import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
+import { buildLocationLookup } from '../../utils/locationContext';
 
 /**
  * LINK-003: Missing protocol in link URL
@@ -12,6 +13,7 @@ const LINK_003: Rule = {
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
     const links = Array.from(htmlDoc.querySelectorAll('a[href]'));
+    const getContext = buildLocationLookup(htmlDoc);
 
     links.forEach((link, index) => {
       const href = (link.getAttribute('href') ?? '').trim();
@@ -32,6 +34,7 @@ const LINK_003: Rule = {
       // Check for www. without protocol
       if (href.startsWith('www.') || /^[a-z0-9.-]+\.[a-z]{2,}\//i.test(href)) {
         const sectionId = findSectionForElement(link, doc);
+        const { nearestHeading, page } = getContext(link);
         const suggestedUrl = `https://${href}`;
 
         issues.push({
@@ -40,6 +43,8 @@ const LINK_003: Rule = {
           title: 'Link is missing protocol (https://)',
           severity: 'error',
           sectionId,
+          nearestHeading,
+          page,
           description: `The link "${text}" has an href of "${href}" which is missing the protocol. Browsers may not resolve this correctly.`,
           suggestedFix: `Change the href to "${suggestedUrl}"`,
           location: href,

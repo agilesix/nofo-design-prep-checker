@@ -35,6 +35,8 @@ const FORMAT_001: Rule = {
           title: 'Section contains excessive bold text',
           severity: 'suggestion',
           sectionId: section.id,
+          nearestHeading: section.headingLevel > 0 ? section.heading : null,
+          page: section.startPage,
           description: `The section "${section.heading}" has ${Math.round(boldRatio * 100)}% of its text formatted as bold. Excessive bold formatting may indicate that Word styles weren't used correctly, or that emphasis is overused.`,
           suggestedFix: 'Review bold formatting in this section. Use bold only for truly important terms or to indicate field labels — not for general emphasis. Consider using proper heading styles instead.',
           instructionOnly: true,

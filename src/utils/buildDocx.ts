@@ -109,6 +109,27 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
       }
     }
 
+    // LINK-006: update link display text
+    // targetField: "link.text.{anchor}", value: "{new link text}"
+    if (fix.ruleId === 'LINK-006' && fix.targetField?.startsWith('link.text.')) {
+      const anchor = fix.targetField.replace('link.text.', '');
+      const newText = fix.value?.trim();
+      if (anchor && newText) {
+        const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+        for (const el of hyperlinks) {
+          if (el.getAttribute('w:anchor') === anchor) {
+            const wTElements = Array.from(el.getElementsByTagName('w:t'));
+            if (wTElements.length > 0) {
+              wTElements[0]!.textContent = newText;
+              for (let i = 1; i < wTElements.length; i++) {
+                wTElements[i]!.textContent = '';
+              }
+            }
+          }
+        }
+      }
+    }
+
     // LINK-006: retarget internal bookmark anchor
     // targetField: "link.bookmark.{old_anchor}", value: "{new_anchor}"
     if (fix.ruleId === 'LINK-006' && fix.targetField?.startsWith('link.bookmark.')) {

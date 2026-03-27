@@ -118,15 +118,14 @@ export default function IssueCard({
           </p>
         )}
 
-        {issue.nearestHeading && (
+        {(issue.page != null || !!issue.nearestHeading) && (
           <p className="font-body-xs text-base margin-top-1">
-            <span className="text-bold">Near:</span> {issue.nearestHeading}
-          </p>
-        )}
-
-        {issue.page != null && (
-          <p className="font-body-xs text-base margin-top-1">
-            📄 Page {issue.page}
+            {[
+              issue.page != null ? `📄 Page ${issue.page}` : null,
+              issue.nearestHeading ? `§ Near: ${issue.nearestHeading}` : null,
+            ]
+              .filter((part): part is string => part !== null)
+              .join(' · ')}
           </p>
         )}
 
