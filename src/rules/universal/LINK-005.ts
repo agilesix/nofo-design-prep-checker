@@ -3,7 +3,7 @@ import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types
 /**
  * LINK-005: Duplicate link text pointing to different URLs
  * Flags cases where the same link text points to different destinations.
- * All offending link texts are consolidated into a single suggestion card.
+ * All offending link texts are consolidated into a single consolidated card.
  */
 const LINK_005: Rule = {
   id: 'LINK-005',
