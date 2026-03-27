@@ -4,6 +4,7 @@ import { content } from '../content';
 
 interface StepIndicatorProps {
   currentStep: AppStep;
+  onBack?: () => void;
 }
 
 interface StepConfig {
@@ -38,12 +39,14 @@ function getStepStatus(
   return 'pending';
 }
 
-export default function StepIndicator({ currentStep }: StepIndicatorProps): React.ReactElement {
+export default function StepIndicator({ currentStep, onBack }: StepIndicatorProps): React.ReactElement {
   const displayStep = resolveDisplayStep(currentStep);
 
   const currentIndex = STEPS.findIndex(s => s.id === displayStep);
   const currentStepNumber = currentIndex + 1;
   const currentLabel = STEPS[currentIndex]?.label ?? '';
+
+  const showBack = onBack !== undefined && displayStep !== 'upload';
 
   return (
     <div className="usa-step-indicator margin-bottom-4">
@@ -76,7 +79,19 @@ export default function StepIndicator({ currentStep }: StepIndicatorProps): Reac
           );
         })}
       </ol>
-      <div className="usa-step-indicator__header">
+      <div
+        className="usa-step-indicator__header"
+        style={showBack ? { display: 'flex', alignItems: 'center', gap: '1rem' } : undefined}
+      >
+        {showBack && (
+          <button
+            type="button"
+            className="usa-button usa-button--unstyled"
+            onClick={onBack}
+          >
+            &larr; Back
+          </button>
+        )}
         <h2 className="usa-step-indicator__heading">
           <span className="usa-step-indicator__heading-counter">
             <span className="usa-sr-only">Step </span>

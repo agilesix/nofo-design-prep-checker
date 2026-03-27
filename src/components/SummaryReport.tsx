@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import type { ReviewState, AcceptedFix } from '../types';
+import React from 'react';
+import type { ReviewState, AcceptedFix, IssueResolution, Issue } from '../types';
 import { content } from '../content';
 import { getCategoryLabel } from '../utils/getCategoryLabel';
 import ContentGuideBadge from './ContentGuideBadge';
@@ -10,6 +10,15 @@ interface SummaryReportProps {
   onProceedToDownload: () => void;
 }
 
+const SEVERITY_GROUPS = ['error', 'warning', 'suggestion'] as const;
+type Severity = (typeof SEVERITY_GROUPS)[number];
+
+const SEVERITY_LABELS: Record<Severity, string> = {
+  error: 'Errors',
+  warning: 'Warnings',
+  suggestion: 'Suggestions',
+};
+
 export default function SummaryReport({
   reviewState,
   acceptedFixes,
@@ -19,23 +28,18 @@ export default function SummaryReport({
 
   const acceptedIssues = issues.filter(i => resolutions[i.id] === 'accepted');
   const skippedIssues = issues.filter(i => resolutions[i.id] === 'skipped');
-  const keptAsBoldIssues = issues.filter(i => resolutions[i.id] === 'keptAsBold');
   const unreviewedIssues = issues.filter(i => resolutions[i.id] === 'unreviewed');
 
   const totalFixed = acceptedFixes.length + autoAppliedChanges.length;
 
-  const [unreviewedOpen, setUnreviewedOpen] = useState(false);
-  const [skippedOpen, setSkippedOpen] = useState(false);
-  const [keptAsBoldOpen, setKeptAsBoldOpen] = useState(false);
-
   return (
     <div className="margin-top-4">
-      <div className="display-flex flex-align-center flex-gap-2 margin-bottom-2">
-        <h1 className="usa-h1 margin-0">{content.steps.summary.heading}</h1>
-        {activeContentGuide && (
+      <h1 className="usa-h1 margin-bottom-1">{content.steps.summary.heading}</h1>
+      {activeContentGuide && (
+        <div className="margin-bottom-2">
           <ContentGuideBadge guide={activeContentGuide} />
-        )}
-      </div>
+        </div>
+      )}
 
       <p className="usa-intro">{content.summary.intro}</p>
 
@@ -69,123 +73,59 @@ export default function SummaryReport({
 
       {/* Auto-applied changes */}
       {autoAppliedChanges.length > 0 && (
-        <div className="margin-bottom-4">
-          <h2 className="usa-h3">{content.summary.sections.autoApplied}</h2>
-          <ul className="usa-list">
-            {autoAppliedChanges.map((change, i) => (
-              <li key={i}>{change.description}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Accepted fixes */}
-      {acceptedIssues.length > 0 && (
-        <div className="margin-bottom-4">
-          <h2 className="usa-h3">{content.summary.sections.accepted}</h2>
-          <table className="usa-table usa-table--borderless width-full">
-            <thead>
-              <tr>
-                <th scope="col">Issue</th>
-                <th scope="col">Category</th>
-                <th scope="col">Severity</th>
-              </tr>
-            </thead>
-            <tbody>
-              {acceptedIssues.map(issue => (
-                <tr key={issue.id}>
-                  <td>{issue.title}</td>
-                  <td>{getCategoryLabel(issue.ruleId)}</td>
-                  <td>
-                    <span className={`usa-tag font-body-3xs ${getSeverityTagClass(issue.severity)}`}>
-                      {issue.severity}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Skipped issues */}
-      {skippedIssues.length > 0 && (
-        <div className="margin-bottom-4">
-          <h2 className="usa-h3">{content.summary.sections.skipped}</h2>
-          <p className="font-body-sm margin-bottom-1">
-            {skippedIssues.length} issue{skippedIssues.length === 1 ? '' : 's'} skipped — no fixes will be applied.
-          </p>
-          <button
-            type="button"
-            className="usa-button usa-button--unstyled font-body-sm"
-            onClick={() => setSkippedOpen(o => !o)}
-            aria-expanded={skippedOpen}
-          >
-            {skippedOpen ? 'Hide issues ▴' : 'Show issues ▾'}
-          </button>
-          {skippedOpen && (
-            <ul className="usa-list margin-top-1">
-              {skippedIssues.map(issue => (
-                <li key={issue.id}>
-                  <strong>{issue.title}</strong> — {getCategoryLabel(issue.ruleId)}
+        <div className="usa-alert usa-alert--success margin-bottom-4">
+          <div className="usa-alert__body">
+            <h2 className="usa-alert__heading">Changes applied automatically</h2>
+            <p className="usa-alert__text">
+              The following changes were made to your document without requiring your input. They are included in your download.
+            </p>
+            <ul className="usa-list margin-top-2">
+              {autoAppliedChanges.map((change, i) => (
+                <li
+                  key={i}
+                  style={{ borderLeft: '2px solid #00a91c', paddingLeft: '0.75rem', marginBottom: '0.5rem' }}
+                >
+                  <strong>{getCategoryLabel(change.ruleId)}</strong> &mdash; {change.description}
                 </li>
               ))}
             </ul>
-          )}
-        </div>
-      )}
-
-      {/* Kept as bold */}
-      {keptAsBoldIssues.length > 0 && (
-        <div className="margin-bottom-4">
-          <h2 className="usa-h3">Kept as bold</h2>
-          <p className="font-body-sm margin-bottom-1">
-            {keptAsBoldIssues.length} issue{keptAsBoldIssues.length === 1 ? '' : 's'} kept as bold.
-          </p>
-          <button
-            type="button"
-            className="usa-button usa-button--unstyled font-body-sm"
-            onClick={() => setKeptAsBoldOpen(o => !o)}
-            aria-expanded={keptAsBoldOpen}
-          >
-            {keptAsBoldOpen ? 'Hide issues ▴' : 'Show issues ▾'}
-          </button>
-          {keptAsBoldOpen && (
-            <ul className="usa-list margin-top-1">
-              {keptAsBoldIssues.map(issue => (
-                <li key={issue.id}>{issue.title}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
-      {/* Unreviewed */}
-      {unreviewedIssues.length > 0 && (
-        <div className="usa-alert usa-alert--warning margin-bottom-4">
-          <div className="usa-alert__body">
-            <h2 className="usa-alert__heading">Unreviewed issues</h2>
-            <p className="usa-alert__text">
-              {unreviewedIssues.length} issue{unreviewedIssues.length === 1 ? '' : 's'} were not reviewed and will not have fixes applied.
-            </p>
-            <button
-              type="button"
-              className="usa-button usa-button--unstyled font-body-sm"
-              onClick={() => setUnreviewedOpen(o => !o)}
-              aria-expanded={unreviewedOpen}
-            >
-              {unreviewedOpen ? 'Hide issues ▴' : 'Show issues ▾'}
-            </button>
-            {unreviewedOpen && (
-              <ul className="usa-list margin-top-1">
-                {unreviewedIssues.map(issue => (
-                  <li key={issue.id}>{issue.title}</li>
-                ))}
-              </ul>
-            )}
           </div>
         </div>
       )}
+
+      {/* Issues grouped by severity */}
+      {SEVERITY_GROUPS.map(severity => {
+        const severityIssues = issues.filter(i => i.severity === severity);
+        if (severityIssues.length === 0) return null;
+        return (
+          <div key={severity} className="margin-bottom-4">
+            <h2 className="usa-h2">{SEVERITY_LABELS[severity]} ({severityIssues.length})</h2>
+            <table className="usa-table usa-table--borderless width-full">
+              <thead>
+                <tr>
+                  <th scope="col">Category</th>
+                  <th scope="col">Issue</th>
+                  <th scope="col">Location</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {severityIssues.map(issue => {
+                  const resolution = resolutions[issue.id] ?? null;
+                  return (
+                    <tr key={issue.id} style={getRowStyle(resolution)}>
+                      <td>{getCategoryLabel(issue.ruleId)}</td>
+                      <td>{issue.title}</td>
+                      <td>{getLocationText(issue)}</td>
+                      <td>{getStatusDisplay(resolution, issue.instructionOnly)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
 
       <div className="margin-top-4">
         <button
@@ -200,11 +140,30 @@ export default function SummaryReport({
   );
 }
 
-function getSeverityTagClass(severity: string): string {
-  switch (severity) {
-    case 'error': return 'bg-red text-white';
-    case 'warning': return 'bg-gold text-ink';
-    case 'suggestion': return 'bg-blue text-white';
-    default: return 'bg-base text-white';
+function getRowStyle(resolution: IssueResolution | null): React.CSSProperties {
+  if (resolution === 'accepted') return { backgroundColor: '#ecf3ec' };
+  if (resolution === 'unreviewed') return { backgroundColor: '#f8e6e6' };
+  return {};
+}
+
+function getLocationText(issue: Issue): string {
+  const parts: string[] = [];
+  if (issue.page) parts.push(`Page ${issue.page}`);
+  if (issue.nearestHeading) parts.push(issue.nearestHeading);
+  return parts.length > 0 ? parts.join(' \u2014 ') : '\u2014';
+}
+
+function getStatusDisplay(resolution: IssueResolution | null, instructionOnly?: boolean): React.ReactElement {
+  switch (resolution) {
+    case 'accepted':
+      return <span style={{ color: '#1a7a1a', fontWeight: 'bold' }}>\u2713 Accepted</span>;
+    case 'keptAsBold':
+      return <span style={{ color: '#71767a' }}>Kept as bold text</span>;
+    case 'skipped':
+      return instructionOnly
+        ? <span style={{ color: '#71767a' }}>I&apos;ll do it later</span>
+        : <span style={{ color: '#71767a' }}>Skipped</span>;
+    default:
+      return <span style={{ color: '#71767a', fontStyle: 'italic' }}>Unreviewed</span>;
   }
 }
