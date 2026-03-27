@@ -124,7 +124,7 @@ export default function IssueCard({
               issue.page != null ? `📄 Page ${issue.page}` : null,
               issue.nearestHeading ? `§ Near: ${issue.nearestHeading}` : null,
             ]
-              .filter(Boolean)
+              .filter((part): part is string => part !== null)
               .join(' · ')}
           </p>
         )}
