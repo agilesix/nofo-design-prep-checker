@@ -137,6 +137,8 @@ function stripArtifacts(raw: string): string {
   s = s.replace(/^[[\](){}*#@!»«·•–—/\\|<>\]]+/, '')
        .replace(/[[\](){}*#@!»«·•–—/\\|<>\]]+$/, '')
        .trim();
+  // Collapse embedded newlines and repeated spaces to a single space.
+  s = s.replace(/\s+/g, ' ');
   return s;
 }
 
@@ -231,6 +233,11 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
     }
   }
 
+  // Max character length for a single extracted keyword phrase (opp name / tagline).
+  // Heuristic guardrail: most ≤3-word phrases should fall under this; much longer ones are
+  // likely parsing artifacts rather than meaningful keywords.
+  const MAX_KEYWORD_CHARS = 60;
+
   // 2. Opportunity name — include directly if ≤ 3 words; otherwise derive a
   //    short representative phrase so the program area is still represented.
   const oppNameMatch = doc.rawText.match(/opportunity\s+name\s*:?\s*(.+?)(?:\n|$)/i);
@@ -238,7 +245,7 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
     const oppNameRaw = oppNameMatch[1].trim().replace(/\s+/g, ' ');
     const sanitized = sanitizeKeywordCandidate(oppNameRaw);
     const candidate = sanitized ?? shortFormOf(stripArtifacts(oppNameRaw), 3);
-    if (candidate && !isDuplicate(candidate, keywords)) {
+    if (candidate && candidate.length <= MAX_KEYWORD_CHARS && !isDuplicate(candidate, keywords)) {
       keywords.push(candidate);
     }
   }
@@ -249,7 +256,7 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
     const taglineRaw = taglineMatch[1].trim().replace(/\s+/g, ' ');
     const sanitized = sanitizeKeywordCandidate(taglineRaw);
     const candidate = sanitized ?? shortFormOf(stripArtifacts(taglineRaw), 3);
-    if (candidate && !isDuplicate(candidate, keywords)) {
+    if (candidate && candidate.length <= MAX_KEYWORD_CHARS && !isDuplicate(candidate, keywords)) {
       keywords.push(candidate);
     }
   }
