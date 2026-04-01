@@ -30,6 +30,16 @@ This tool automates that process. The same comprehensive review now takes about 
 - **Application checklists** — formatting issues that make checklist items harder to scan or understand
 - **Text formatting** — common style issues in dates, times, and ranges based on SimplerNOFOs guidance
 
+## Applied automatically
+
+The following changes are applied silently without requiring review. They appear in the **Applied automatically** sidebar on the review screen and in the Summary page with a count of what was changed.
+
+| Rule | Scope | What it does |
+|------|-------|--------------|
+| **Tagline relocation** (CLEAN-005) | All NOFOs | If the document contains a standalone tagline paragraph ("Tagline: …") that is not already positioned immediately after the metadata block, moves it there. Removes any duplicate tagline paragraphs found elsewhere in the document. Reports: *"Tagline relocated to follow metadata section."* Skips silently if no standalone tagline is found, if no headings are present, or if the tagline is already correctly placed. |
+| **Before You Begin heading removal** (CLEAN-006) | HRSA NOFOs only | NOFO Builder does not use a "Before You Begin" heading. For HRSA NOFOs, any heading-level paragraph (any heading level) with exactly that text is automatically removed. The content below the heading is preserved. Reports: *"Before You Begin heading removed — content preserved."* |
+| **Date format correction** (FORMAT-002) | All NOFOs except HRSA | Scans paragraph text for dates that do not follow the SimplerNOFOs style guide format of Month D, YYYY (e.g. "April 2, 2024"). Corrects: MM/DD/YYYY or MM/DD/YY, Month DD, YYYY with a leading zero on the day (e.g. "April 02, 2024"), and YYYY-MM-DD. When a day name precedes the date (e.g. "Monday, April 02, 2024") the day name is preserved. Reports: *"Date formats corrected — N instance(s) updated to Month D, YYYY format."* No entry appears if zero corrections are needed. **HRSA exception:** HRSA templates use MM/DD/YYYY by convention — this rule is skipped entirely for all HRSA content guides. |
+
 ## Your document stays private
 
 This tool runs entirely in your browser. **Your document is never uploaded to a server, saved, or shared with anyone.** When you close the tab, all data is cleared automatically.

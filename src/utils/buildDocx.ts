@@ -24,6 +24,15 @@ export async function buildDocx(
   const hasDoublespaceFix = autoAppliedChanges.some(
     c => c.targetField === 'text.doublespace'
   );
+  const hasTaglineRelocate = autoAppliedChanges.some(
+    c => c.targetField === 'struct.tagline.relocate'
+  );
+  const hasRemoveBybHeading = autoAppliedChanges.some(
+    c => c.targetField === 'struct.byb.removeheading'
+  );
+  const hasDateCorrection = autoAppliedChanges.some(
+    c => c.targetField === 'format.date.correct'
+  );
 
   // Apply metadata patches
   if (metaFixes.length > 0) {
@@ -48,6 +57,21 @@ export async function buildDocx(
   // Apply note fixes (two-file operation)
   if (noteFixes.length > 0) {
     await applyNoteFixes(zip);
+  }
+
+  // Apply tagline relocation
+  if (hasTaglineRelocate) {
+    await applyTaglineRelocation(zip);
+  }
+
+  // Apply "Before You Begin" heading removal
+  if (hasRemoveBybHeading) {
+    await applyRemoveBeforeYouBeginHeading(zip);
+  }
+
+  // Apply date format corrections
+  if (hasDateCorrection) {
+    await applyDateFormatCorrections(zip);
   }
 
   return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
@@ -261,6 +285,224 @@ async function applyNoteFixes(_zip: JSZip): Promise<void> {
   // NOTE-003: convert footnotes to endnotes
   // This is handled during rule execution as an auto-applied change
   // The actual XML mutation should be done in NOTE-003 rule
+}
+
+// ─── Shared OOXML helpers ─────────────────────────────────────────────────────
+
+/**
+ * Concatenate the text content of all <w:t> descendants of a <w:p> element.
+ */
+function getParaText(para: Element): string {
+  return Array.from(para.getElementsByTagName('w:t'))
+    .map(t => t.textContent ?? '')
+    .join('');
+}
+
+/**
+ * Return true if a <w:p> element has a heading paragraph style
+ * (w:pStyle value starts with "Heading").
+ */
+function isHeadingParagraph(wP: Element): boolean {
+  const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
+  if (!pPr) return false;
+  const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+  if (!pStyle) return false;
+  return (pStyle.getAttribute('w:val') ?? '').startsWith('Heading');
+}
+
+// ─── CLEAN-005: Tagline relocation ───────────────────────────────────────────
+
+/**
+ * Move the standalone tagline paragraph to immediately before the first
+ * heading in the document body (i.e., immediately after the metadata block).
+ * Removes any duplicate tagline paragraphs found anywhere in the body.
+ */
+async function applyTaglineRelocation(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  // Collect direct element children of <w:body>.
+  const bodyElements = (): Element[] =>
+    Array.from(body.childNodes).filter(
+      n => n.nodeType === Node.ELEMENT_NODE
+    ) as Element[];
+
+  // Identify all standalone tagline <w:p> elements (direct body children).
+  const taglineParagraphs = bodyElements().filter(el => {
+    if (el.localName !== 'p') return false;
+    const text = getParaText(el).trim();
+    return /^tagline\s*:?/i.test(text);
+  });
+
+  if (taglineParagraphs.length === 0) return;
+
+  const primary = taglineParagraphs[0]!;
+
+  // Remove all tagline paragraphs (primary and any duplicates) from the body.
+  for (const el of taglineParagraphs) {
+    body.removeChild(el);
+  }
+
+  // Find the first heading paragraph in the updated children.
+  const updatedChildren = bodyElements();
+  const firstHeadingEl = updatedChildren.find(
+    el => el.localName === 'p' && isHeadingParagraph(el)
+  );
+
+  if (firstHeadingEl) {
+    // Insert the primary tagline just before the first heading.
+    body.insertBefore(primary, firstHeadingEl);
+  } else {
+    // No heading found — place before <w:sectPr> if present, otherwise append.
+    const sectPr = updatedChildren.find(el => el.localName === 'sectPr');
+    if (sectPr) {
+      body.insertBefore(primary, sectPr);
+    } else {
+      body.appendChild(primary);
+    }
+  }
+
+  const serializer = new XMLSerializer();
+  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+}
+
+// ─── CLEAN-006: Remove "Before You Begin" heading ────────────────────────────
+
+/**
+ * Remove any heading-style <w:p> elements whose text is exactly
+ * "Before You Begin" (case-insensitive, whitespace-normalised).
+ * Content following the heading is left intact.
+ */
+async function applyRemoveBeforeYouBeginHeading(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  const toRemove: Element[] = [];
+
+  for (const child of Array.from(body.childNodes)) {
+    if (child.nodeType !== Node.ELEMENT_NODE) continue;
+    const el = child as Element;
+    if (el.localName !== 'p') continue;
+    if (!isHeadingParagraph(el)) continue;
+
+    const text = getParaText(el).replace(/\s+/g, ' ').trim().toLowerCase();
+    if (text === 'before you begin') {
+      toRemove.push(el);
+    }
+  }
+
+  if (toRemove.length === 0) return;
+
+  for (const el of toRemove) {
+    body.removeChild(el);
+  }
+
+  const serializer = new XMLSerializer();
+  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+}
+
+// ─── FORMAT-002: Date format corrections ─────────────────────────────────────
+
+const DATE_MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+] as const;
+
+const DATE_MONTH_PATTERN = DATE_MONTHS.join('|');
+
+/**
+ * Reformat non-standard dates within a single text string.
+ * Returns the corrected string (unchanged if no non-standard dates found).
+ *
+ * Patterns corrected:
+ *  A. YYYY-MM-DD          →  Month D, YYYY
+ *  B. MM/DD/YYYY or MM/DD/YY  →  Month D, YYYY
+ *  C. Month DD, YYYY (leading-zero day 01–09)  →  Month D, YYYY
+ *
+ * Day names preceding the date (e.g. "Monday, ") are preserved because the
+ * regexes match only the date portion.
+ */
+function applyDateFormatsToText(text: string): string {
+  let result = text;
+
+  // Pattern A: YYYY-MM-DD
+  result = result.replace(
+    /\b(\d{4})-(0?[1-9]|1[0-2])-(0?[1-9]|[12]\d|3[01])\b/g,
+    (_match, year, month, day) => {
+      const monthName = DATE_MONTHS[parseInt(month, 10) - 1] ?? month;
+      return `${monthName} ${parseInt(day, 10)}, ${year}`;
+    }
+  );
+
+  // Pattern B: MM/DD/YYYY or MM/DD/YY
+  result = result.replace(
+    /\b(0?[1-9]|1[0-2])\/(0?[1-9]|[12]\d|3[01])\/(\d{2}|\d{4})\b/g,
+    (_match, month, day, year) => {
+      const monthName = DATE_MONTHS[parseInt(month, 10) - 1] ?? month;
+      const fullYear = year.length === 2 ? 2000 + parseInt(year, 10) : parseInt(year, 10);
+      return `${monthName} ${parseInt(day, 10)}, ${fullYear}`;
+    }
+  );
+
+  // Pattern C: Month DD, YYYY with leading-zero day (01–09 only)
+  result = result.replace(
+    new RegExp(`\\b(${DATE_MONTH_PATTERN})\\s+(0[1-9]),\\s*(\\d{4})\\b`, 'g'),
+    (_match, monthName, day, year) => `${monthName} ${parseInt(day, 10)}, ${year}`
+  );
+
+  return result;
+}
+
+/**
+ * Scan all <w:t> elements in body paragraphs (excluding headings) and
+ * reformat any non-standard dates in their text content.
+ */
+async function applyDateFormatCorrections(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const wTElements = Array.from(xmlDoc.getElementsByTagName('w:t'));
+  let changed = false;
+
+  for (const wT of wTElements) {
+    const text = wT.textContent ?? '';
+    if (!text) continue;
+
+    // Skip heading paragraphs and table cells (mirrors CLEAN-004 exclusion logic).
+    const wP = findAncestorByLocalName(wT, 'p');
+    if (wP && isExcludedParagraph(wP)) continue;
+
+    const wTc = findAncestorByLocalName(wT, 'tc');
+    if (wTc) continue;
+    const corrected = applyDateFormatsToText(text);
+    if (corrected !== text) {
+      wT.textContent = corrected;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
 }
 
 /**
