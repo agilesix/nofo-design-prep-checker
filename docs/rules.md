@@ -59,12 +59,15 @@ Universal rules run on every document regardless of which content guide is selec
 | Rule ID | Title | Severity | Description |
 |---------|-------|----------|-------------|
 | CLEAN-004 | Collapse double spaces in body text (auto-apply) | — | Two or more consecutive spaces between words in body paragraphs are silently collapsed to a single space. Excludes headings, table cells, and code/preformatted blocks. |
+| CLEAN-005 | Tagline relocation (auto-apply) | — | Checks whether the document's standalone tagline paragraph is positioned immediately after the metadata block (immediately before the first heading). If not, silently moves it there. Also removes any duplicate tagline paragraphs found elsewhere in the document. Skips when no standalone tagline is found, when no headings are present, or when the tagline is already in the correct position. Applies to all NOFOs. |
+| CLEAN-006 | Remove "Before You Begin" heading — HRSA only (auto-apply) | — | NOFO Builder does not use a "Before You Begin" heading. For HRSA NOFOs, any heading-level paragraph (any heading level) whose text is exactly "Before You Begin" is automatically removed. The content below the heading is preserved. Scoped to HRSA content guides only. |
 
 ### Text formatting (FORMAT)
 
 | Rule ID | Title | Severity | Description |
 |---------|-------|----------|-------------|
 | FORMAT-001 | Excessive bold text | Suggestion | A section has an unusually high proportion of bold text, which may indicate incorrect use of Word styles. |
+| FORMAT-002 | Date format correction (auto-apply) | — | Scans paragraph text for dates that do not follow the SimplerNOFOs style guide format of "Month D, YYYY". Automatically corrects: MM/DD/YYYY or MM/DD/YY → Month D, YYYY; Month DD, YYYY with a leading-zero day (e.g. "April 02, 2024") → Month D, YYYY; YYYY-MM-DD → Month D, YYYY. When a day name precedes the date (e.g. "Monday, April 02, 2024") the day name is preserved and only the date is reformatted. No entry appears in the auto-applied list when zero corrections are needed. **Exception: HRSA NOFOs use MM/DD/YYYY by convention — this rule is skipped entirely for all HRSA content guides.** |
 
 ---
 
@@ -89,7 +92,7 @@ These run for ACF, ACL, CDC (standard), CMS, and IHS content guides.
 
 | Rule ID | Title | Applies to |
 |---------|-------|------------|
-| STRUCT-007 | Required "Before You Begin" section | All HRSA guides |
+| STRUCT-007 | Required "Before You Begin" section | All HRSA guides | Note: CLEAN-006 auto-removes the "Before You Begin" heading from the downloaded document — STRUCT-007 checks the original uploaded document and will not conflict. |
 | STRUCT-008 | Required "Trainee Eligibility" section | HRSA BHW, MCHB, RR |
 | STRUCT-009 | Required "Project Description" section | HRSA Construction |
 | STRUCT-020 | Required "Program Requirements" section | HRSA BPHC |
