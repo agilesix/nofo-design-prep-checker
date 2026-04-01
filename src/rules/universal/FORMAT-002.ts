@@ -7,12 +7,20 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
  * guide format of "Month D, YYYY" (e.g. "April 2, 2024"). Automatically
  * corrects dates in these non-standard formats:
  *
- *  - MM/DD/YYYY or MM/DD/YY           →  Month D, YYYY
- *  - Month DD, YYYY (leading-zero day) →  Month D, YYYY  (e.g. "April 02, 2024" → "April 2, 2024")
- *  - YYYY-MM-DD                        →  Month D, YYYY
+ *  - MM/DD/YYYY (4-digit year required)  →  Month D, YYYY
+ *  - Month DD, YYYY (leading-zero day)   →  Month D, YYYY  (e.g. "April 02, 2024" → "April 2, 2024")
+ *  - YYYY-MM-DD                          →  Month D, YYYY
+ *
+ * Note: MM/DD/YY (2-digit year) is intentionally NOT corrected — there is no
+ * reliable way to expand a 2-digit year without potentially introducing an
+ * incorrect century (e.g. 12/31/98 could be 1998 or 2098). Only 4-digit years
+ * are auto-corrected.
  *
  * When a day name precedes the date (e.g. "Monday, April 02, 2024") the day
  * name is preserved and only the date portion is reformatted.
+ *
+ * Excludes headings and code/preformatted blocks, matching the scope of the
+ * OOXML patcher in buildDocx.ts.
  *
  * Exception: HRSA NOFOs use MM/DD/YYYY by convention — this rule is skipped
  * entirely for any HRSA content guide.
@@ -39,8 +47,9 @@ function countNonStandardDates(text: string): number {
   const matchesA = text.match(patternA);
   if (matchesA) count += matchesA.length;
 
-  // Pattern B: MM/DD/YYYY or MM/DD/YY
-  const patternB = /\b(?:0?[1-9]|1[0-2])\/(?:0?[1-9]|[12]\d|3[01])\/(?:\d{2}|\d{4})\b/g;
+  // Pattern B: MM/DD/YYYY (4-digit year only — 2-digit years are not corrected
+  // because there is no reliable way to determine the correct century).
+  const patternB = /\b(?:0?[1-9]|1[0-2])\/(?:0?[1-9]|[12]\d|3[01])\/\d{4}\b/g;
   const matchesB = text.match(patternB);
   if (matchesB) count += matchesB.length;
 
@@ -80,8 +89,9 @@ const FORMAT_002: Rule = {
       const parent = textNode.parentElement;
       if (!parent) continue;
 
-      // Skip headings
+      // Skip headings and code/preformatted content to match OOXML mutation exclusions.
       if (parent.closest('h1, h2, h3, h4, h5, h6')) continue;
+      if (parent.closest('code, pre')) continue;
 
       const text = textNode.textContent ?? '';
       totalCount += countNonStandardDates(text);

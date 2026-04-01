@@ -448,13 +448,13 @@ function applyDateFormatsToText(text: string): string {
     }
   );
 
-  // Pattern B: MM/DD/YYYY or MM/DD/YY
+  // Pattern B: MM/DD/YYYY (4-digit year only — 2-digit years are not corrected
+  // because there is no reliable way to determine the correct century).
   result = result.replace(
-    /\b(0?[1-9]|1[0-2])\/(0?[1-9]|[12]\d|3[01])\/(\d{2}|\d{4})\b/g,
+    /\b(0?[1-9]|1[0-2])\/(0?[1-9]|[12]\d|3[01])\/(\d{4})\b/g,
     (_match, month, day, year) => {
       const monthName = DATE_MONTHS[parseInt(month, 10) - 1] ?? month;
-      const fullYear = year.length === 2 ? 2000 + parseInt(year, 10) : parseInt(year, 10);
-      return `${monthName} ${parseInt(day, 10)}, ${fullYear}`;
+      return `${monthName} ${parseInt(day, 10)}, ${parseInt(year, 10)}`;
     }
   );
 
