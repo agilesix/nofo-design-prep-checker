@@ -429,9 +429,12 @@ const DATE_MONTH_PATTERN = DATE_MONTHS.join('|');
  * Returns the corrected string (unchanged if no non-standard dates found).
  *
  * Patterns corrected:
- *  A. YYYY-MM-DD          →  Month D, YYYY
- *  B. MM/DD/YYYY or MM/DD/YY  →  Month D, YYYY
- *  C. Month DD, YYYY (leading-zero day 01–09)  →  Month D, YYYY
+ *  A. YYYY-MM-DD                              →  Month D, YYYY
+ *  B. MM/DD/YYYY (4-digit year only)          →  Month D, YYYY
+ *  C. Month DD, YYYY (leading-zero day 01–09) →  Month D, YYYY
+ *
+ * MM/DD/YY (2-digit year) is intentionally not corrected — there is no
+ * reliable way to determine the correct century.
  *
  * Day names preceding the date (e.g. "Monday, ") are preserved because the
  * regexes match only the date portion.
@@ -468,8 +471,9 @@ function applyDateFormatsToText(text: string): string {
 }
 
 /**
- * Scan all <w:t> elements in body paragraphs (excluding headings) and
- * reformat any non-standard dates in their text content.
+ * Scan all <w:t> elements in body paragraphs and reformat any non-standard
+ * dates in their text content. Excludes headings and code/preformatted
+ * paragraphs via isExcludedParagraph().
  */
 async function applyDateFormatCorrections(zip: JSZip): Promise<void> {
   const docFile = zip.file('word/document.xml');
