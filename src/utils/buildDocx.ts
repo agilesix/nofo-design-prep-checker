@@ -486,10 +486,12 @@ async function applyDateFormatCorrections(zip: JSZip): Promise<void> {
     const text = wT.textContent ?? '';
     if (!text) continue;
 
-    // Skip heading paragraphs (mirrors CLEAN-004 exclusion logic).
+    // Skip heading paragraphs and table cells (mirrors CLEAN-004 exclusion logic).
     const wP = findAncestorByLocalName(wT, 'p');
     if (wP && isExcludedParagraph(wP)) continue;
 
+    const wTc = findAncestorByLocalName(wT, 'tc');
+    if (wTc) continue;
     const corrected = applyDateFormatsToText(text);
     if (corrected !== text) {
       wT.textContent = corrected;
