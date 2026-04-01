@@ -165,7 +165,7 @@ describe('getCategoryLabel utility', () => {
     const { getCategoryLabel } = await import('../../utils/getCategoryLabel');
     expect(getCategoryLabel('META-001')).toBe('Document metadata');
     expect(getCategoryLabel('LINK-001')).toBe('Links');
-    expect(getCategoryLabel('TABLE-001')).toBe('Tables');
+    expect(getCategoryLabel('TABLE-002')).toBe('Tables');
     expect(getCategoryLabel('NOTE-001')).toBe('Footnotes and endnotes');
     expect(getCategoryLabel('IMG-001')).toBe('Images');
     expect(getCategoryLabel('LIST-001')).toBe('Lists');
