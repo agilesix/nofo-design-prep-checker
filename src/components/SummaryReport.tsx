@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { ReviewState, AcceptedFix, IssueResolution, Issue } from '../types';
 import { content } from '../content';
 import { getCategoryLabel } from '../utils/getCategoryLabel';
@@ -8,7 +8,13 @@ interface SummaryReportProps {
   reviewState: ReviewState;
   acceptedFixes: AcceptedFix[];
   onProceedToDownload: () => void;
+  onGoBackToReview: () => void;
 }
+
+const RESOLUTION_COLORS = {
+  accepted: { bg: '#ecf3ec', text: '#1a7a1a' },
+  unreviewed: { bg: '#f8e1e1', text: '#b50909' },
+} as const;
 
 const SEVERITY_GROUPS = ['error', 'warning', 'suggestion'] as const;
 type Severity = (typeof SEVERITY_GROUPS)[number];
@@ -23,11 +29,12 @@ export default function SummaryReport({
   reviewState,
   acceptedFixes,
   onProceedToDownload,
+  onGoBackToReview,
 }: SummaryReportProps): React.ReactElement {
   const { issues, autoAppliedChanges, resolutions, activeContentGuide } = reviewState;
+  const [showUnreviewedWarning, setShowUnreviewedWarning] = useState(false);
 
   const acceptedIssues = issues.filter(i => resolutions[i.id] === 'accepted');
-  const skippedIssues = issues.filter(i => resolutions[i.id] === 'skipped');
   const unreviewedIssues = issues.filter(i => resolutions[i.id] === 'unreviewed');
 
   const totalFixed = acceptedFixes.length + autoAppliedChanges.length;
@@ -64,9 +71,9 @@ export default function SummaryReport({
           </div>
         </div>
         <div className="grid-col-12 tablet:grid-col-3">
-          <div className="usa-card__body bg-gold-5 padding-3 text-center">
-            <p className="font-heading-xl margin-0 text-gold-50">{skippedIssues.length + unreviewedIssues.length}</p>
-            <p className="font-body-sm margin-0">{content.summary.sections.skipped}</p>
+          <div className="usa-card__body padding-3 text-center" style={{ backgroundColor: RESOLUTION_COLORS.unreviewed.bg }}>
+            <p className="font-heading-xl margin-0" style={{ color: RESOLUTION_COLORS.unreviewed.text }}>{unreviewedIssues.length}</p>
+            <p className="font-body-sm margin-0" style={{ color: RESOLUTION_COLORS.unreviewed.text }}>{content.summary.sections.unreviewed}</p>
           </div>
         </div>
       </div>
@@ -101,10 +108,10 @@ export default function SummaryReport({
             </h2>
             <table className="usa-table usa-table--borderless width-full">
               <colgroup>
-                <col style={{ width: '20%' }} />
-                <col style={{ width: '45%' }} />
                 <col style={{ width: '15%' }} />
-                <col style={{ width: '20%' }} />
+                <col style={{ width: '40%' }} />
+                <col style={{ width: '30%' }} />
+                <col style={{ width: '15%' }} />
               </colgroup>
               <thead>
                 <tr>
@@ -133,21 +140,54 @@ export default function SummaryReport({
       })}
 
       <div className="margin-top-4">
-        <button
-          type="button"
-          className="usa-button"
-          onClick={onProceedToDownload}
-        >
-          {content.summary.downloadButton}
-        </button>
+        {showUnreviewedWarning ? (
+          <div className="usa-alert usa-alert--warning">
+            <div className="usa-alert__body">
+              <p className="usa-alert__text margin-bottom-2">
+                <strong>You have {unreviewedIssues.length} issue{unreviewedIssues.length === 1 ? '' : 's'} you haven&apos;t reviewed yet.</strong>{' '}
+                Unreviewed issues will not be fixed in your download. You can still download now, or go back to finish reviewing.
+              </p>
+              <div className="display-flex flex-gap-2 flex-wrap">
+                <button
+                  type="button"
+                  className="usa-button"
+                  onClick={onProceedToDownload}
+                >
+                  Download anyway
+                </button>
+                <button
+                  type="button"
+                  className="usa-button usa-button--outline"
+                  onClick={onGoBackToReview}
+                >
+                  Go back to review
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="usa-button"
+            onClick={() => {
+              if (unreviewedIssues.length > 0) {
+                setShowUnreviewedWarning(true);
+              } else {
+                onProceedToDownload();
+              }
+            }}
+          >
+            {content.summary.downloadButton}
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
 function getRowStyle(resolution: IssueResolution | null): React.CSSProperties {
-  if (resolution === 'accepted') return { backgroundColor: '#ecf3ec' };
-  if (resolution === 'unreviewed') return { backgroundColor: '#f8e6e6' };
+  if (resolution === 'accepted') return { backgroundColor: RESOLUTION_COLORS.accepted.bg };
+  if (resolution === 'unreviewed') return { backgroundColor: RESOLUTION_COLORS.unreviewed.bg };
   return {};
 }
 
@@ -161,7 +201,7 @@ function getLocationText(issue: Issue): string {
 function getStatusDisplay(resolution: IssueResolution | null, instructionOnly?: boolean): React.ReactElement {
   switch (resolution) {
     case 'accepted':
-      return <span style={{ color: '#1a7a1a', fontWeight: 'bold' }}>✓ Accepted</span>;
+      return <span style={{ color: RESOLUTION_COLORS.accepted.text, fontWeight: 'bold' }}>✓ Accepted</span>;
     case 'keptAsBold':
       return <span style={{ color: '#71767a' }}>Kept as bold text</span>;
     case 'skipped':
