@@ -40,12 +40,13 @@ export default function ReviewStep({
     return map;
   }, [doc.sections]);
 
-  const severityRank: Record<string, number> = { error: 0, warning: 1, suggestion: 2 };
+  const severityRank: Record<Issue['severity'], number> = { error: 0, warning: 1, suggestion: 2 };
+  const UNKNOWN_SECTION_POSITION = Number.MAX_SAFE_INTEGER;
 
   function issuePosition(issue: Issue): number {
     if (issue.page != null) return issue.page * 10000;
-    const sectionIdx = sectionIndexMap.get(issue.sectionId) ?? Infinity;
-    return sectionIdx * 10000;
+    const sectionIdx = sectionIndexMap.get(issue.sectionId);
+    return sectionIdx != null ? sectionIdx * 10000 : UNKNOWN_SECTION_POSITION;
   }
 
   const severityCounts = useMemo<Record<SeverityFilter, number>>(() => {
