@@ -64,9 +64,9 @@ export default function SummaryReport({
           </div>
         </div>
         <div className="grid-col-12 tablet:grid-col-3">
-          <div className="usa-card__body bg-gold-5 padding-3 text-center">
-            <p className="font-heading-xl margin-0 text-gold-50">{skippedIssues.length + unreviewedIssues.length}</p>
-            <p className="font-body-sm margin-0">{content.summary.sections.skipped}</p>
+          <div className="usa-card__body padding-3 text-center" style={{ backgroundColor: '#f8e1e1' }}>
+            <p className="font-heading-xl margin-0" style={{ color: '#b50909' }}>{unreviewedIssues.length}</p>
+            <p className="font-body-sm margin-0" style={{ color: '#b50909' }}>Unreviewed</p>
           </div>
         </div>
       </div>
@@ -101,10 +101,10 @@ export default function SummaryReport({
             </h2>
             <table className="usa-table usa-table--borderless width-full">
               <colgroup>
-                <col style={{ width: '20%' }} />
-                <col style={{ width: '45%' }} />
                 <col style={{ width: '15%' }} />
-                <col style={{ width: '20%' }} />
+                <col style={{ width: '40%' }} />
+                <col style={{ width: '30%' }} />
+                <col style={{ width: '15%' }} />
               </colgroup>
               <thead>
                 <tr>
@@ -147,7 +147,7 @@ export default function SummaryReport({
 
 function getRowStyle(resolution: IssueResolution | null): React.CSSProperties {
   if (resolution === 'accepted') return { backgroundColor: '#ecf3ec' };
-  if (resolution === 'unreviewed') return { backgroundColor: '#f8e6e6' };
+  if (resolution === 'unreviewed') return { backgroundColor: '#f8e1e1' };
   return {};
 }
 
