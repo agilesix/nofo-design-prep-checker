@@ -18,7 +18,7 @@ interface ReviewStepProps {
 type SeverityFilter = 'all' | 'error' | 'warning' | 'suggestion';
 
 export default function ReviewStep({
-  doc: _doc,
+  doc,
   reviewState,
   onComplete,
   onGuideChange,
@@ -33,6 +33,21 @@ export default function ReviewStep({
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
 
   const { issues, autoAppliedChanges, activeContentGuide } = reviewState;
+
+  const sectionIndexMap = useMemo<Map<string, number>>(() => {
+    const map = new Map<string, number>();
+    doc.sections.forEach((s, i) => map.set(s.id, i));
+    return map;
+  }, [doc.sections]);
+
+  const severityRank: Record<Issue['severity'], number> = { error: 0, warning: 1, suggestion: 2 };
+  const UNKNOWN_SECTION_POSITION = Number.MAX_SAFE_INTEGER;
+
+  function issuePosition(issue: Issue): number {
+    if (issue.page != null) return issue.page * 10000;
+    const sectionIdx = sectionIndexMap.get(issue.sectionId);
+    return sectionIdx != null ? sectionIdx * 10000 : UNKNOWN_SECTION_POSITION;
+  }
 
   const severityCounts = useMemo<Record<SeverityFilter, number>>(() => {
     const counts = { all: issues.length, error: 0, warning: 0, suggestion: 0 };
@@ -61,8 +76,14 @@ export default function ReviewStep({
     return issue.severity === effectiveSeverityFilter;
   });
 
+  const sortedIssues = [...filteredIssues].sort((a, b) => {
+    const severityDiff = (severityRank[a.severity] ?? 3) - (severityRank[b.severity] ?? 3);
+    if (severityDiff !== 0) return severityDiff;
+    return issuePosition(a) - issuePosition(b);
+  });
+
   // Group by category
-  const groupedIssues = groupByCategory(filteredIssues);
+  const groupedIssues = groupByCategory(sortedIssues);
 
   const reviewedCount = Object.values(resolutions).filter(r => r !== 'unreviewed').length;
   const unreviewedCount = issues.length - reviewedCount;
@@ -105,7 +126,7 @@ export default function ReviewStep({
           <div className="usa-alert__body">
             <div className="display-flex flex-justify flex-align-start">
               <p className="usa-alert__text margin-0">
-                Nothing is saved automatically. Your changes exist only in this browser tab. If you
+                <strong>Nothing is saved automatically.</strong> Your changes exist only in this browser tab. If you
                 close or refresh the tab, you'll need to start over. Download your corrected
                 document before leaving.
               </p>
