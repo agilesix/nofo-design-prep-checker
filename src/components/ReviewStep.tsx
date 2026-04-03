@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import type { ParsedDocument, ReviewState, AcceptedFix, IssueResolution, Issue, ContentGuideId } from '../types';
 import { content } from '../content';
 import { getCategoryLabel } from '../utils/getCategoryLabel';
@@ -34,12 +34,22 @@ export default function ReviewStep({
 
   const { issues, autoAppliedChanges, activeContentGuide } = reviewState;
 
-  const severityCounts: Record<SeverityFilter, number> = {
-    all: issues.length,
-    error: issues.filter(i => i.severity === 'error').length,
-    warning: issues.filter(i => i.severity === 'warning').length,
-    suggestion: issues.filter(i => i.severity === 'suggestion').length,
-  };
+  const severityCounts = useMemo<Record<SeverityFilter, number>>(() => {
+    const counts = { all: issues.length, error: 0, warning: 0, suggestion: 0 };
+    for (const issue of issues) {
+      if (issue.severity === 'error') counts.error++;
+      else if (issue.severity === 'warning') counts.warning++;
+      else if (issue.severity === 'suggestion') counts.suggestion++;
+    }
+    return counts;
+  }, [issues]);
+
+  // If the active filter now has 0 issues (e.g. after a content guide change), reset to 'all'.
+  useEffect(() => {
+    if (severityFilter !== 'all' && severityCounts[severityFilter] === 0) {
+      setSeverityFilter('all');
+    }
+  }, [severityCounts, severityFilter]);
 
   const filteredIssues = issues.filter(issue => {
     if (severityFilter === 'all') return true;

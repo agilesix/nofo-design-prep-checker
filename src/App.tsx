@@ -41,6 +41,7 @@ export default function App(): React.ReactElement {
     setUploadedFile(file);
     setParseError(null);
     setIsProcessing(true);
+    setReviewBannerDismissed(false);
     setStep('parsing');
 
     try {
@@ -201,6 +202,7 @@ export default function App(): React.ReactElement {
     setReviewState(null);
     setAcceptedFixes([]);
     setParseError(null);
+    setReviewBannerDismissed(false);
   }, []);
 
   const mainAppContent = (
