@@ -38,7 +38,13 @@ export default function ContentGuideBadge({
     <div className="content-guide-badge margin-bottom-4" role="region" aria-label="Active content guide">
       <div className="content-guide-badge__header display-flex flex-align-center flex-justify flex-wrap flex-gap-2">
         <div className="display-flex flex-align-center flex-gap-1 flex-wrap">
-          <span className="usa-tag">{guide.entry.opDiv}{guide.entry.subType ? ` \u00b7 ${guide.entry.subType}` : ''}</span>
+          <img
+            src="/uswds/img/usa-icons/check_circle.svg"
+            alt=""
+            aria-hidden="true"
+            className="usa-icon"
+          />
+          <span className="font-body-xs text-base">Checked against:</span>
           <span className="font-body-sm text-bold">{guide.entry.displayName}</span>
           <span className="font-body-xs text-base">{guide.entry.version}</span>
           <span className="font-body-3xs text-base-light">({sourceLabel})</span>
@@ -78,6 +84,9 @@ export default function ContentGuideBadge({
               ))}
             </select>
           </div>
+          <p className="font-body-xs text-base margin-bottom-2">
+            Don't see your guide? It may not be loaded yet. Contact your SimplerNOFOs team.
+          </p>
           <div className="display-flex flex-gap-2">
             <button
               type="button"
