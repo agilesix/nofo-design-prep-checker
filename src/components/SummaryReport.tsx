@@ -63,9 +63,9 @@ export default function SummaryReport({
           </div>
         </div>
         <div className="grid-col-12 tablet:grid-col-3">
-          <div className="usa-card__body padding-3 text-center" style={{ backgroundColor: '#f8e1e1' }}>
-            <p className="font-heading-xl margin-0" style={{ color: '#b50909' }}>{unreviewedIssues.length}</p>
-            <p className="font-body-sm margin-0" style={{ color: '#b50909' }}>Unreviewed</p>
+          <div className="usa-card__body bg-secondary-lighter padding-3 text-center">
+            <p className="font-heading-xl margin-0 text-secondary-dark">{unreviewedIssues.length}</p>
+            <p className="font-body-sm margin-0 text-secondary-dark">{content.summary.sections.unreviewed}</p>
           </div>
         </div>
       </div>
