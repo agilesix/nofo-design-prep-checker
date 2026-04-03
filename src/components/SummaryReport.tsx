@@ -33,7 +33,7 @@ export default function SummaryReport({
   const [showUnreviewedWarning, setShowUnreviewedWarning] = useState(false);
 
   const acceptedIssues = issues.filter(i => resolutions[i.id] === 'accepted');
-  const skippedIssues = issues.filter(i => resolutions[i.id] === 'skipped' || resolutions[i.id] === 'keptAsBold');
+  const skippedIssues = issues.filter(i => resolutions[i.id] === 'skipped');
   const unreviewedIssues = issues.filter(i => resolutions[i.id] === 'unreviewed');
 
   return (
