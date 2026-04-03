@@ -217,7 +217,7 @@ export default function ReviewStep({
 
           {Object.entries(groupedIssues).map(([category, categoryIssues]) => (
             <div key={category} className="margin-bottom-5">
-              <h2 className="usa-h3 border-bottom-1px border-base-light padding-bottom-1">
+              <h2 className="usa-h3 border-bottom-1px border-base-light padding-bottom-1 issue-category-heading">
                 {category}
                 <span className="font-body-xs text-base margin-left-1">
                   ({categoryIssues.length})
