@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import type { ReviewState, AcceptedFix, IssueResolution, Issue } from '../types';
+import type { ReviewState, IssueResolution, Issue } from '../types';
 import { content } from '../content';
 import { getCategoryLabel } from '../utils/getCategoryLabel';
 import ContentGuideBadge from './ContentGuideBadge';
 
 interface SummaryReportProps {
   reviewState: ReviewState;
-  acceptedFixes: AcceptedFix[];
   onProceedToDownload: () => void;
   onGoBackToReview: () => void;
 }
@@ -27,7 +26,6 @@ const SEVERITY_LABELS: Record<Severity, string> = {
 
 export default function SummaryReport({
   reviewState,
-  acceptedFixes,
   onProceedToDownload,
   onGoBackToReview,
 }: SummaryReportProps): React.ReactElement {

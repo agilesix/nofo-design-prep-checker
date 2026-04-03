@@ -251,7 +251,6 @@ export default function App(): React.ReactElement {
         {step === 'summary' && reviewState && (
           <SummaryReport
             reviewState={reviewState}
-            acceptedFixes={acceptedFixes}
             onProceedToDownload={handleProceedToDownload}
             onGoBackToReview={handleBack}
           />
