@@ -155,7 +155,7 @@ export const content = {
     continueButton: 'Continue to summary',
     startOverButton: 'Start over',
     continueWarning: (unreviewed: number): string =>
-      `${unreviewed} issue${unreviewed === 1 ? '' : 's'} not yet reviewed. You can continue, but unreviewed issues will not have fixes applied.`,
+      `${unreviewed} issue${unreviewed === 1 ? '' : 's'} not yet reviewed. Unreviewed issues will not have fixes applied.`,
   },
 
   summary: {

@@ -245,15 +245,11 @@ export default function ReviewStep({
         </>
       )}
 
-      <div className="margin-top-4">
+      <div className="margin-top-4 padding-top-3" style={{ borderTop: '1px solid #c9c7c3' }}>
         {unreviewedCount > 0 && (
-          <div className="usa-alert usa-alert--warning usa-alert--slim margin-bottom-2">
-            <div className="usa-alert__body">
-              <p className="usa-alert__text">
-                {content.review.continueWarning(unreviewedCount)}
-              </p>
-            </div>
-          </div>
+          <p className="font-body-sm margin-bottom-2" style={{ color: '#4a4944' }}>
+            {content.review.continueWarning(unreviewedCount)}
+          </p>
         )}
 
         <div className="display-flex flex-gap-2 flex-align-center flex-wrap">

@@ -188,6 +188,25 @@
   &.usa-alert--info    { background-color: #f5f8ff; }
 }
 
+// ─── Neutral alert variant ─────────────────────────────────────────────────
+// Used for inline helper callouts (e.g. prefill notes) inside issue cards,
+// where the teal info tint blends into suggestion card backgrounds.
+// Keeps usa-alert--info in the class list for icon/structure; this class
+// overrides the palette to a warm gray.
+
+.usa-alert--neutral {
+  background-color: #f5f4f2;   // gray5
+  border-left-color: #aba9a4;  // gray30
+
+  .usa-alert__body {
+    color: #4a4944;             // gray70
+
+    &::before {
+      background-color: #4a4944; // icon color — gray70
+    }
+  }
+}
+
 // ─── Content guide badge ───────────────────────────────────────────────────
 
 .content-guide-badge {
