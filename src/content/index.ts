@@ -166,6 +166,7 @@ export const content = {
       skipped: 'Issues skipped',
       autoApplied: 'Auto-applied changes',
       noAction: 'Issues with no action',
+      unreviewed: 'Unreviewed',
     },
     empty: 'None',
     downloadButton: 'Continue to download',

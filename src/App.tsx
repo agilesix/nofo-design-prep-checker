@@ -253,6 +253,7 @@ export default function App(): React.ReactElement {
             reviewState={reviewState}
             acceptedFixes={acceptedFixes}
             onProceedToDownload={handleProceedToDownload}
+            onGoBackToReview={handleBack}
           />
         )}
 
