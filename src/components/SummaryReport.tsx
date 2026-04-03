@@ -27,7 +27,6 @@ export default function SummaryReport({
   const { issues, autoAppliedChanges, resolutions, activeContentGuide } = reviewState;
 
   const acceptedIssues = issues.filter(i => resolutions[i.id] === 'accepted');
-  const skippedIssues = issues.filter(i => resolutions[i.id] === 'skipped');
   const unreviewedIssues = issues.filter(i => resolutions[i.id] === 'unreviewed');
 
   const totalFixed = acceptedFixes.length + autoAppliedChanges.length;
