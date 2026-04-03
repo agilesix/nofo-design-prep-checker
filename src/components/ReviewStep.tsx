@@ -44,16 +44,21 @@ export default function ReviewStep({
     return counts;
   }, [issues]);
 
-  // If the active filter now has 0 issues (e.g. after a content guide change), reset to 'all'.
+  // Derived filter used for rendering: falls back to 'all' immediately when the selected
+  // severity has 0 issues, preventing a transient blank state between renders.
+  const effectiveSeverityFilter: SeverityFilter =
+    severityFilter !== 'all' && severityCounts[severityFilter] === 0 ? 'all' : severityFilter;
+
+  // Sync state to match the effective filter so the radio buttons stay consistent.
   useEffect(() => {
-    if (severityFilter !== 'all' && severityCounts[severityFilter] === 0) {
-      setSeverityFilter('all');
+    if (effectiveSeverityFilter !== severityFilter) {
+      setSeverityFilter(effectiveSeverityFilter);
     }
-  }, [severityCounts, severityFilter]);
+  }, [effectiveSeverityFilter, severityFilter]);
 
   const filteredIssues = issues.filter(issue => {
-    if (severityFilter === 'all') return true;
-    return issue.severity === severityFilter;
+    if (effectiveSeverityFilter === 'all') return true;
+    return issue.severity === effectiveSeverityFilter;
   });
 
   // Group by category
@@ -169,7 +174,7 @@ export default function ReviewStep({
                         id={`filter-${filter}`}
                         name="severity-filter"
                         value={filter}
-                        checked={severityFilter === filter}
+                        checked={effectiveSeverityFilter === filter}
                         onChange={() => setSeverityFilter(filter)}
                       />
                       <label className="usa-radio__label" htmlFor={`filter-${filter}`}>
