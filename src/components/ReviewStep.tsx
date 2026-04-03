@@ -40,7 +40,7 @@ export default function ReviewStep({
     return map;
   }, [doc.sections]);
 
-  const severityRank: Record<string, number> = { error: 0, warning: 1, suggestion: 2 };
+  const severityRank: Record<Issue['severity'], number> = { error: 0, warning: 1, suggestion: 2 };
   const UNKNOWN_SECTION_POSITION = Number.MAX_SAFE_INTEGER;
 
   function issuePosition(issue: Issue): number {
