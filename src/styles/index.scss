@@ -207,6 +207,17 @@
   }
 }
 
+// ─── Issue category sticky headings ───────────────────────────────────────
+
+.issue-category-heading {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: #ffffff;
+  padding-top: 0.75rem;
+  margin-top: 0;
+}
+
 // ─── Content guide badge ───────────────────────────────────────────────────
 
 .content-guide-badge {
