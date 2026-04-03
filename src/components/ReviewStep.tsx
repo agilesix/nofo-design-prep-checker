@@ -247,9 +247,13 @@ export default function ReviewStep({
 
       <div className="margin-top-4">
         {unreviewedCount > 0 && (
-          <p className="font-body-sm text-base margin-bottom-2">
-            {content.review.continueWarning(unreviewedCount)}
-          </p>
+          <div className="usa-alert usa-alert--warning usa-alert--slim margin-bottom-2">
+            <div className="usa-alert__body">
+              <p className="usa-alert__text">
+                {content.review.continueWarning(unreviewedCount)}
+              </p>
+            </div>
+          </div>
         )}
 
         <div className="display-flex flex-gap-2 flex-align-center flex-wrap">
