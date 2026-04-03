@@ -11,6 +11,8 @@ interface ReviewStepProps {
   onComplete: (fixes: AcceptedFix[], resolutions: Record<string, IssueResolution>) => void;
   onGuideChange: (guideId: ContentGuideId) => void;
   onStartOver: () => void;
+  bannerDismissed: boolean;
+  onDismissBanner: (val: boolean) => void;
 }
 
 type SeverityFilter = 'all' | 'error' | 'warning' | 'suggestion';
@@ -21,6 +23,8 @@ export default function ReviewStep({
   onComplete,
   onGuideChange,
   onStartOver,
+  bannerDismissed,
+  onDismissBanner,
 }: ReviewStepProps): React.ReactElement {
   const [resolutions, setResolutions] = useState<Record<string, IssueResolution>>(
     reviewState.resolutions
@@ -29,6 +33,13 @@ export default function ReviewStep({
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
 
   const { issues, autoAppliedChanges, activeContentGuide } = reviewState;
+
+  const severityCounts: Record<SeverityFilter, number> = {
+    all: issues.length,
+    error: issues.filter(i => i.severity === 'error').length,
+    warning: issues.filter(i => i.severity === 'warning').length,
+    suggestion: issues.filter(i => i.severity === 'suggestion').length,
+  };
 
   const filteredIssues = issues.filter(issue => {
     if (severityFilter === 'all') return true;
@@ -74,6 +85,28 @@ export default function ReviewStep({
 
       <p className="usa-intro">{content.review.intro}</p>
 
+      {!bannerDismissed && (
+        <div className="usa-alert usa-alert--info margin-bottom-4" role="alert">
+          <div className="usa-alert__body">
+            <div className="display-flex flex-justify flex-align-start">
+              <p className="usa-alert__text margin-0">
+                Nothing is saved automatically. Your changes exist only in this browser tab. If you
+                close or refresh the tab, you'll need to start over. Download your corrected
+                document before leaving.
+              </p>
+              <button
+                type="button"
+                className="usa-button usa-button--unstyled margin-left-2 flex-no-shrink"
+                aria-label="Dismiss alert"
+                onClick={() => onDismissBanner(true)}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {autoAppliedChanges.length > 0 && (
         <div className="usa-alert usa-alert--success margin-bottom-4">
           <div className="usa-alert__body">
@@ -112,24 +145,29 @@ export default function ReviewStep({
                 {content.review.filters.label}
               </legend>
               <div className="display-flex flex-gap-2 flex-wrap">
-                {(['all', 'error', 'warning', 'suggestion'] as SeverityFilter[]).map(filter => (
-                  <div key={filter} className="usa-radio display-inline-block">
-                    <input
-                      className="usa-radio__input usa-radio__input--tile"
-                      type="radio"
-                      id={`filter-${filter}`}
-                      name="severity-filter"
-                      value={filter}
-                      checked={severityFilter === filter}
-                      onChange={() => setSeverityFilter(filter)}
-                    />
-                    <label className="usa-radio__label" htmlFor={`filter-${filter}`}>
-                      {filter === 'all'
-                        ? content.review.filters.all
-                        : content.review.filters[filter]}
-                    </label>
-                  </div>
-                ))}
+                {(['all', 'error', 'warning', 'suggestion'] as SeverityFilter[]).map(filter => {
+                  if (filter !== 'all' && severityCounts[filter] === 0) return null;
+                  const label =
+                    filter === 'all'
+                      ? content.review.filters.all
+                      : content.review.filters[filter];
+                  return (
+                    <div key={filter} className="usa-radio display-inline-block">
+                      <input
+                        className="usa-radio__input usa-radio__input--tile"
+                        type="radio"
+                        id={`filter-${filter}`}
+                        name="severity-filter"
+                        value={filter}
+                        checked={severityFilter === filter}
+                        onChange={() => setSeverityFilter(filter)}
+                      />
+                      <label className="usa-radio__label" htmlFor={`filter-${filter}`}>
+                        {label} ({severityCounts[filter]})
+                      </label>
+                    </div>
+                  );
+                })}
               </div>
             </fieldset>
           </div>
