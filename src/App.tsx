@@ -31,6 +31,7 @@ export default function App(): React.ReactElement {
   const [acceptedFixes, setAcceptedFixes] = useState<AcceptedFix[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [reviewBannerDismissed, setReviewBannerDismissed] = useState(false);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -240,6 +241,8 @@ export default function App(): React.ReactElement {
             onComplete={handleReviewComplete}
             onGuideChange={handleGuideChangeFromReview}
             onStartOver={handleStartOver}
+            bannerDismissed={reviewBannerDismissed}
+            onDismissBanner={setReviewBannerDismissed}
           />
         )}
 
