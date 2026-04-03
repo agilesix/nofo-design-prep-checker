@@ -244,9 +244,9 @@ export default function ReviewStep({
         </>
       )}
 
-      <div className="margin-top-4">
+      <div className="margin-top-4 padding-top-3" style={{ borderTop: '1px solid #c9c7c3' }}>
         {unreviewedCount > 0 && (
-          <p className="font-body-sm text-base margin-bottom-2">
+          <p className="font-body-sm margin-bottom-2" style={{ color: '#4a4944' }}>
             {content.review.continueWarning(unreviewedCount)}
           </p>
         )}

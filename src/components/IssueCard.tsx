@@ -152,7 +152,7 @@ export default function IssueCard({
             </label>
 
             {issue.inputRequired.prefillNote && (
-              <div className="usa-alert usa-alert--info usa-alert--slim margin-bottom-1">
+              <div className="usa-alert usa-alert--info usa-alert--neutral usa-alert--slim margin-bottom-1">
                 <div className="usa-alert__body">
                   <p className="usa-alert__text font-body-xs">{issue.inputRequired.prefillNote}</p>
                 </div>
