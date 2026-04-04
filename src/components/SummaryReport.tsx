@@ -103,35 +103,37 @@ export default function SummaryReport({
             <h2 className="bg-base-lightest border-left-05 border-base-light padding-y-1 padding-x-2 font-sans text-bold text-base-darker margin-0">
               {SEVERITY_LABELS[severity]} ({severityIssues.length})
             </h2>
-            <table className="usa-table usa-table--borderless width-full">
-              <colgroup>
-                <col style={{ width: '15%' }} />
-                <col style={{ width: '40%' }} />
-                <col style={{ width: '30%' }} />
-                <col style={{ width: '15%' }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th scope="col">Category</th>
-                  <th scope="col">Issue</th>
-                  <th scope="col">Location</th>
-                  <th scope="col">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {severityIssues.map(issue => {
-                  const resolution = resolutions[issue.id] ?? null;
-                  return (
-                    <tr key={issue.id} style={getRowStyle(resolution)}>
-                      <td>{getCategoryLabel(issue.ruleId)}</td>
-                      <td>{issue.title}</td>
-                      <td>{getLocationText(issue)}</td>
-                      <td>{getStatusDisplay(resolution, issue.instructionOnly)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="usa-table usa-table--borderless width-full" style={{ minWidth: '36rem' }}>
+                <colgroup>
+                  <col style={{ width: '15%' }} />
+                  <col style={{ width: '40%' }} />
+                  <col style={{ width: '30%' }} />
+                  <col style={{ width: '15%' }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th scope="col">Category</th>
+                    <th scope="col">Issue</th>
+                    <th scope="col">Location</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {severityIssues.map(issue => {
+                    const resolution = resolutions[issue.id] ?? null;
+                    return (
+                      <tr key={issue.id} style={getRowStyle(resolution)}>
+                        <td>{getCategoryLabel(issue.ruleId)}</td>
+                        <td>{issue.title}</td>
+                        <td>{getLocationText(issue)}</td>
+                        <td>{getStatusDisplay(resolution, issue.instructionOnly)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         );
       })}
