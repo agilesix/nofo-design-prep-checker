@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import type { ReviewState, AcceptedFix, IssueResolution, Issue } from '../types';
+import type { ReviewState, IssueResolution, Issue } from '../types';
 import { content } from '../content';
 import { getCategoryLabel } from '../utils/getCategoryLabel';
 import ContentGuideBadge from './ContentGuideBadge';
 
 interface SummaryReportProps {
   reviewState: ReviewState;
-  acceptedFixes: AcceptedFix[];
   onProceedToDownload: () => void;
   onGoBackToReview: () => void;
 }
@@ -27,7 +26,6 @@ const SEVERITY_LABELS: Record<Severity, string> = {
 
 export default function SummaryReport({
   reviewState,
-  acceptedFixes,
   onProceedToDownload,
   onGoBackToReview,
 }: SummaryReportProps): React.ReactElement {
@@ -35,9 +33,8 @@ export default function SummaryReport({
   const [showUnreviewedWarning, setShowUnreviewedWarning] = useState(false);
 
   const acceptedIssues = issues.filter(i => resolutions[i.id] === 'accepted');
+  const skippedIssues = issues.filter(i => resolutions[i.id] === 'skipped');
   const unreviewedIssues = issues.filter(i => resolutions[i.id] === 'unreviewed');
-
-  const totalFixed = acceptedFixes.length + autoAppliedChanges.length;
 
   return (
     <div className="margin-top-4">
@@ -53,12 +50,6 @@ export default function SummaryReport({
       {/* Summary stats */}
       <div className="grid-row grid-gap-3 margin-bottom-4">
         <div className="grid-col-12 tablet:grid-col-3">
-          <div className="usa-card__body bg-primary-lighter padding-3 text-center">
-            <p className="font-heading-xl margin-0 text-primary">{totalFixed}</p>
-            <p className="font-body-sm margin-0">Total changes</p>
-          </div>
-        </div>
-        <div className="grid-col-12 tablet:grid-col-3">
           <div className="usa-card__body bg-green-cool-5 padding-3 text-center">
             <p className="font-heading-xl margin-0 text-green-cool-60">{acceptedIssues.length}</p>
             <p className="font-body-sm margin-0">{content.summary.sections.accepted}</p>
@@ -66,7 +57,13 @@ export default function SummaryReport({
         </div>
         <div className="grid-col-12 tablet:grid-col-3">
           <div className="usa-card__body bg-base-lightest padding-3 text-center">
-            <p className="font-heading-xl margin-0 text-base">{autoAppliedChanges.length}</p>
+            <p className="font-heading-xl margin-0 text-base">{skippedIssues.length}</p>
+            <p className="font-body-sm margin-0">{content.summary.sections.skipped}</p>
+          </div>
+        </div>
+        <div className="grid-col-12 tablet:grid-col-3">
+          <div className="usa-card__body bg-primary-lighter padding-3 text-center">
+            <p className="font-heading-xl margin-0 text-primary">{autoAppliedChanges.length}</p>
             <p className="font-body-sm margin-0">{content.summary.sections.autoApplied}</p>
           </div>
         </div>
@@ -144,8 +141,8 @@ export default function SummaryReport({
           <div className="usa-alert usa-alert--warning">
             <div className="usa-alert__body">
               <p className="usa-alert__text margin-bottom-2">
-                <strong>You have {unreviewedIssues.length} issue{unreviewedIssues.length === 1 ? '' : 's'} you haven&apos;t reviewed yet.</strong>{' '}
-                Unreviewed issues will not be fixed in your download. You can still download now, or go back to finish reviewing.
+                <strong>{content.summary.unreviewedWarning.lead(unreviewedIssues.length)}</strong>{' '}
+                {content.summary.unreviewedWarning.body}
               </p>
               <div className="display-flex flex-gap-2 flex-wrap">
                 <button
@@ -153,14 +150,14 @@ export default function SummaryReport({
                   className="usa-button"
                   onClick={onProceedToDownload}
                 >
-                  Download anyway
+                  {content.summary.unreviewedWarning.downloadAnywayButton}
                 </button>
                 <button
                   type="button"
                   className="usa-button usa-button--outline"
                   onClick={onGoBackToReview}
                 >
-                  Go back to review
+                  {content.summary.unreviewedWarning.goBackButton}
                 </button>
               </div>
             </div>
