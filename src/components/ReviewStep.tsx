@@ -33,6 +33,19 @@ export default function ReviewStep({
   );
   const [acceptedFixes, setAcceptedFixes] = useState<AcceptedFix[]>([]);
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
+  const [dismissedCategories, setDismissedCategories] = useState<Set<string>>(new Set());
+
+  // When the guide changes, App rebuilds reviewState with a fresh issues array and
+  // new resolutions. Reset all local state so stale fixes and dismissed markers
+  // from the previous guide run are not carried forward into the new one.
+  // reviewState.resolutions is read here intentionally — it is the authoritative
+  // reset value and only changes in lockstep with reviewState.issues.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setResolutions(reviewState.resolutions);
+    setAcceptedFixes([]);
+    setDismissedCategories(new Set());
+  }, [reviewState.issues]);
 
   const { issues, autoAppliedChanges, activeContentGuide } = reviewState;
 
@@ -111,6 +124,32 @@ export default function ReviewStep({
   const handleUndo = useCallback((issueId: string) => {
     setResolutions(prev => ({ ...prev, [issueId]: 'unreviewed' }));
     setAcceptedFixes(prev => prev.filter(f => f.issueId !== issueId));
+  }, []);
+
+  const handleDismissAll = useCallback((category: string, categoryIssues: Issue[]) => {
+    setDismissedCategories(prev => new Set([...prev, category]));
+    setResolutions(prev => {
+      const updates: Record<string, IssueResolution> = {};
+      for (const issue of categoryIssues) {
+        if (prev[issue.id] === 'unreviewed') updates[issue.id] = 'skipped';
+      }
+      return { ...prev, ...updates };
+    });
+    setAcceptedFixes(prev => prev.filter(f => !categoryIssues.some(i => i.id === f.issueId)));
+  }, []);
+
+  const handleUndoAll = useCallback((category: string, categoryIssues: Issue[]) => {
+    setDismissedCategories(prev => {
+      const next = new Set(prev);
+      next.delete(category);
+      return next;
+    });
+    setResolutions(prev => {
+      const updates: Record<string, IssueResolution> = {};
+      for (const issue of categoryIssues) updates[issue.id] = 'unreviewed';
+      return { ...prev, ...updates };
+    });
+    setAcceptedFixes(prev => prev.filter(f => !categoryIssues.some(i => i.id === f.issueId)));
   }, []);
 
   const handleContinue = useCallback(() => {
@@ -216,32 +255,63 @@ export default function ReviewStep({
             />
           )}
 
-          {Object.entries(groupedIssues).map(([category, categoryIssues]) => (
-            <div key={category} className="margin-bottom-5">
-              <h2 className="usa-h3 border-bottom-1px border-base-light padding-bottom-1 issue-category-heading">
-                {category}
-                <span className="font-body-xs text-base margin-left-1">
-                  ({categoryIssues.length})
-                </span>
-              </h2>
+          {Object.entries(groupedIssues).map(([category, categoryIssues]) => {
+            const hasUnreviewed = categoryIssues.some(i => resolutions[i.id] === 'unreviewed');
+            // isDismissed is intentionally gated on !hasUnreviewed: if any issue in the
+            // category is individually undone back to unreviewed, the "Dismissed" state
+            // clears automatically and "Dismiss all" reappears without any extra handler work.
+            const isDismissed = dismissedCategories.has(category) && !hasUnreviewed;
+            return (
+              <div key={category} className="margin-bottom-5">
+                <h2 className="usa-h3 border-bottom-1px border-base-light padding-bottom-1 issue-category-heading">
+                  <span>
+                    {category}
+                    <span className="font-body-xs text-base margin-left-1">
+                      ({categoryIssues.length})
+                    </span>
+                  </span>
 
-              {categoryIssues.map(issue => (
-                <IssueCard
-                  key={issue.id}
-                  issue={issue}
-                  resolution={resolutions[issue.id] ?? 'unreviewed'}
-                  onAccept={handleAccept}
-                  onSkip={() => handleSkip(issue.id)}
-                  onKeepAsBold={
-                    issue.ruleId.startsWith('FORMAT-')
-                      ? () => handleKeepAsBold(issue.id)
-                      : undefined
-                  }
-                  onUndo={() => handleUndo(issue.id)}
-                />
-              ))}
-            </div>
-          ))}
+                  {isDismissed ? (
+                    <span className="font-body-xs text-base display-flex flex-align-center" style={{ gap: '0.375rem' }}>
+                      <span>&#10003; Dismissed</span>
+                      <span aria-hidden="true">&middot;</span>
+                      <button
+                        type="button"
+                        className="usa-button usa-button--unstyled font-body-xs"
+                        onClick={() => handleUndoAll(category, categoryIssues)}
+                      >
+                        Undo all
+                      </button>
+                    </span>
+                  ) : hasUnreviewed ? (
+                    <button
+                      type="button"
+                      className="usa-button usa-button--unstyled font-body-xs"
+                      onClick={() => handleDismissAll(category, categoryIssues)}
+                    >
+                      Dismiss all<span className="dismiss-all-count"> ({categoryIssues.length})</span>
+                    </button>
+                  ) : null}
+                </h2>
+
+                {categoryIssues.map(issue => (
+                  <IssueCard
+                    key={issue.id}
+                    issue={issue}
+                    resolution={resolutions[issue.id] ?? 'unreviewed'}
+                    onAccept={handleAccept}
+                    onSkip={() => handleSkip(issue.id)}
+                    onKeepAsBold={
+                      issue.ruleId.startsWith('FORMAT-')
+                        ? () => handleKeepAsBold(issue.id)
+                        : undefined
+                    }
+                    onUndo={() => handleUndo(issue.id)}
+                  />
+                ))}
+              </div>
+            );
+          })}
         </>
       )}
 

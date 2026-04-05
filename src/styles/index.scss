@@ -282,6 +282,19 @@ $app-green-dark: #1a4f3a;
   background-color: #ffffff;
   padding-top: 0.75rem;
   margin-top: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+// "Dismiss all (N)" count suffix — hidden on mobile, shown at tablet+
+// USWDS tablet breakpoint: 40em / 640px
+.dismiss-all-count {
+  display: none;
+
+  @media (min-width: 40em) {
+    display: inline;
+  }
 }
 
 // ─── Content guide badge ───────────────────────────────────────────────────
