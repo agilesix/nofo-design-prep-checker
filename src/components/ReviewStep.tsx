@@ -133,7 +133,9 @@ export default function ReviewStep({
       }
       return { ...prev, ...updates };
     });
-    setAcceptedFixes(prev => prev.filter(f => !categoryIssues.some(i => i.id === f.issueId)));
+    // Do not touch acceptedFixes: only unreviewed issues are changed here,
+    // and unreviewed issues have no accepted fixes to remove. Clearing fixes
+    // for the whole category would orphan previously-accepted changes.
   }, []);
 
   const handleUndoAll = useCallback((category: string, categoryIssues: Issue[]) => {
