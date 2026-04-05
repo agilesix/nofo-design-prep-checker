@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import BackLink from '../components/BackLink';
 
 // ─── Impact stats ─────────────────────────────────────────────────────────────
 
@@ -77,6 +77,11 @@ export default function AboutPage(): React.ReactElement {
   return (
     <main id="main-content" className="about-main">
 
+      {/* ── Top back navigation ───────────────────────────────────────────── */}
+      <div className="grid-container padding-top-3 padding-bottom-0">
+        <BackLink to="/">← Back to the checker</BackLink>
+      </div>
+
       {/* ── Hero heading ──────────────────────────────────────────────────── */}
       <div className="about-hero padding-y-6">
         <div className="grid-container">
@@ -84,13 +89,12 @@ export default function AboutPage(): React.ReactElement {
             <div className="desktop:grid-col-8">
               <h1
                 className="usa-h1 margin-0"
-                style={{ color: '#1c1c19' }}
                 tabIndex={-1}
                 ref={headingRef}
               >
                 About the NOFO Design Prep Checker
               </h1>
-              <p className="font-body-md margin-top-2 margin-bottom-0" style={{ color: '#1c1c19' }}>
+              <p className="font-body-md margin-top-2 margin-bottom-0">
                 A tool built for the HHS SimplerNOFOs initiative to reduce
                 administrative burden and improve document quality before design
                 handoff.
@@ -510,9 +514,7 @@ export default function AboutPage(): React.ReactElement {
               </div>
 
               <div className="margin-top-5">
-                <Link to="/" className="usa-button usa-button--outline">
-                  ← Back to the checker
-                </Link>
+                <BackLink to="/">← Back to the checker</BackLink>
               </div>
             </div>
           </div>

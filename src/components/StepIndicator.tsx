@@ -1,6 +1,7 @@
 import React from 'react';
 import type { AppStep } from '../types';
 import { content } from '../content';
+import BackLink from './BackLink';
 
 interface StepIndicatorProps {
   currentStep: AppStep;
@@ -86,13 +87,7 @@ export default function StepIndicator({ currentStep, onBack }: StepIndicatorProp
             style={showBack ? { display: 'inline-flex', alignItems: 'center' } : undefined}
           >
             {showBack && (
-              <button
-                type="button"
-                className="usa-button usa-button--unstyled"
-                onClick={onBack}
-              >
-                &larr; Back
-              </button>
+              <BackLink onClick={onBack!} />
             )}
             <span className="usa-sr-only">Step </span>
             <span className="usa-step-indicator__current-step">{currentStepNumber}</span>
