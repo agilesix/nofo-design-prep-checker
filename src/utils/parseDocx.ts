@@ -29,9 +29,15 @@ export async function parseDocx(
   // Load as JSZip for raw XML access
   const zipArchive = await JSZip.loadAsync(arrayBuffer);
 
-  // Read word/document.xml now so rules can parse OOXML synchronously
+  // Read core XML files now so rules can inspect OOXML synchronously
   const documentXmlFile = zipArchive.file('word/document.xml');
   const documentXml = documentXmlFile ? await documentXmlFile.async('string') : '';
+
+  const footnotesXmlFile = zipArchive.file('word/footnotes.xml');
+  const footnotesXml = footnotesXmlFile ? await footnotesXmlFile.async('string') : '';
+
+  const endnotesXmlFile = zipArchive.file('word/endnotes.xml');
+  const endnotesXml = endnotesXmlFile ? await endnotesXmlFile.async('string') : '';
 
   // Extract raw text
   const rawText = extractRawText(html);
@@ -45,6 +51,8 @@ export async function parseDocx(
     rawText,
     zipArchive,
     documentXml,
+    footnotesXml,
+    endnotesXml,
     activeContentGuide,
   };
 }

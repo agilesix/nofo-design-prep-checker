@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import BackLink from '../components/BackLink';
+import { useFocusHeading } from '../hooks/useFocusHeading';
 
 // ─── Impact stats ─────────────────────────────────────────────────────────────
 
@@ -68,11 +69,7 @@ function Accordion({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AboutPage(): React.ReactElement {
-  const headingRef = useRef<HTMLHeadingElement>(null);
-
-  useEffect(() => {
-    headingRef.current?.focus();
-  }, []);
+  const headingRef = useFocusHeading();
 
   return (
     <main id="main-content" className="about-main">

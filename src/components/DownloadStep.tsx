@@ -1,4 +1,5 @@
-import React, { useRef, useEffect } from 'react';
+import React from 'react';
+import { useFocusHeading } from '../hooks/useFocusHeading';
 import type { AcceptedFix } from '../types';
 import { content } from '../content';
 
@@ -17,11 +18,9 @@ export default function DownloadStep({
   onDownload,
   onStartOver,
 }: DownloadStepProps): React.ReactElement {
-  const headingRef = useRef<HTMLHeadingElement>(null);
+  const headingRef = useFocusHeading();
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [hasDownloaded, setHasDownloaded] = React.useState(false);
-
-  useEffect(() => { headingRef.current?.focus(); }, []);
 
   const downloadName = fileName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
   const acceptedCount = acceptedFixes.length;

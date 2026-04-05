@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useFocusHeading } from '../hooks/useFocusHeading';
 import type { ReviewState, IssueResolution, Issue } from '../types';
 import { content } from '../content';
 import { getCategoryLabel } from '../utils/getCategoryLabel';
@@ -29,11 +30,9 @@ export default function SummaryReport({
   onProceedToDownload,
   onGoBackToReview,
 }: SummaryReportProps): React.ReactElement {
-  const headingRef = useRef<HTMLHeadingElement>(null);
+  const headingRef = useFocusHeading();
   const { issues, autoAppliedChanges, resolutions, activeContentGuide } = reviewState;
   const [showUnreviewedWarning, setShowUnreviewedWarning] = useState(false);
-
-  useEffect(() => { headingRef.current?.focus(); }, []);
 
   const acceptedIssues = issues.filter(i => resolutions[i.id] === 'accepted');
 
