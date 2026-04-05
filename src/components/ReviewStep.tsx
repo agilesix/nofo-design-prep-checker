@@ -38,14 +38,12 @@ export default function ReviewStep({
   // When the guide changes, App rebuilds reviewState with a fresh issues array and
   // new resolutions. Reset all local state so stale fixes and dismissed markers
   // from the previous guide run are not carried forward into the new one.
-  // reviewState.resolutions is read here intentionally — it is the authoritative
-  // reset value and only changes in lockstep with reviewState.issues.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Both deps change atomically via the same setReviewState call in App.tsx.
   useEffect(() => {
     setResolutions(reviewState.resolutions);
     setAcceptedFixes([]);
     setDismissedCategories(new Set());
-  }, [reviewState.issues]);
+  }, [reviewState.issues, reviewState.resolutions]);
 
   const { issues, autoAppliedChanges, activeContentGuide } = reviewState;
 
