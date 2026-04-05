@@ -31,14 +31,14 @@ export async function parseDocx(
 
   // Read core XML files now so rules can inspect OOXML synchronously
   const documentXmlFile = zipArchive.file('word/document.xml');
-  const documentXml = documentXmlFile ? await documentXmlFile.async('string') : '';
-
   const footnotesXmlFile = zipArchive.file('word/footnotes.xml');
-  const footnotesXml = footnotesXmlFile ? await footnotesXmlFile.async('string') : '';
-
   const endnotesXmlFile = zipArchive.file('word/endnotes.xml');
-  const endnotesXml = endnotesXmlFile ? await endnotesXmlFile.async('string') : '';
 
+  const [documentXml, footnotesXml, endnotesXml] = await Promise.all([
+    documentXmlFile ? documentXmlFile.async('string') : Promise.resolve(''),
+    footnotesXmlFile ? footnotesXmlFile.async('string') : Promise.resolve(''),
+    endnotesXmlFile ? endnotesXmlFile.async('string') : Promise.resolve(''),
+  ]);
   // Extract raw text
   const rawText = extractRawText(html);
 
