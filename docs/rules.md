@@ -22,7 +22,6 @@ Universal rules run on every document regardless of which content guide is selec
 | LINK-002 | Non-descriptive link text | Error | Link text is non-descriptive ("click here", "here", "read more", etc.). Fails accessibility requirements. |
 | LINK-003 | Missing protocol in URL | Error | A link's `href` is missing `http://` or `https://`. |
 | LINK-004 | Malformed URL | Error | A link's URL is malformed and may not resolve correctly. |
-| LINK-005 | Same text, different destinations | Warning | Surfaces as a single consolidated card. All link texts that point to more than one destination are collected and reported together — e.g. "3 link texts point to different URLs" — with up to 3 examples inline (showing the link text and destination count) and an "and N more" note if additional offenders exist. |
 | LINK-006 | Internal bookmark not found | Warning | An internal anchor link (`#bookmark`) points to a target that was not found in the document. The rule attempts fuzzy matching through three passes before giving up: (1) normalize-and-compare against OOXML bookmarks, HTML element IDs, and heading text — heading text uses both direct containment and a stop-word-stripped containment check to handle slugs where Word dropped connective words like "and" or "or" (e.g. `#Program_requirements_expectations` matches "Program requirements and expectations"); (2) strip Word's trailing numeric suffix (`_1`, `_2`, etc.) and retry — Word appends these when multiple headings share the same text; (3) numeric extraction fallback — extract integers from the anchor and match against headings where a structural keyword (Attachment, Section, Step, Part, Appendix, Exhibit) immediately precedes that number (e.g. `#Attach8OrgChart` matches "Attachment 8: Non-duplication…"). A single match surfaces a Review card with a pre-filled suggestion; multiple matches surface an ambiguous-anchor card; no match falls through to a broken-link warning. |
 | LINK-008 | Email address mailto enforcement (auto-apply) | Error | Plain-text email addresses are automatically converted to `mailto:` hyperlinks. Links whose `href` contains an email address but is missing the `mailto:` protocol are flagged as errors for manual correction. |
 
@@ -30,8 +29,8 @@ Universal rules run on every document regardless of which content guide is selec
 
 | Rule ID | Title | Severity | Description |
 |---------|-------|----------|-------------|
-| TABLE-002 | Table missing caption | Warning | A table has no caption element. Captions must follow the format `Table: Title of table` in normal (unstyled) text, placed directly above the table with no blank line — a bold line or heading does not count. Exempt table types (application contents, standard forms, application checklist, merit review criteria, reporting) are suppressed automatically where detectable; the issue card notes the exempt categories for cases the rule cannot detect. |
-| TABLE-003 | Table contains merged cells | Warning | A table uses `colspan` or `rowspan`. Merged cells can be difficult for assistive technology to interpret. |
+| TABLE-002 | Table missing caption | Warning | A table has no caption element. Captions must follow the format `Table: Title of table` in normal (unstyled) text, placed directly above the table with no blank line — a bold line or heading does not count. Exempt table types (key facts tables, key dates tables, callout boxes/single-cell tables, application contents, standard forms, application checklist, merit review criteria, reporting) are suppressed automatically where detectable; the issue card notes the exempt categories for cases the rule cannot detect. |
+| TABLE-003 | Table contains merged cells | Suggestion | A table uses `colspan` or `rowspan`. Merged cells can sometimes be harder for screen readers to interpret, but are acceptable when the table structure is clear and the merging aids comprehension. |
 
 ### Footnotes and endnotes (NOTE)
 
@@ -39,7 +38,7 @@ Universal rules run on every document regardless of which content guide is selec
 |---------|-------|----------|-------------|
 | NOTE-001 | Footnotes present | Warning | The document appears to contain footnotes. All notes must be converted to endnotes before design. |
 | NOTE-002 | Endnotes present — verify intent | Suggestion | Endnotes detected. Verify they are intentional and not accidentally placed footnotes. |
-| NOTE-003 | Auto-convert footnotes to endnotes (auto-apply) | — | Flags documents with footnotes but no endnotes for mandatory manual conversion. |
+| NOTE-004 | Orphaned "Footnotes" heading | Warning | A heading paragraph with the text "Footnotes" (or close variation) was found, but the document contains no footnotes or endnotes. This heading is likely a leftover from the Word template and will appear as an empty section in the published NOFO. |
 
 ### Images (IMG)
 
