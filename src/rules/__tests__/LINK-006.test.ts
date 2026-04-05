@@ -21,6 +21,8 @@ function makeDoc(html: string, documentXml = ''): ParsedDocument {
     rawText: html.replace(/<[^>]+>/g, ''),
     zipArchive: new JSZip(),
     documentXml,
+    footnotesXml: '',
+    endnotesXml: '',
     activeContentGuide: null,
   };
 }

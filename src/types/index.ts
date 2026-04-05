@@ -50,6 +50,10 @@ export interface ParsedDocument {
   zipArchive: JSZip;
   /** Raw XML of word/document.xml — available synchronously so rules can parse OOXML. */
   documentXml: string;
+  /** Raw XML of word/footnotes.xml, or empty string if the file is absent. */
+  footnotesXml: string;
+  /** Raw XML of word/endnotes.xml, or empty string if the file is absent. */
+  endnotesXml: string;
   activeContentGuide: ActiveContentGuide | null;
 }
 

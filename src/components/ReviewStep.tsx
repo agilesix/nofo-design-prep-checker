@@ -1,4 +1,5 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import { useFocusHeading } from '../hooks/useFocusHeading';
 import type { ParsedDocument, ReviewState, AcceptedFix, IssueResolution, Issue, ContentGuideId } from '../types';
 import { content } from '../content';
 import { getCategoryLabel } from '../utils/getCategoryLabel';
@@ -26,7 +27,7 @@ export default function ReviewStep({
   bannerDismissed,
   onDismissBanner,
 }: ReviewStepProps): React.ReactElement {
-  const headingRef = useRef<HTMLHeadingElement>(null);
+  const headingRef = useFocusHeading();
   const [resolutions, setResolutions] = useState<Record<string, IssueResolution>>(
     reviewState.resolutions
   );
@@ -34,8 +35,6 @@ export default function ReviewStep({
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
 
   const { issues, autoAppliedChanges, activeContentGuide } = reviewState;
-
-  useEffect(() => { headingRef.current?.focus(); }, []);
 
   const sectionIndexMap = useMemo<Map<string, number>>(() => {
     const map = new Map<string, number>();
