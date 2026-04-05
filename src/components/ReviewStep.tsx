@@ -122,23 +122,21 @@ export default function ReviewStep({
       <p className="usa-intro">{content.review.intro}</p>
 
       {!bannerDismissed && (
-        <div className="usa-alert usa-alert--info margin-bottom-4" role="alert">
+        <div className="usa-alert usa-alert--info margin-bottom-4 review-banner" role="alert">
           <div className="usa-alert__body">
-            <div className="display-flex flex-justify flex-align-start">
-              <p className="usa-alert__text margin-0">
-                <strong>Nothing is saved automatically.</strong> Your changes exist only in this browser tab. If you
-                close or refresh the tab, you'll need to start over. Download your corrected
-                document before leaving.
-              </p>
-              <button
-                type="button"
-                className="usa-button usa-button--unstyled margin-left-2 flex-no-shrink"
-                aria-label="Dismiss alert"
-                onClick={() => onDismissBanner(true)}
-              >
-                Dismiss
-              </button>
-            </div>
+            <p className="usa-alert__text">
+              <strong>Nothing is saved automatically.</strong> Your changes exist only in this browser tab. If you
+              close or refresh the tab, you'll need to start over. Download your corrected
+              document before leaving.
+            </p>
+            <button
+              type="button"
+              className="usa-button usa-button--unstyled review-banner__close"
+              aria-label="Dismiss alert"
+              onClick={() => onDismissBanner(true)}
+            >
+              <img src="/uswds/img/usa-icons/close.svg" alt="" aria-hidden="true" width="20" height="20" />
+            </button>
           </div>
         </div>
       )}

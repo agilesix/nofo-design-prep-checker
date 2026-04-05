@@ -5,11 +5,17 @@
 // USWDS v3 — full package import. Picks up the pre-configured uswds-core.
 @use "uswds";
 
+// ─── Shared palette tokens ─────────────────────────────────────────────────
+
+// Primary dark green — used for the site header background and footer lower band.
+// Defined once here so both stay in sync.
+$app-green-dark: #1a4f3a;
+
 // ─── App-specific overrides ────────────────────────────────────────────────
 
 // Header — dark green background with white text
 .usa-header {
-  background-color: #1a4f3a;
+  background-color: $app-green-dark;
 }
 
 .usa-header .usa-logo__text,
@@ -36,9 +42,9 @@
   border-top: 3px solid #5abf95; // mint-30
 }
 
-// Lower band — dark forest green (same token as the header identifier)
+// Lower band — dark forest green (same token as the site header)
 .site-footer__lower {
-  background-color: #204e34; // mint-70
+  background-color: $app-green-dark;
 }
 
 // Shared inner container: grid-container handles max-width and horizontal padding
@@ -181,6 +187,44 @@
   }
 }
 
+// ─── Dismissible review banner ───────────────────────────────────────────
+// Close button is absolutely positioned so the alert text always gets the
+// full available width — no flex column-narrowing on mobile.
+
+.review-banner {
+  position: relative;
+
+  // Extra right padding keeps text from running underneath the close button.
+  .usa-alert__body {
+    padding-right: 2.75rem;
+  }
+}
+
+.review-banner__close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  // Ensure a minimum 44×44px touch target (WCAG 2.5.5)
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+
+  img {
+    display: block;
+    // Tint the icon to match the info alert text color so it reads as part of
+    // the alert rather than an unrelated control.
+    opacity: 0.7;
+  }
+
+  &:hover img,
+  &:focus img {
+    opacity: 1;
+  }
+}
+
 // Ensure code snippets in issue cards don't overflow
 .usa-alert code {
   word-break: break-all;
@@ -281,6 +325,10 @@
 .about-hero {
   background-color: #ffffff;
   border-bottom: 1px solid #dfe1e2;
+
+  h1, p {
+    color: #1c1c19; // dark ink — legible on white, distinct from the green header above
+  }
 }
 
 // About page section dividers — border between each section for visual separation.
