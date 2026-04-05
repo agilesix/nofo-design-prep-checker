@@ -17,7 +17,6 @@ export async function buildDocx(
     f => f.ruleId.startsWith('LINK-003') || f.ruleId.startsWith('FORMAT-') || f.ruleId === 'LINK-006'
   );
   const imgFixes = acceptedFixes.filter(f => f.targetField?.startsWith('image.'));
-  const noteFixes = acceptedFixes.filter(f => f.ruleId === 'NOTE-003');
   const emailChanges = autoAppliedChanges.filter(
     c => c.targetField === 'email.mailto' && c.value
   );
@@ -52,11 +51,6 @@ export async function buildDocx(
   // Apply double-space collapse
   if (hasDoublespaceFix) {
     await applyDoublespaceFix(zip);
-  }
-
-  // Apply note fixes (two-file operation)
-  if (noteFixes.length > 0) {
-    await applyNoteFixes(zip);
   }
 
   // Apply tagline relocation
@@ -279,12 +273,6 @@ function isExcludedParagraph(wP: Element): boolean {
     styleVal === 'HTMLPreformatted'
   ) return true;
   return false;
-}
-
-async function applyNoteFixes(_zip: JSZip): Promise<void> {
-  // NOTE-003: convert footnotes to endnotes
-  // This is handled during rule execution as an auto-applied change
-  // The actual XML mutation should be done in NOTE-003 rule
 }
 
 // ─── Shared OOXML helpers ─────────────────────────────────────────────────────

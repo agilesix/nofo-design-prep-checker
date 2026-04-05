@@ -32,8 +32,15 @@ const TABLE_002: Rule = {
       const section = findSectionForElement(table, doc);
       const sectionHeading = section?.heading ?? '';
 
-      // Single-cell tables are callout boxes per the SimplerNOFOs style guide — not data tables
-      if (table.querySelectorAll('td, th').length === 1) return;
+      // Single-cell tables are callout boxes per the SimplerNOFOs style guide — not data tables.
+      // Use :scope child combinators so cells inside nested tables are not counted.
+      const directCells = table.querySelectorAll(
+        ':scope > tr > td, :scope > tr > th,' +
+        ':scope > tbody > tr > td, :scope > tbody > tr > th,' +
+        ':scope > thead > tr > td, :scope > thead > tr > th,' +
+        ':scope > tfoot > tr > td, :scope > tfoot > tr > th'
+      );
+      if (directCells.length === 1) return;
 
       // Suppress for table types that are exempt per the SimplerNOFOs style guide
       if (isExemptFromCaption(table, sectionHeading)) return;
