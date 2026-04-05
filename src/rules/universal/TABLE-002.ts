@@ -32,6 +32,9 @@ const TABLE_002: Rule = {
       const section = findSectionForElement(table, doc);
       const sectionHeading = section?.heading ?? '';
 
+      // Single-cell tables are callout boxes per the SimplerNOFOs style guide — not data tables
+      if (table.querySelectorAll('td, th').length === 1) return;
+
       // Suppress for table types that are exempt per the SimplerNOFOs style guide
       if (isExemptFromCaption(table, sectionHeading)) return;
 
@@ -51,7 +54,8 @@ const TABLE_002: Rule = {
           `Per the SimplerNOFOs style guide, captions must follow the format \u201cTable: Title of table\u201d ` +
           `in normal (unstyled) text, placed directly above the table with no blank line. ` +
           `A bold line or heading above the table does not count as a caption. ` +
-          `Note: application checklist, merit review criteria, standard forms, application contents, ` +
+          `Note: key facts tables, key dates tables, callout boxes (single-cell tables), ` +
+          `application checklist, merit review criteria, standard forms, application contents, ` +
           `and reporting tables are exempt from this requirement \u2014 use your judgment if this table ` +
           `falls into one of those categories.`,
         suggestedFix:
@@ -97,9 +101,14 @@ function isExemptFromCaption(table: Element, sectionHeading: string): boolean {
     return true;
   }
 
-  // Table first-row content signals
+  // Table first-row / first-cell content signals
+  const firstCellText = (table.querySelector('td, th')?.textContent ?? '').toLowerCase();
   const firstRowText = (table.querySelector('tr')?.textContent ?? '').toLowerCase();
   return (
+    /key\s+facts/.test(firstCellText) ||
+    /key\s+dates/.test(firstCellText) ||
+    /key\s+facts/.test(firstRowText) ||
+    /key\s+dates/.test(firstRowText) ||
     /merit\s+review\s+criteri/.test(firstRowText) ||
     /maximum\s+points?/.test(firstRowText) ||
     /total\s+points?/.test(firstRowText) ||
