@@ -1,14 +1,19 @@
-import React from 'react';
-import type { ReviewState, AcceptedFix, IssueResolution, Issue } from '../types';
+import React, { useState } from 'react';
+import type { ReviewState, IssueResolution, Issue } from '../types';
 import { content } from '../content';
 import { getCategoryLabel } from '../utils/getCategoryLabel';
 import ContentGuideBadge from './ContentGuideBadge';
 
 interface SummaryReportProps {
   reviewState: ReviewState;
-  acceptedFixes: AcceptedFix[];
   onProceedToDownload: () => void;
+  onGoBackToReview: () => void;
 }
+
+const RESOLUTION_COLORS = {
+  accepted: { bg: '#ecf3ec', text: '#1a7a1a' },
+  unreviewed: { bg: '#f8e1e1', text: '#b50909' },
+} as const;
 
 const SEVERITY_GROUPS = ['error', 'warning', 'suggestion'] as const;
 type Severity = (typeof SEVERITY_GROUPS)[number];
@@ -21,15 +26,14 @@ const SEVERITY_LABELS: Record<Severity, string> = {
 
 export default function SummaryReport({
   reviewState,
-  acceptedFixes,
   onProceedToDownload,
+  onGoBackToReview,
 }: SummaryReportProps): React.ReactElement {
   const { issues, autoAppliedChanges, resolutions, activeContentGuide } = reviewState;
+  const [showUnreviewedWarning, setShowUnreviewedWarning] = useState(false);
 
   const acceptedIssues = issues.filter(i => resolutions[i.id] === 'accepted');
   const unreviewedIssues = issues.filter(i => resolutions[i.id] === 'unreviewed');
-
-  const totalFixed = acceptedFixes.length + autoAppliedChanges.length;
 
   return (
     <div className="margin-top-4">
@@ -45,12 +49,6 @@ export default function SummaryReport({
       {/* Summary stats */}
       <div className="grid-row grid-gap-3 margin-bottom-4">
         <div className="grid-col-12 tablet:grid-col-3">
-          <div className="usa-card__body bg-primary-lighter padding-3 text-center">
-            <p className="font-heading-xl margin-0 text-primary">{totalFixed}</p>
-            <p className="font-body-sm margin-0">Total changes</p>
-          </div>
-        </div>
-        <div className="grid-col-12 tablet:grid-col-3">
           <div className="usa-card__body bg-green-cool-5 padding-3 text-center">
             <p className="font-heading-xl margin-0 text-green-cool-60">{acceptedIssues.length}</p>
             <p className="font-body-sm margin-0">{content.summary.sections.accepted}</p>
@@ -58,7 +56,13 @@ export default function SummaryReport({
         </div>
         <div className="grid-col-12 tablet:grid-col-3">
           <div className="usa-card__body bg-base-lightest padding-3 text-center">
-            <p className="font-heading-xl margin-0 text-base">{autoAppliedChanges.length}</p>
+            <p className="font-heading-xl margin-0 text-base">{skippedIssues.length}</p>
+            <p className="font-body-sm margin-0">{content.summary.sections.skipped}</p>
+          </div>
+        </div>
+        <div className="grid-col-12 tablet:grid-col-3">
+          <div className="usa-card__body bg-primary-lighter padding-3 text-center">
+            <p className="font-heading-xl margin-0 text-primary">{autoAppliedChanges.length}</p>
             <p className="font-body-sm margin-0">{content.summary.sections.autoApplied}</p>
           </div>
         </div>
@@ -98,55 +102,90 @@ export default function SummaryReport({
             <h2 className="bg-base-lightest border-left-05 border-base-light padding-y-1 padding-x-2 font-sans text-bold text-base-darker margin-0">
               {SEVERITY_LABELS[severity]} ({severityIssues.length})
             </h2>
-            <table className="usa-table usa-table--borderless width-full">
-              <colgroup>
-                <col style={{ width: '15%' }} />
-                <col style={{ width: '40%' }} />
-                <col style={{ width: '30%' }} />
-                <col style={{ width: '15%' }} />
-              </colgroup>
-              <thead>
-                <tr>
-                  <th scope="col">Category</th>
-                  <th scope="col">Issue</th>
-                  <th scope="col">Location</th>
-                  <th scope="col">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {severityIssues.map(issue => {
-                  const resolution = resolutions[issue.id] ?? null;
-                  return (
-                    <tr key={issue.id} style={getRowStyle(resolution)}>
-                      <td>{getCategoryLabel(issue.ruleId)}</td>
-                      <td>{issue.title}</td>
-                      <td>{getLocationText(issue)}</td>
-                      <td>{getStatusDisplay(resolution, issue.instructionOnly)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="usa-table usa-table--borderless width-full" style={{ minWidth: '36rem' }}>
+                <colgroup>
+                  <col style={{ width: '15%' }} />
+                  <col style={{ width: '40%' }} />
+                  <col style={{ width: '30%' }} />
+                  <col style={{ width: '15%' }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th scope="col">Category</th>
+                    <th scope="col">Issue</th>
+                    <th scope="col">Location</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {severityIssues.map(issue => {
+                    const resolution = resolutions[issue.id] ?? null;
+                    return (
+                      <tr key={issue.id} style={getRowStyle(resolution)}>
+                        <td>{getCategoryLabel(issue.ruleId)}</td>
+                        <td>{issue.title}</td>
+                        <td>{getLocationText(issue)}</td>
+                        <td>{getStatusDisplay(resolution, issue.instructionOnly)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         );
       })}
 
       <div className="margin-top-4">
-        <button
-          type="button"
-          className="usa-button"
-          onClick={onProceedToDownload}
-        >
-          {content.summary.downloadButton}
-        </button>
+        {showUnreviewedWarning ? (
+          <div className="usa-alert usa-alert--warning">
+            <div className="usa-alert__body">
+              <p className="usa-alert__text margin-bottom-2">
+                <strong>{content.summary.unreviewedWarning.lead(unreviewedIssues.length)}</strong>{' '}
+                {content.summary.unreviewedWarning.body}
+              </p>
+              <div className="display-flex flex-gap-2 flex-wrap">
+                <button
+                  type="button"
+                  className="usa-button"
+                  onClick={onProceedToDownload}
+                >
+                  {content.summary.unreviewedWarning.downloadAnywayButton}
+                </button>
+                <button
+                  type="button"
+                  className="usa-button usa-button--outline"
+                  onClick={onGoBackToReview}
+                >
+                  {content.summary.unreviewedWarning.goBackButton}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="usa-button"
+            onClick={() => {
+              if (unreviewedIssues.length > 0) {
+                setShowUnreviewedWarning(true);
+              } else {
+                onProceedToDownload();
+              }
+            }}
+          >
+            {content.summary.downloadButton}
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
 function getRowStyle(resolution: IssueResolution | null): React.CSSProperties {
-  if (resolution === 'accepted') return { backgroundColor: '#ecf3ec' };
-  if (resolution === 'unreviewed') return { backgroundColor: '#f8e1e1' };
+  if (resolution === 'accepted') return { backgroundColor: RESOLUTION_COLORS.accepted.bg };
+  if (resolution === 'unreviewed') return { backgroundColor: RESOLUTION_COLORS.unreviewed.bg };
   return {};
 }
 
@@ -160,7 +199,7 @@ function getLocationText(issue: Issue): string {
 function getStatusDisplay(resolution: IssueResolution | null, instructionOnly?: boolean): React.ReactElement {
   switch (resolution) {
     case 'accepted':
-      return <span style={{ color: '#1a7a1a', fontWeight: 'bold' }}>✓ Accepted</span>;
+      return <span style={{ color: RESOLUTION_COLORS.accepted.text, fontWeight: 'bold' }}>✓ Accepted</span>;
     case 'keptAsBold':
       return <span style={{ color: '#71767a' }}>Kept as bold text</span>;
     case 'skipped':

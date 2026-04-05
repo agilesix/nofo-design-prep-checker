@@ -160,12 +160,20 @@ export const content = {
 
   summary: {
     heading: 'Summary report',
-    intro: "Errors are most likely to cause problems when importing into NOFO Builder or generating the PDF. Skipped issues and items marked 'I'll do it later' are not fixed in your download.",
+    intro: "Errors are most likely to cause problems when importing into NOFO Builder or generating the PDF. Skipped issues, items marked 'I'll do it later', and unreviewed issues are not fixed in your download.",
     sections: {
       accepted: 'Fixes accepted',
       skipped: 'Issues skipped',
       autoApplied: 'Auto-applied changes',
       noAction: 'Issues with no action',
+      unreviewed: 'Unreviewed',
+    },
+    unreviewedWarning: {
+      lead: (count: number): string =>
+        `You have ${count} issue${count === 1 ? '' : 's'} you haven\u2019t reviewed yet.`,
+      body: 'Unreviewed issues will not be fixed in your download. You can still download now, or go back to finish reviewing.',
+      downloadAnywayButton: 'Download anyway',
+      goBackButton: 'Go back to review',
     },
     empty: 'None',
     downloadButton: 'Continue to download',

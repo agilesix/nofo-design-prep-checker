@@ -7,6 +7,21 @@
 
 // ─── App-specific overrides ────────────────────────────────────────────────
 
+// Header — dark green background with white text
+.usa-header {
+  background-color: #1a4f3a;
+}
+
+.usa-header .usa-logo__text,
+.usa-header .usa-logo__text:visited {
+  color: #ffffff;
+}
+
+.usa-header .usa-nav__link,
+.usa-header .usa-nav__link span {
+  color: #ffffff;
+}
+
 // Prevent the header title from wrapping onto two lines
 .usa-logo__text {
   white-space: nowrap;
@@ -114,7 +129,7 @@
     font-size: 0.88rem !important;
     font-weight: 700 !important;
     line-height: 1 !important;
-    color: #76766a !important; // matches desktop usa-nav__link color
+    color: #ffffff !important; // white to match dark green header
     display: flex !important;
     align-items: center !important;
     padding: 1rem !important;
@@ -260,6 +275,12 @@
     margin: 0;
     line-height: 1.5;
   }
+}
+
+// About page hero banner — white background, visually distinct from dark green header
+.about-hero {
+  background-color: #ffffff;
+  border-bottom: 1px solid #dfe1e2;
 }
 
 // About page section dividers — border between each section for visual separation.
