@@ -125,7 +125,6 @@ export default function ReviewStep({
       }
       return { ...prev, ...updates };
     });
-    setAcceptedFixes(prev => prev.filter(f => !categoryIssues.some(i => i.id === f.issueId)));
   }, []);
 
   const handleUndoAll = useCallback((category: string, categoryIssues: Issue[]) => {
