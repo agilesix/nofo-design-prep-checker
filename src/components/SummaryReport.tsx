@@ -35,7 +35,7 @@ export default function SummaryReport({
   const [showUnreviewedWarning, setShowUnreviewedWarning] = useState(false);
 
   const acceptedIssues = issues.filter(i => resolutions[i.id] === 'accepted');
-  const skippedIssues = issues.filter(i => resolutions[i.id] === 'skipped' || resolutions[i.id] === 'keptAsBold');
+  const skippedOrKeptIssues = issues.filter(i => resolutions[i.id] === 'skipped' || resolutions[i.id] === 'keptAsBold');
   const unreviewedIssues = issues.filter(i => resolutions[i.id] === 'unreviewed');
 
   return (
@@ -59,7 +59,7 @@ export default function SummaryReport({
         </div>
         <div className="grid-col-12 tablet:grid-col-3">
           <div className="usa-card__body bg-base-lightest padding-3 text-center">
-            <p className="font-heading-xl margin-0 text-base">{skippedIssues.length}</p>
+            <p className="font-heading-xl margin-0 text-base">{skippedOrKeptIssues.length}</p>
             <p className="font-body-sm margin-0">{content.summary.sections.skipped}</p>
           </div>
         </div>
@@ -125,7 +125,7 @@ export default function SummaryReport({
                   {severityIssues.map(issue => {
                     const resolution = resolutions[issue.id] ?? null;
                     return (
-                      <tr key={issue.id} style={getRowStyle(resolution)}>
+                      <tr key={issue.id} className={getRowClassName(resolution)}>
                         <td>{getCategoryLabel(issue.ruleId)}</td>
                         <td>{issue.title}</td>
                         <td>{getLocationText(issue)}</td>
@@ -186,10 +186,10 @@ export default function SummaryReport({
   );
 }
 
-function getRowStyle(resolution: IssueResolution | null): React.CSSProperties {
-  if (resolution === 'accepted') return { backgroundColor: RESOLUTION_COLORS.accepted.bg };
-  if (resolution === 'unreviewed') return { backgroundColor: RESOLUTION_COLORS.unreviewed.bg };
-  return {};
+function getRowClassName(resolution: IssueResolution | null): string | undefined {
+  if (resolution === 'accepted') return 'summary-table__row--accepted';
+  if (resolution === 'unreviewed') return 'summary-table__row--unreviewed';
+  return undefined;
 }
 
 function getLocationText(issue: Issue): string {
