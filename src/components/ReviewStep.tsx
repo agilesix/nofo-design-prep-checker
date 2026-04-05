@@ -256,8 +256,9 @@ export default function ReviewStep({
           {Object.entries(groupedIssues).map(([category, categoryIssues]) => {
             const hasUnreviewed = categoryIssues.some(i => resolutions[i.id] === 'unreviewed');
             // isDismissed is intentionally gated on !hasUnreviewed: if any issue in the
-            // category is individually undone back to unreviewed, the "Dismissed" state
-            // clears automatically and "Dismiss all" reappears without any extra handler work.
+            // category is individually undone back to unreviewed, the stored dismissed
+            // category remains in `dismissedCategories`, but the UI hides the "Dismissed"
+            // state and shows "Dismiss all" again without any extra handler work.
             const isDismissed = dismissedCategories.has(category) && !hasUnreviewed;
             return (
               <div key={category} className="margin-bottom-5">
