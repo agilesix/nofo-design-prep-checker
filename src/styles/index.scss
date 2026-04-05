@@ -89,6 +89,18 @@ $app-green-dark: #1a4f3a;
   align-items: center;
 }
 
+// Ensure the navbar flex child itself centers its content (logo) vertically.
+.usa-header .usa-navbar {
+  display: flex;
+  align-items: center;
+}
+
+// USWDS adds margin-bottom to .usa-logo which pushes the logo text downward
+// within the flex row, making it appear lower than the nav link.
+.usa-header .usa-logo {
+  margin-bottom: 0;
+}
+
 @media all and (max-width: 63.99em) {
   // .usa-navbar has border-bottom at all sizes; with our flex layout it only
   // spans the logo area. Move the line to .usa-header so it spans full width.
@@ -282,6 +294,33 @@ $app-green-dark: #1a4f3a;
   background-color: #ffffff;
   padding-top: 0.75rem;
   margin-top: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+// Responsive count suffix in "Dismiss all (N)" — hidden on mobile, shown at tablet+
+// USWDS tablet breakpoint: 640px / 40em
+.dismiss-all-count {
+  display: none;
+
+  @media (min-width: 40em) {
+    display: inline;
+  }
+}
+
+// ─── Summary report table row colors ──────────────────────────────────────
+// Row background must target td/th because USWDS applies background-color
+// directly to table cells, which visually overlays any background set on <tr>.
+
+.summary-table__row--accepted td,
+.summary-table__row--accepted th {
+  background-color: #ecf3ec;
+}
+
+.summary-table__row--unreviewed td,
+.summary-table__row--unreviewed th {
+  background-color: #f8e1e1;
 }
 
 // ─── Content guide badge ───────────────────────────────────────────────────
