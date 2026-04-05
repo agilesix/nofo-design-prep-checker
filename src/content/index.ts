@@ -163,7 +163,7 @@ export const content = {
     intro: "Errors are most likely to cause problems when importing into NOFO Builder or generating the PDF. Skipped issues, items marked 'I'll do it later', and unreviewed issues are not fixed in your download.",
     sections: {
       accepted: 'Fixes accepted',
-      skipped: 'Skipped / kept as bold',
+      skipped: 'Skipped',
       autoApplied: 'Auto-applied changes',
       noAction: 'Issues with no action',
       unreviewed: 'Unreviewed',

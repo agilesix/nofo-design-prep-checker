@@ -299,8 +299,8 @@ $app-green-dark: #1a4f3a;
   align-items: center;
 }
 
-// Responsive count suffix in "Dismiss all (N)" — hidden on mobile, shown at tablet+
-// USWDS tablet breakpoint: 640px / 40em
+// "Dismiss all (N)" count suffix — hidden on mobile, shown at tablet+
+// USWDS tablet breakpoint: 40em / 640px
 .dismiss-all-count {
   display: none;
 
