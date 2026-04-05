@@ -86,8 +86,8 @@ export default function StepIndicator({ currentStep, onBack }: StepIndicatorProp
             className={`usa-step-indicator__heading-counter${showBack ? ' flex-gap-1' : ''}`}
             style={showBack ? { display: 'inline-flex', alignItems: 'center' } : undefined}
           >
-            {showBack && (
-              <BackLink onClick={onBack!} />
+            {showBack && onBack && (
+              <BackLink onClick={onBack} />
             )}
             <span className="usa-sr-only">Step </span>
             <span className="usa-step-indicator__current-step">{currentStepNumber}</span>
