@@ -32,12 +32,12 @@ const TABLE_003: Rule = {
           id: `TABLE-003-${index}`,
           ruleId: 'TABLE-003',
           title: 'Table contains merged cells',
-          severity: 'warning',
+          severity: 'suggestion',
           sectionId,
           nearestHeading,
           page,
-          description: `A table${caption ? ` ("${caption}")` : firstRowText ? ` starting with "${firstRowText}…"` : ''} contains ${mergedCells.length} merged cell${mergedCells.length === 1 ? '' : 's'} (colspan/rowspan). Merged cells can be difficult for screen readers to interpret correctly.`,
-          suggestedFix: 'If possible, restructure the table to avoid merged cells. If merging is necessary, ensure the table has a clear, consistent structure.',
+          description: `A table${caption ? ` ("${caption}")` : firstRowText ? ` starting with "${firstRowText}…"` : ''} contains ${mergedCells.length} merged cell${mergedCells.length === 1 ? '' : 's'} (colspan/rowspan). Merged cells can sometimes be harder for screen readers to interpret, but they are acceptable when the table structure is clear and the merging genuinely aids comprehension.`,
+          suggestedFix: 'Consider whether the merged cells are necessary. If the table structure is clear and the merging helps readers understand the content, no change is needed. If the merge is incidental or the table could be restructured more simply without it, that may improve accessibility.',
           instructionOnly: true,
         });
       }
