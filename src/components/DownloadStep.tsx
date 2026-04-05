@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import type { AcceptedFix } from '../types';
 import { content } from '../content';
 
@@ -17,8 +17,11 @@ export default function DownloadStep({
   onDownload,
   onStartOver,
 }: DownloadStepProps): React.ReactElement {
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [hasDownloaded, setHasDownloaded] = React.useState(false);
+
+  useEffect(() => { headingRef.current?.focus(); }, []);
 
   const downloadName = fileName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
   const acceptedCount = acceptedFixes.length;
@@ -46,7 +49,7 @@ export default function DownloadStep({
 
   return (
     <div className="margin-top-4">
-      <h1 className="usa-h1">
+      <h1 className="usa-h1" tabIndex={-1} ref={headingRef}>
         {hasDownloaded ? 'Download complete' : 'Download your corrected document'}
       </h1>
 

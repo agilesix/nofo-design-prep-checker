@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { ReviewState, IssueResolution, Issue } from '../types';
 import { content } from '../content';
 import { getCategoryLabel } from '../utils/getCategoryLabel';
@@ -29,8 +29,11 @@ export default function SummaryReport({
   onProceedToDownload,
   onGoBackToReview,
 }: SummaryReportProps): React.ReactElement {
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const { issues, autoAppliedChanges, resolutions, activeContentGuide } = reviewState;
   const [showUnreviewedWarning, setShowUnreviewedWarning] = useState(false);
+
+  useEffect(() => { headingRef.current?.focus(); }, []);
 
   const acceptedIssues = issues.filter(i => resolutions[i.id] === 'accepted');
 
@@ -38,7 +41,7 @@ export default function SummaryReport({
 
   return (
     <div className="margin-top-4">
-      <h1 className="usa-h1 margin-bottom-1">{content.steps.summary.heading}</h1>
+      <h1 className="usa-h1 margin-bottom-1" tabIndex={-1} ref={headingRef}>{content.steps.summary.heading}</h1>
       {activeContentGuide && (
         <div className="margin-bottom-2">
           <ContentGuideBadge guide={activeContentGuide} />
