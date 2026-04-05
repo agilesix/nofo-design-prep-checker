@@ -78,18 +78,19 @@ export default function AboutPage(): React.ReactElement {
     <main id="main-content" className="about-main">
 
       {/* ── Hero heading ──────────────────────────────────────────────────── */}
-      <div className="bg-primary-darkest padding-y-6">
+      <div className="about-hero padding-y-6">
         <div className="grid-container">
           <div className="grid-row">
             <div className="desktop:grid-col-8">
               <h1
-                className="usa-h1 text-white margin-0"
+                className="usa-h1 margin-0"
+                style={{ color: '#1c1c19' }}
                 tabIndex={-1}
                 ref={headingRef}
               >
                 About the NOFO Design Prep Checker
               </h1>
-              <p className="font-body-md text-primary-lighter margin-top-2 margin-bottom-0">
+              <p className="font-body-md margin-top-2 margin-bottom-0" style={{ color: '#1c1c19' }}>
                 A tool built for the HHS SimplerNOFOs initiative to reduce
                 administrative burden and improve document quality before design
                 handoff.
