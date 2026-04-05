@@ -8,14 +8,13 @@ import LINK_001 from './universal/LINK-001';
 import LINK_002 from './universal/LINK-002';
 import LINK_003 from './universal/LINK-003';
 import LINK_004 from './universal/LINK-004';
-import LINK_005 from './universal/LINK-005';
 import LINK_006 from './universal/LINK-006';
 import LINK_008 from './universal/LINK-008';
 import TABLE_002 from './universal/TABLE-002';
 import TABLE_003 from './universal/TABLE-003';
 import NOTE_001 from './universal/NOTE-001';
 import NOTE_002 from './universal/NOTE-002';
-import NOTE_003 from './universal/NOTE-003';
+import NOTE_004 from './universal/NOTE-004';
 import IMG_001 from './universal/IMG-001';
 import LIST_001 from './universal/LIST-001';
 import FORMAT_001 from './universal/FORMAT-001';
@@ -53,7 +52,6 @@ export const allRules: Rule[] = [
   CLEAN_004,
   CLEAN_005,
   CLEAN_006,
-  NOTE_003,
   LINK_006,
   FORMAT_002,
 
@@ -67,7 +65,6 @@ export const allRules: Rule[] = [
   LINK_002,
   LINK_003,
   LINK_004,
-  LINK_005,
   LINK_008,
 
   // Table rules
@@ -77,6 +74,7 @@ export const allRules: Rule[] = [
   // Note rules
   NOTE_001,
   NOTE_002,
+  NOTE_004,
 
   // Image rules
   IMG_001,
@@ -109,9 +107,9 @@ export const allRules: Rule[] = [
 
 export {
   META_001, META_002, META_003,
-  LINK_001, LINK_002, LINK_003, LINK_004, LINK_005, LINK_006, LINK_008,
+  LINK_001, LINK_002, LINK_003, LINK_004, LINK_006, LINK_008,
   TABLE_002, TABLE_003,
-  NOTE_001, NOTE_002, NOTE_003,
+  NOTE_001, NOTE_002, NOTE_004,
   IMG_001,
   LIST_001,
   FORMAT_001, FORMAT_002,

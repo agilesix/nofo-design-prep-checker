@@ -36,11 +36,7 @@ export default function App(): React.ReactElement {
 
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, [location.pathname]);
-
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, [step]);
+  }, [location.pathname, step]);
 
   const handleFileSelected = useCallback(async (file: File) => {
     setUploadedFile(file);

@@ -1,4 +1,5 @@
-import React, { useRef, useState, useCallback, useEffect, useId } from 'react';
+import React, { useRef, useState, useCallback, useId } from 'react';
+import { useFocusHeading } from '../hooks/useFocusHeading';
 import { content } from '../content';
 
 interface UploadStepProps {
@@ -14,13 +15,11 @@ export default function UploadStep({
   isProcessing,
   error,
 }: UploadStepProps): React.ReactElement {
-  const headingRef = useRef<HTMLHeadingElement>(null);
+  const headingRef = useFocusHeading();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const fileInputId = useId();
-
-  useEffect(() => { headingRef.current?.focus(); }, []);
 
   const displayError = error ?? localError;
 
