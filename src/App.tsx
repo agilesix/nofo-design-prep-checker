@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { Routes, Route, Link } from 'react-router-dom';
+import { Routes, Route, Link, useLocation } from 'react-router-dom';
 import type {
   AppStep,
   ParsedDocument,
@@ -24,6 +24,7 @@ import DownloadStep from './components/DownloadStep';
 import AboutPage from './pages/AboutPage';
 
 export default function App(): React.ReactElement {
+  const location = useLocation();
   const [step, setStep] = useState<AppStep>('upload');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [parsedDoc, setParsedDoc] = useState<ParsedDocument | null>(null);
@@ -32,6 +33,10 @@ export default function App(): React.ReactElement {
   const [parseError, setParseError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [reviewBannerDismissed, setReviewBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
 
   useEffect(() => {
     window.scrollTo(0, 0);

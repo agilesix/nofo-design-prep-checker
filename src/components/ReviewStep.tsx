@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import type { ParsedDocument, ReviewState, AcceptedFix, IssueResolution, Issue, ContentGuideId } from '../types';
 import { content } from '../content';
 import { getCategoryLabel } from '../utils/getCategoryLabel';
@@ -26,6 +26,7 @@ export default function ReviewStep({
   bannerDismissed,
   onDismissBanner,
 }: ReviewStepProps): React.ReactElement {
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const [resolutions, setResolutions] = useState<Record<string, IssueResolution>>(
     reviewState.resolutions
   );
@@ -33,6 +34,8 @@ export default function ReviewStep({
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
 
   const { issues, autoAppliedChanges, activeContentGuide } = reviewState;
+
+  useEffect(() => { headingRef.current?.focus(); }, []);
 
   const sectionIndexMap = useMemo<Map<string, number>>(() => {
     const map = new Map<string, number>();
@@ -117,7 +120,7 @@ export default function ReviewStep({
 
   return (
     <div className="margin-top-4">
-      <h1 className="usa-h1 margin-bottom-2">{content.steps.review.heading}</h1>
+      <h1 className="usa-h1 margin-bottom-2" tabIndex={-1} ref={headingRef}>{content.steps.review.heading}</h1>
 
       <p className="usa-intro">{content.review.intro}</p>
 

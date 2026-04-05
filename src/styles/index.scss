@@ -82,6 +82,13 @@ $app-green-dark: #1a4f3a;
   display: none !important;
 }
 
+// Vertically center the logo and nav link within the header at all breakpoints.
+// USWDS --basic defaults to align-items:stretch, which leaves the inner content
+// top-aligned inside the stretched flex children.
+.usa-nav-container {
+  align-items: center;
+}
+
 @media all and (max-width: 63.99em) {
   // .usa-navbar has border-bottom at all sizes; with our flex layout it only
   // spans the logo area. Move the line to .usa-header so it spans full width.
