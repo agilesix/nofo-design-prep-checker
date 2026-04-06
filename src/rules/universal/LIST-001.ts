@@ -65,7 +65,6 @@ const LIST_001: Rule = {
         severity: 'warning',
         sectionId,
         nearestHeading,
-        page,
         description: `${count} consecutive paragraphs starting near "${text}…" appear to use manual ${group.type === 'bullet' ? 'bullet characters' : 'numbering'} instead of proper Word list formatting. This may not convert correctly to accessible HTML.`,
         suggestedFix: `Select these paragraphs in the source document and apply the proper ${group.type === 'bullet' ? 'bulleted' : 'numbered'} list style from the Word paragraph formatting options.`,
         instructionOnly: true,
