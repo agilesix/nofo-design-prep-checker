@@ -51,19 +51,19 @@ export default function SummaryReport({
 
       {/* Summary stats */}
       <div className="grid-row grid-gap-3 margin-bottom-4">
-        <div className="grid-col-12 tablet:grid-col-3">
+        <div className="grid-col-12 tablet:grid-col-3 margin-bottom-1 tablet:margin-bottom-0">
           <div className="usa-card__body bg-green-cool-5 padding-3 text-center">
             <p className="font-heading-xl margin-0 text-green-cool-60">{acceptedIssues.length}</p>
             <p className="font-body-sm margin-0">{content.summary.sections.accepted}</p>
           </div>
         </div>
-        <div className="grid-col-12 tablet:grid-col-3">
+        <div className="grid-col-12 tablet:grid-col-3 margin-bottom-1 tablet:margin-bottom-0">
           <div className="usa-card__body bg-base-lightest padding-3 text-center">
             <p className="font-heading-xl margin-0 text-base">{skippedOrKeptIssues.length}</p>
             <p className="font-body-sm margin-0">{content.summary.sections.skipped}</p>
           </div>
         </div>
-        <div className="grid-col-12 tablet:grid-col-3">
+        <div className="grid-col-12 tablet:grid-col-3 margin-bottom-1 tablet:margin-bottom-0">
           <div className="usa-card__body bg-primary-lighter padding-3 text-center">
             <p className="font-heading-xl margin-0 text-primary">{autoAppliedChanges.length}</p>
             <p className="font-body-sm margin-0">{content.summary.sections.autoApplied}</p>

@@ -1,6 +1,7 @@
 import React, { useRef, useState, useCallback, useId } from 'react';
 import { useFocusHeading } from '../hooks/useFocusHeading';
 import { content } from '../content';
+import { RULES_REFERENCE_URL } from '../constants';
 
 interface UploadStepProps {
   onFileSelected: (file: File) => Promise<void>;
@@ -88,7 +89,18 @@ export default function UploadStep({
       <h1 className="usa-h1" tabIndex={-1} ref={headingRef}>{content.steps.upload.heading}</h1>
 
       <div className="usa-prose margin-bottom-3">
-        <p>{content.upload.helperText}</p>
+        <p>
+          Upload your NOFO Word document to prepare it for design. This tool checks formatting and structural issues against a{' '}
+          <a
+            href={RULES_REFERENCE_URL}
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            rules reference
+            <span className="usa-sr-only"> (opens in a new tab)</span>
+          </a>{' '}
+          — it does not modify your document&apos;s regulatory or policy content. The downloaded file is ready for design handoff; your original remains your source of truth.
+        </p>
       </div>
 
       <div
