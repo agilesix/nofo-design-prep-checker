@@ -447,9 +447,12 @@ async function applyRemoveDghtScaffolding(zip: JSZip): Promise<void> {
   // Safety: if the anchor heading is not found, do not remove anything
   if (step1Index === -1) return;
 
-  // Remove every element that precedes the Step 1 heading
+  // Remove only body-level paragraphs and tables that precede the Step 1
+  // heading; preserve structural nodes such as w:sectPr.
   for (const el of bodyChildren.slice(0, step1Index)) {
-    body.removeChild(el);
+    if (el.localName === 'p' || el.localName === 'tbl') {
+      body.removeChild(el);
+    }
   }
 
   const serializer = new XMLSerializer();
