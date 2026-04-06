@@ -75,7 +75,7 @@ const TABLE_002: Rule = {
           `falls into one of those categories.`,
         suggestedFix:
           `Either add a caption directly above the table (format: \u201cTable: Title of table\u201d in normal ` +
-          `unstyled text, no blank line between caption and table), or move the section heading closer ` +
+          `unstyled text, no blank line between caption and table), or move the relevant heading closer ` +
           `to the table so that no more than 50 words of body text separate them.`,
         instructionOnly: true,
       });
