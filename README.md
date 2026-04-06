@@ -27,7 +27,7 @@ This tool automates that process. The same comprehensive review now takes about 
 - **Images** — missing or empty alternative text
 - **Lists** — consecutive paragraphs using manual bullet characters or numbering instead of proper Word list styles, which may not convert correctly to accessible HTML
 - **Date formatting** — dates not following the SimplerNOFOs style guide format of Month D, YYYY; auto-corrects MM/DD/YYYY, leading-zero days (e.g. "April 02, 2024"), and YYYY-MM-DD formats (HRSA NOFOs excepted)
-- **Document cleanliness** — auto-applied fixes including collapsing double spaces in body text, relocating misplaced tagline paragraphs, and removing editorial scaffolding specific to certain content guide templates (HRSA "Before You Begin" headings, CDC/DGHT color-coding instructions)
+- **Document cleanliness** — auto-applied fixes including collapsing double spaces in body text, relocating misplaced tagline paragraphs, and removing editorial scaffolding specific to certain content guide templates (HRSA "Before You Begin" headings; **CLEAN-007** for CDC/DGHT template scaffolding). **CLEAN-007 scope:** editorial/template-only CDC/DGHT scaffolding such as color-coding instructions and similar handoff notes, not substantive NOFO content. **CLEAN-007 trigger:** applied when those CDC/DGHT scaffolding markers are detected in the document.
 - **Required sections** (when a content guide is selected) — flags missing sections based on the selected OpDiv content guide (ACF, ACL, CDC standard and research, CDC/DGHT, CMS, IHS, and HRSA variants)
 
 ## Your document stays private
