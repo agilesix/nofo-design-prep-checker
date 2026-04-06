@@ -92,19 +92,56 @@ const METADATA_PREFIX_MAP: Record<string, string> = {
 };
 
 /**
- * Apply accepted metadata fixes to body paragraphs in word/document.xml.
+ * Apply accepted metadata fixes to both locations where metadata is stored:
  *
- * Metadata fields are stored as plain-text body paragraphs with the format:
- *   "Metadata author: [value]"
- *   "Metadata subject: [value]"
- *   "Metadata keywords: [value]"
+ *  1. docProps/core.xml — the standard OOXML Document Properties location
+ *     (dc:creator, dc:subject, cp:keywords). Word and other consumers read
+ *     these fields when displaying or indexing document properties.
  *
- * For each fix, this function finds the matching paragraph by its prefix
- * (case-insensitive), writes the new value into the first run's <w:t>,
- * and clears the text content of any subsequent runs in that paragraph so
- * only the updated text remains.
+ *  2. word/document.xml body paragraphs — template placeholder paragraphs
+ *     with the format "Metadata author: [value]" etc. These are the visible
+ *     placeholders that the META-001/002/003 rules flag and that users see in
+ *     the document body.
+ *
+ * Both locations are updated so they stay consistent after an accepted fix.
+ * If either file is absent in the archive, that location is skipped silently.
  */
 async function applyMetadataFixes(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
+  await applyMetadataFixesToCoreXml(zip, fixes);
+  await applyMetadataFixesToBodyParagraphs(zip, fixes);
+}
+
+async function applyMetadataFixesToCoreXml(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
+  const coreXmlFile = zip.file('docProps/core.xml');
+  if (!coreXmlFile) return;
+
+  const xmlStr = await coreXmlFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  for (const fix of fixes) {
+    if (!fix.value || !fix.targetField) continue;
+
+    if (fix.targetField === 'metadata.author') {
+      const creator = xmlDoc.getElementsByTagNameNS('http://purl.org/dc/elements/1.1/', 'creator')[0];
+      if (creator) creator.textContent = fix.value;
+    } else if (fix.targetField === 'metadata.subject') {
+      const subject = xmlDoc.getElementsByTagNameNS('http://purl.org/dc/elements/1.1/', 'subject')[0];
+      if (subject) subject.textContent = fix.value;
+    } else if (fix.targetField === 'metadata.keywords') {
+      const keywords = xmlDoc.getElementsByTagNameNS(
+        'http://schemas.openxmlformats.org/package/2006/metadata/core-properties',
+        'keywords'
+      )[0];
+      if (keywords) keywords.textContent = fix.value;
+    }
+  }
+
+  const serializer = new XMLSerializer();
+  zip.file('docProps/core.xml', serializer.serializeToString(xmlDoc));
+}
+
+async function applyMetadataFixesToBodyParagraphs(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
   const docFile = zip.file('word/document.xml');
   if (!docFile) return;
 
