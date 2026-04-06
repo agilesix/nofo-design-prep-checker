@@ -309,8 +309,11 @@ $app-green-dark: #1a4f3a;
 
 // "Dismiss all (N)" count suffix — hidden on mobile, shown at tablet+
 // USWDS tablet breakpoint: 40em / 640px
+// text-decoration: inherit ensures the span doesn't break the parent button's
+// continuous underline — without it the span renders as a visually separate segment.
 .dismiss-all-count {
   display: none;
+  text-decoration: inherit;
 
   @media (min-width: 40em) {
     display: inline;
