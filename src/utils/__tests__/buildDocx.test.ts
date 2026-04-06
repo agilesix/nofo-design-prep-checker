@@ -510,10 +510,13 @@ describe('buildDocx — LINK-006 link text fix: hyperlink attribute preservation
     const outXml = await getOutputDocXml(zip, [fix]);
     expect(outXml).toContain('Updated text');
 
-    // Both attributes must appear in the serialized string with their prefixes
+    // The serialized XML must keep the w:anchor attribute literally, and must
+    // also keep the relationship id attribute in serialized form even if the
+    // serializer chooses a different namespace prefix for the relationships ns.
     expect(outXml).toMatch(/w:anchor="Section_2"/);
-    // r:id may be serialized with a different namespace prefix depending on the
-    // serializer; verify the attribute value is present via DOM as well.
+    expect(outXml).toMatch(/\s[\w.-]+:id="rId5"/);
+
+    // Also verify the namespace-correct attribute values via DOM.
     const parser = new DOMParser();
     const doc = parser.parseFromString(outXml, 'application/xml');
     const hl = doc.getElementsByTagName('w:hyperlink')[0]!;
