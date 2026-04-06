@@ -463,10 +463,11 @@ describe('buildDocx — LINK-006 link text fix: hyperlink attribute preservation
   // NOTE: these tests check the RAW SERIALIZED XML string (not just the re-parsed
   // DOM) so they will catch XMLSerializer stripping the w: namespace prefix.
   // Checking only via getAttributeNS on a re-parsed document is insufficient:
-  // DOMParser re-parses `anchor="Section_2"` (no prefix) into the default
-  // namespace, but getAttributeNS(W_NS, 'anchor') on that result returns null —
-  // meaning such a test would FAIL if the prefix were stripped.  Checking the
-  // literal string is the authoritative test because Word reads the raw bytes.
+  // DOMParser re-parses `anchor="Section_2"` (no prefix) as an unprefixed
+  // attribute with no namespace (namespaceURI === null), so
+  // getAttributeNS(W_NS, 'anchor') on that result returns null. Checking the
+  // literal string is therefore the authoritative test because Word reads the
+  // raw bytes and requires the namespace-qualified `w:anchor` in the XML.
 
   it('serialized XML contains w:anchor with the w: prefix after a link text update', async () => {
     const zip = new JSZip();
