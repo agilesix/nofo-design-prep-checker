@@ -325,6 +325,7 @@ export default function App(): React.ReactElement {
                 target="_blank"
                 rel="noreferrer noopener"
                 className="font-body-sm"
+                aria-label="Rules reference (opens in a new tab)"
               >
                 Rules reference
               </a>
