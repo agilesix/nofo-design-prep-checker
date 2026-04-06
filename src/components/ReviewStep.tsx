@@ -288,6 +288,7 @@ export default function ReviewStep({
                     <button
                       type="button"
                       className="usa-button usa-button--unstyled font-body-xs"
+                      style={{ whiteSpace: 'nowrap', alignSelf: 'center' }}
                       onClick={() => handleDismissAll(category, categoryIssues)}
                     >
                       Dismiss all<span className="dismiss-all-count"> ({categoryIssues.length})</span>
