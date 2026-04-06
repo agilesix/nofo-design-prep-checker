@@ -320,6 +320,15 @@ export default function App(): React.ReactElement {
             </div>
             <nav aria-label="Footer navigation">
               <Link to="/about" className="font-body-sm">About this tool</Link>
+              <a
+                href="https://github.com/agilesix/nofo-design-prep-checker/blob/main/docs/rules.md#rules-reference"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="font-body-sm"
+                aria-label="Rules reference (opens in a new tab)"
+              >
+                Rules reference
+              </a>
             </nav>
           </div>
         </div>

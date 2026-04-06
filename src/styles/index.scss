@@ -75,6 +75,13 @@ $app-green-dark: #1a4f3a;
   color: rgba(255, 255, 255, 0.5);
 }
 
+// Footer nav: display links in a row with consistent spacing.
+.site-footer__inner nav[aria-label="Footer navigation"] {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
 // Single "About" nav link — skip the hamburger menu on all screen sizes.
 // On mobile, USWDS sets .usa-nav-container to block and hides .usa-nav;
 // override both so the About link sits inline with the logo on the same row.
