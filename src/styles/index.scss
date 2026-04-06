@@ -108,9 +108,11 @@ $app-green-dark: #1a4f3a;
 // USWDS adds margin-top: 4 units and margin-bottom: 2 units to .usa-logo at
 // desktop — these are sized for the default flex-end layout and push the logo
 // downward when we switch to centered alignment. Zero both out.
-.usa-header .usa-logo {
-  margin-top: 0;
-  margin-bottom: 0;
+@media all and (min-width: 64em) {
+  .usa-header .usa-logo {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
 }
 
 // USWDS adds padding-bottom: 1 unit to .usa-nav at desktop, which makes the
