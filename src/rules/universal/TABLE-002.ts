@@ -65,16 +65,18 @@ const TABLE_002: Rule = {
           `A table${firstRowText ? ` starting with "${firstRowText}\u2026"` : ''} does not have a caption. ` +
           `Per the SimplerNOFOs style guide, captions must follow the format \u201cTable: Title of table\u201d ` +
           `in normal (unstyled) text, placed directly above the table with no blank line. ` +
-          `A bold line or heading above the table does not count as a caption. ` +
+          `A heading can serve as a caption substitute only when it appears within the three elements ` +
+          `directly above the table with 50 words or fewer of body text between it and the table \u2014 ` +
+          `this table was flagged because no heading was found within that range, or the intervening ` +
+          `text exceeded the threshold. ` +
           `Note: key facts tables, key dates tables, callout boxes (single-cell tables), ` +
           `application checklist, merit review criteria, standard forms, application contents, ` +
           `and reporting tables are exempt from this requirement \u2014 use your judgment if this table ` +
           `falls into one of those categories.`,
         suggestedFix:
-          `Add a caption directly above the table in your source document. ` +
-          `The caption should follow the format: \u201cTable: Title of table\u201d \u2014 ` +
-          `for example, \u201cTable: Project narrative components\u201d. ` +
-          `Use normal (unstyled) text. Do not add a blank line between the caption and the table.`,
+          `Either add a caption directly above the table (format: \u201cTable: Title of table\u201d in normal ` +
+          `unstyled text, no blank line between caption and table), or move the relevant heading closer ` +
+          `to the table so that no more than 50 words of body text separate them.`,
         instructionOnly: true,
       });
     });
