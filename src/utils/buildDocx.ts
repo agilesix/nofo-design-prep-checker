@@ -225,7 +225,9 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
       if (anchor && newText?.trim()) {
         const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
         for (const el of hyperlinks) {
-          if (el.getAttribute('w:anchor') !== anchor) continue;
+          // Use getAttributeNS so the namespace-qualified attribute is matched
+          // correctly regardless of how the XML was parsed or serialized.
+          if (el.getAttributeNS(W, 'anchor') !== anchor) continue;
 
           // Collect only the direct-child <w:r> runs of this hyperlink (bookmarks
           // and other sibling nodes are left untouched).
@@ -279,8 +281,11 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
       }
       const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
       for (const el of hyperlinks) {
-        if (el.getAttribute('w:anchor') === oldAnchor) {
-          el.setAttribute('w:anchor', normalizedNewAnchor);
+        // Use namespace-aware accessors so the attribute is read and written with
+        // its correct OOXML namespace URI, preventing XMLSerializer from emitting
+        // a non-namespaced or differently-prefixed attribute that Word cannot read.
+        if (el.getAttributeNS(W, 'anchor') === oldAnchor) {
+          el.setAttributeNS(W, 'w:anchor', normalizedNewAnchor);
         }
       }
     }

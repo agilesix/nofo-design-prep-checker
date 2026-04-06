@@ -422,3 +422,120 @@ describe('buildDocx — tagline relocation', () => {
     expect(taglineCount).toBe(1);
   });
 });
+
+// ─── LINK-006 link text fix: hyperlink attribute preservation ─────────────────
+
+const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+const R_NS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+
+/**
+ * Build a minimal word/document.xml containing one or two <w:hyperlink> elements.
+ * The first hyperlink has the given anchor (and optional r:id).
+ * If hasExternalLink is true, a second hyperlink with only r:id="rId99" is added.
+ */
+function makeHyperlinkDocXml(opts: {
+  anchor?: string;
+  rid?: string;
+  linkText?: string;
+  hasExternalLink?: boolean;
+}): string {
+  const internalAttrs = [
+    opts.anchor ? `w:anchor="${opts.anchor}"` : '',
+    opts.rid    ? `r:id="${opts.rid}"`        : '',
+    'w:history="1"',
+  ].filter(Boolean).join(' ');
+
+  const externalPara = opts.hasExternalLink
+    ? `<w:p><w:hyperlink r:id="rId99" w:history="1"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>External link</w:t></w:r></w:hyperlink></w:p>`
+    : '';
+
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}">` +
+    `<w:body>` +
+    `<w:p><w:hyperlink ${internalAttrs}><w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>${opts.linkText ?? 'Click here'}</w:t></w:r></w:hyperlink></w:p>` +
+    externalPara +
+    `<w:sectPr/></w:body></w:document>`
+  );
+}
+
+describe('buildDocx — LINK-006 link text fix: hyperlink attribute preservation', () => {
+  it('preserves w:anchor attribute on the hyperlink after updating link text', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeHyperlinkDocXml({ anchor: 'Section_2', linkText: 'Click here' }));
+
+    const fix: AcceptedFix = {
+      issueId: 'LINK-006-ltext-0',
+      ruleId: 'LINK-006',
+      targetField: 'link.text.Section_2',
+      value: 'Go to Section 2',
+    };
+
+    const outXml = await getOutputDocXml(zip, [fix]);
+
+    // Link text must be updated
+    expect(outXml).toContain('Go to Section 2');
+
+    // w:anchor must be preserved on the hyperlink element
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(outXml, 'application/xml');
+    const hyperlinks = Array.from(doc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(1);
+    expect(hyperlinks[0]!.getAttributeNS(W_NS, 'anchor')).toBe('Section_2');
+  });
+
+  it('preserves both w:anchor and r:id when a hyperlink carries both attributes', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeHyperlinkDocXml({
+      anchor: 'Section_2',
+      rid: 'rId5',
+      linkText: 'Click here',
+    }));
+
+    const fix: AcceptedFix = {
+      issueId: 'LINK-006-ltext-0',
+      ruleId: 'LINK-006',
+      targetField: 'link.text.Section_2',
+      value: 'Updated text',
+    };
+
+    const outXml = await getOutputDocXml(zip, [fix]);
+    expect(outXml).toContain('Updated text');
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(outXml, 'application/xml');
+    const hl = doc.getElementsByTagName('w:hyperlink')[0]!;
+    expect(hl.getAttributeNS(W_NS, 'anchor')).toBe('Section_2');
+    expect(hl.getAttributeNS(R_NS, 'id')).toBe('rId5');
+  });
+
+  it('does not modify an external hyperlink (r:id only) when updating an internal anchor link', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeHyperlinkDocXml({
+      anchor: 'Section_2',
+      linkText: 'Internal link',
+      hasExternalLink: true,
+    }));
+
+    const fix: AcceptedFix = {
+      issueId: 'LINK-006-ltext-0',
+      ruleId: 'LINK-006',
+      targetField: 'link.text.Section_2',
+      value: 'Go to Section 2',
+    };
+
+    const outXml = await getOutputDocXml(zip, [fix]);
+
+    // Internal link text updated
+    expect(outXml).toContain('Go to Section 2');
+
+    // External link text and r:id attribute are untouched
+    expect(outXml).toContain('External link');
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(outXml, 'application/xml');
+    const hyperlinks = Array.from(doc.getElementsByTagName('w:hyperlink'));
+    const externalHl = hyperlinks.find(el => el.getAttributeNS(R_NS, 'id') === 'rId99');
+    expect(externalHl).toBeDefined();
+    expect(externalHl!.getAttributeNS(R_NS, 'id')).toBe('rId99');
+  });
+});
