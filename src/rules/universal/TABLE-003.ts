@@ -26,7 +26,7 @@ const TABLE_003: Rule = {
         const caption = table.querySelector('caption')?.textContent?.trim() ?? '';
         const firstRowText = table.querySelector('tr')?.textContent?.trim().slice(0, 60) ?? '';
         const sectionId = findSectionForElement(table, doc);
-        const { nearestHeading, page } = getContext(table);
+        const { nearestHeading } = getContext(table);
 
         issues.push({
           id: `TABLE-003-${index}`,
@@ -35,7 +35,6 @@ const TABLE_003: Rule = {
           severity: 'suggestion',
           sectionId,
           nearestHeading,
-          page,
           description: `A table${caption ? ` ("${caption}")` : firstRowText ? ` starting with "${firstRowText}…"` : ''} contains ${mergedCells.length} merged cell${mergedCells.length === 1 ? '' : 's'} (colspan/rowspan). Merged cells can sometimes be harder for screen readers to interpret, but they are acceptable when the table structure is clear and the merging genuinely aids comprehension.`,
           suggestedFix: 'Consider whether the merged cells are necessary. If the table structure is clear and the merging helps readers understand the content, no change is needed. If the merge is incidental or the table could be restructured more simply without it, that may improve accessibility.',
           instructionOnly: true,

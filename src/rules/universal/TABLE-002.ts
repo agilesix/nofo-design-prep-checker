@@ -51,7 +51,7 @@ const TABLE_002: Rule = {
       if (hasNearbyHeadingCaption(table)) return;
 
       const sectionId = section?.id ?? doc.sections[0]?.id ?? 'section-preamble';
-      const { nearestHeading, page } = getContext(table);
+      const { nearestHeading } = getContext(table);
 
       issues.push({
         id: `TABLE-002-${index}`,
@@ -60,7 +60,6 @@ const TABLE_002: Rule = {
         severity: 'warning',
         sectionId,
         nearestHeading,
-        page,
         description:
           `A table${firstRowText ? ` starting with "${firstRowText}\u2026"` : ''} does not have a caption. ` +
           `Per the SimplerNOFOs style guide, captions must follow the format \u201cTable: Title of table\u201d ` +

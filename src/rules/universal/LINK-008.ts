@@ -67,7 +67,7 @@ const LINK_008: Rule = {
       const href = link.getAttribute('href') ?? '';
       if (EMAIL_PATTERN.test(href) && !href.startsWith('mailto:')) {
         const sectionId = findSectionForElement(link, doc);
-        const { nearestHeading, page } = getContext(link);
+        const { nearestHeading } = getContext(link);
         results.push({
           id: `LINK-008-href-${index}`,
           ruleId: 'LINK-008',
@@ -75,7 +75,6 @@ const LINK_008: Rule = {
           severity: 'error',
           sectionId,
           nearestHeading,
-          page,
           description: `A link appears to point to an email address but is missing the "mailto:" protocol: "${href}"`,
           suggestedFix: `Change the href to "mailto:${href}"`,
           location: href,

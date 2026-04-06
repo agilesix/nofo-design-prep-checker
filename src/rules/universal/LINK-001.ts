@@ -28,7 +28,7 @@ const LINK_001: Rule = {
 
       if (looksLikeUrl && text.length > 10) {
         const sectionId = findSectionForElement(link, doc);
-        const { nearestHeading, page } = getContext(link);
+        const { nearestHeading } = getContext(link);
 
         issues.push({
           id: `LINK-001-${index}`,
@@ -37,7 +37,6 @@ const LINK_001: Rule = {
           severity: 'warning',
           sectionId,
           nearestHeading,
-          page,
           description: `A hyperlink uses the raw URL as its display text: "${text.slice(0, 80)}${text.length > 80 ? '…' : ''}". Link text should describe the destination, not show the URL.`,
           suggestedFix: "Update this link's display text in Word to describe where it goes — for example, 'Health IT Standards and Interoperability' instead of the raw URL. Right-click the link in Word → Edit Hyperlink → change the Text to display field.",
           location: href,

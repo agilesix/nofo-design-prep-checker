@@ -56,7 +56,7 @@ const LIST_001: Rule = {
       const text = (firstPara?.textContent ?? '').trim().slice(0, 60);
       const count = group.end - group.start + 1;
       const sectionId = firstPara ? findSectionForElement(firstPara, doc) : (doc.sections[0]?.id ?? 'section-preamble');
-      const { nearestHeading, page } = firstPara ? getContext(firstPara) : { nearestHeading: null, page: 1 };
+      const { nearestHeading } = firstPara ? getContext(firstPara) : { nearestHeading: null };
 
       issues.push({
         id: `LIST-001-${index}`,

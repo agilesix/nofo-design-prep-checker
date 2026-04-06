@@ -193,10 +193,7 @@ function getRowClassName(resolution: IssueResolution | null): string | undefined
 }
 
 function getLocationText(issue: Issue): string {
-  const parts: string[] = [];
-  if (issue.page != null) parts.push(`Page ${issue.page}`);
-  if (issue.nearestHeading) parts.push(`Near: ${issue.nearestHeading}`);
-  return parts.length > 0 ? parts.join(' · ') : '\u2014';
+  return issue.nearestHeading ? `Near: ${issue.nearestHeading}` : '\u2014';
 }
 
 function getStatusDisplay(resolution: IssueResolution | null, instructionOnly?: boolean): React.ReactElement {

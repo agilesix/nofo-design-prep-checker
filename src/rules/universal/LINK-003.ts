@@ -34,7 +34,7 @@ const LINK_003: Rule = {
       // Check for www. without protocol
       if (href.startsWith('www.') || /^[a-z0-9.-]+\.[a-z]{2,}\//i.test(href)) {
         const sectionId = findSectionForElement(link, doc);
-        const { nearestHeading, page } = getContext(link);
+        const { nearestHeading } = getContext(link);
         const suggestedUrl = `https://${href}`;
 
         issues.push({
@@ -44,7 +44,6 @@ const LINK_003: Rule = {
           severity: 'error',
           sectionId,
           nearestHeading,
-          page,
           description: `The link "${text}" has an href of "${href}" which is missing the protocol. Browsers may not resolve this correctly.`,
           suggestedFix: `Change the href to "${suggestedUrl}"`,
           location: href,

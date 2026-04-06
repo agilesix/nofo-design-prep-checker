@@ -45,7 +45,7 @@ const LINK_004: Rule = {
 
       if (!isValid) {
         const sectionId = findSectionForElement(link, doc);
-        const { nearestHeading, page } = getContext(link);
+        const { nearestHeading } = getContext(link);
 
         issues.push({
           id: `LINK-004-${index}`,
@@ -54,7 +54,6 @@ const LINK_004: Rule = {
           severity: 'error',
           sectionId,
           nearestHeading,
-          page,
           description: `The link "${text}" has a URL that appears to be malformed: "${href}". This link may not work correctly.`,
           suggestedFix: 'Verify and correct the URL.',
           location: href,
