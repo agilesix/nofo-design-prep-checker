@@ -47,6 +47,38 @@ async function getOutputDocXml(
 }
 
 /**
+ * Run buildDocx and return the docProps/core.xml text from the output blob.
+ */
+async function getOutputCoreXml(
+  zip: JSZip,
+  acceptedFixes: AcceptedFix[] = []
+): Promise<string> {
+  const blob = await buildDocx(zip, acceptedFixes);
+  const outZip = await JSZip.loadAsync(blob);
+  const coreFile = outZip.file('docProps/core.xml');
+  if (!coreFile) throw new Error('docProps/core.xml missing from output');
+  return coreFile.async('string');
+}
+
+/**
+ * Build a minimal docProps/core.xml string.
+ */
+function makeCoreXml({
+  creator = '',
+  subject = '',
+  keywords = '',
+}: { creator?: string; subject?: string; keywords?: string } = {}): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties
+  xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"
+  xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <dc:creator>${creator}</dc:creator>
+  <dc:subject>${subject}</dc:subject>
+  <cp:keywords>${keywords}</cp:keywords>
+</cp:coreProperties>`;
+}
+
+/**
  * Parse the paragraph texts from a serialized word/document.xml string, in
  * document order.
  */
@@ -199,6 +231,94 @@ describe('buildDocx — metadata body paragraph fixes', () => {
     expect(outXml).toContain('Metadata author: Jane Smith');
     // The old placeholder should not appear
     expect(outXml).not.toContain('[Author Name]');
+  });
+});
+
+// ─── applyMetadataFixes — core.xml ───────────────────────────────────────────
+
+describe('buildDocx — metadata core.xml updates', () => {
+  it('writes accepted author value to dc:creator in core.xml', async () => {
+    const zip = await makeZip(['Metadata author: [Author Name]']);
+    zip.file('docProps/core.xml', makeCoreXml({ creator: '[Author Name]' }));
+
+    const fix: AcceptedFix = {
+      issueId: 'META-001-0',
+      ruleId: 'META-001',
+      targetField: 'metadata.author',
+      value: 'Jane Smith',
+    };
+
+    const coreXml = await getOutputCoreXml(zip, [fix]);
+    expect(coreXml).toContain('Jane Smith');
+    expect(coreXml).not.toContain('[Author Name]');
+  });
+
+  it('writes accepted subject value to dc:subject in core.xml', async () => {
+    const zip = await makeZip(['Metadata subject: [Subject]']);
+    zip.file('docProps/core.xml', makeCoreXml({ subject: '[Subject]' }));
+
+    const fix: AcceptedFix = {
+      issueId: 'META-002-0',
+      ruleId: 'META-002',
+      targetField: 'metadata.subject',
+      value: 'Community Health Grants',
+    };
+
+    const coreXml = await getOutputCoreXml(zip, [fix]);
+    expect(coreXml).toContain('Community Health Grants');
+    expect(coreXml).not.toContain('[Subject]');
+  });
+
+  it('writes accepted keywords value to cp:keywords in core.xml', async () => {
+    const zip = await makeZip(['Metadata keywords: [Keywords]']);
+    zip.file('docProps/core.xml', makeCoreXml({ keywords: '[Keywords]' }));
+
+    const fix: AcceptedFix = {
+      issueId: 'META-003-0',
+      ruleId: 'META-003',
+      targetField: 'metadata.keywords',
+      value: 'health, CDC',
+    };
+
+    const coreXml = await getOutputCoreXml(zip, [fix]);
+    expect(coreXml).toContain('health, CDC');
+    expect(coreXml).not.toContain('[Keywords]');
+  });
+
+  it('updates both core.xml and body paragraph in the same pass', async () => {
+    const zip = await makeZip(['Metadata author: [Author Name]']);
+    zip.file('docProps/core.xml', makeCoreXml({ creator: '[Author Name]' }));
+
+    const fix: AcceptedFix = {
+      issueId: 'META-001-0',
+      ruleId: 'META-001',
+      targetField: 'metadata.author',
+      value: 'Jane Smith',
+    };
+
+    const [docXml, coreXml] = await Promise.all([
+      getOutputDocXml(zip, [fix]),
+      getOutputCoreXml(zip, [fix]),
+    ]);
+
+    expect(docXml).toContain('Metadata author: Jane Smith');
+    expect(coreXml).toContain('Jane Smith');
+  });
+
+  it('skips core.xml update silently when docProps/core.xml is absent', async () => {
+    const zip = await makeZip(['Metadata author: [Author Name]']);
+    // No core.xml added — function should not throw
+
+    const fix: AcceptedFix = {
+      issueId: 'META-001-0',
+      ruleId: 'META-001',
+      targetField: 'metadata.author',
+      value: 'Jane Smith',
+    };
+
+    // Body paragraph should still be updated
+    const docXml = await getOutputDocXml(zip, [fix]);
+    expect(docXml).toContain('Metadata author: Jane Smith');
   });
 });
 
