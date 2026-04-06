@@ -62,7 +62,6 @@ Universal rules run on every document regardless of which content guide is selec
 
 | Rule ID | Title | Severity | Description |
 |---------|-------|----------|-------------|
-| FORMAT-001 | Excessive bold text | Suggestion | A section has an unusually high proportion of bold text, which may indicate incorrect use of Word styles. |
 | FORMAT-002 | Date format correction (auto-apply) | — | Scans paragraph text for dates that do not follow the SimplerNOFOs style guide format of "Month D, YYYY". Automatically corrects: MM/DD/YYYY (4-digit year) → Month D, YYYY; Month DD, YYYY with a leading-zero day (e.g. "April 02, 2024") → Month D, YYYY; YYYY-MM-DD → Month D, YYYY. MM/DD/YY (2-digit year) is intentionally not corrected — there is no reliable way to determine the correct century. When a day name precedes the date (e.g. "Monday, April 02, 2024") the day name is preserved. Excludes headings and code/preformatted blocks. No entry appears in the auto-applied list when zero corrections are needed. **Exception: HRSA NOFOs use MM/DD/YYYY by convention — this rule is skipped entirely for all HRSA content guides.** |
 
 ---

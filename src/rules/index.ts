@@ -16,7 +16,6 @@ import NOTE_001 from './universal/NOTE-001';
 import NOTE_004 from './universal/NOTE-004';
 import IMG_001 from './universal/IMG-001';
 import LIST_001 from './universal/LIST-001';
-import FORMAT_001 from './universal/FORMAT-001';
 import FORMAT_002 from './universal/FORMAT-002';
 import CLEAN_004 from './universal/CLEAN-004';
 import CLEAN_005 from './universal/CLEAN-005';
@@ -80,9 +79,6 @@ export const allRules: Rule[] = [
   // List rules
   LIST_001,
 
-  // Format rules
-  FORMAT_001,
-
   // Structure rules (OpDiv-specific)
   STRUCT_001,
   STRUCT_002,
@@ -110,7 +106,7 @@ export {
   NOTE_001, NOTE_004,
   IMG_001,
   LIST_001,
-  FORMAT_001, FORMAT_002,
+  FORMAT_002,
   CLEAN_004, CLEAN_005, CLEAN_006,
   STRUCT_001, STRUCT_002, STRUCT_003, STRUCT_004, STRUCT_005, STRUCT_006,
   STRUCT_007, STRUCT_008, STRUCT_009, STRUCT_010,

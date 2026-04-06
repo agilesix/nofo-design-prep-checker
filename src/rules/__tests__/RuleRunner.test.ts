@@ -171,7 +171,6 @@ describe('getCategoryLabel utility', () => {
     expect(getCategoryLabel('NOTE-001')).toBe('Footnotes and endnotes');
     expect(getCategoryLabel('IMG-001')).toBe('Images');
     expect(getCategoryLabel('LIST-001')).toBe('Lists');
-    expect(getCategoryLabel('FORMAT-001')).toBe('Text formatting');
     expect(getCategoryLabel('STRUCT-001')).toBe('Required sections');
   });
 
