@@ -31,7 +31,7 @@ $app-green-dark: #1a4f3a;
 // Prevent the header title from wrapping onto two lines
 .usa-logo__text {
   white-space: nowrap;
-  font-size: 1rem;
+  font-size: 1.06rem;
 }
 
 // ─── Footer two-band layout ────────────────────────────────────────────────
@@ -90,11 +90,13 @@ $app-green-dark: #1a4f3a;
 }
 
 // Vertically center the logo and nav link within the header at all breakpoints.
-// USWDS --basic sets .usa-nav-container to display:block at desktop breakpoints,
-// which prevents align-items from taking effect. Force flex here so centering works.
+// Root cause: USWDS --basic sets `.usa-header--basic .usa-nav-container` to
+// `align-items: flex-end` (pins children to the bottom). That selector has
+// higher specificity (2 classes) than `.usa-nav-container` (1 class), so
+// !important is required to override it.
 .usa-nav-container {
   display: flex !important;
-  align-items: center;
+  align-items: center !important;
 }
 
 // Ensure the navbar flex child itself centers its content (logo) vertically.
@@ -103,10 +105,19 @@ $app-green-dark: #1a4f3a;
   align-items: center;
 }
 
-// USWDS adds margin-bottom to .usa-logo which pushes the logo text downward
-// within the flex row, making it appear lower than the nav link.
+// USWDS adds margin-top: 4 units and margin-bottom: 2 units to .usa-logo at
+// desktop — these are sized for the default flex-end layout and push the logo
+// downward when we switch to centered alignment. Zero both out.
 .usa-header .usa-logo {
+  margin-top: 0;
   margin-bottom: 0;
+}
+
+// USWDS adds padding-bottom: 1 unit to .usa-nav at desktop, which makes the
+// nav's visual center sit above the logo's. Remove it so both align on the
+// same horizontal axis when the container uses align-items: center.
+.usa-header--basic .usa-nav {
+  padding-bottom: 0 !important;
 }
 
 @media all and (max-width: 63.99em) {
