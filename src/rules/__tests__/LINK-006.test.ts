@@ -258,6 +258,33 @@ describe('LINK-006 fuzzy match — heading text', () => {
     const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
     expect(issue.inputRequired?.hint).toBeUndefined();
   });
+
+  it('matches CamelCase anchor #AppendixA to heading "Appendix A" via CamelCase splitting', () => {
+    // Without CamelCase splitting: normalizeAnchor("AppendixA") → "appendixa"
+    // normalizeAnchor("Appendix A") → "appendix a" — no containment match.
+    // With CamelCase splitting: "AppendixA" → "Appendix A" → "appendix a" — exact match.
+    const doc = makeDoc(
+      '<h2>Appendix A</h2>' +
+      '<p><a href="#AppendixA">See Appendix A</a></p>'
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    // Link text "See Appendix A" contains heading name → no link-text suggestion, just the bookmark fix
+    expect(results).toHaveLength(1);
+    const issue = results[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.inputRequired?.prefill).toBe('Appendix_A');
+    expect(issue.description).toContain('Appendix A');
+  });
+
+  it('matches CamelCase anchor #AppendixB to heading "Appendix B"', () => {
+    const doc = makeDoc(
+      '<h2>Appendix B</h2>' +
+      '<p><a href="#AppendixB">See Appendix B</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.inputRequired?.prefill).toBe('Appendix_B');
+  });
 });
 
 // ─── Numeric suffix stripping (Word duplicate-heading anchors) ────────────────
