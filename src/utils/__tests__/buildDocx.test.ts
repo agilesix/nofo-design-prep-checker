@@ -460,7 +460,16 @@ function makeHyperlinkDocXml(opts: {
 }
 
 describe('buildDocx — LINK-006 link text fix: hyperlink attribute preservation', () => {
-  it('preserves w:anchor attribute on the hyperlink after updating link text', async () => {
+  // NOTE: these tests check the RAW SERIALIZED XML string (not just the re-parsed
+  // DOM) so they will catch XMLSerializer stripping the w: namespace prefix.
+  // Checking only via getAttributeNS on a re-parsed document is insufficient:
+  // DOMParser re-parses `anchor="Section_2"` (no prefix) as an unprefixed
+  // attribute with no namespace (namespaceURI === null), so
+  // getAttributeNS(W_NS, 'anchor') on that result returns null. Checking the
+  // literal string is therefore the authoritative test because Word reads the
+  // raw bytes and requires the namespace-qualified `w:anchor` in the XML.
+
+  it('serialized XML contains w:anchor with the w: prefix after a link text update', async () => {
     const zip = new JSZip();
     zip.file('word/document.xml', makeHyperlinkDocXml({ anchor: 'Section_2', linkText: 'Click here' }));
 
@@ -476,15 +485,14 @@ describe('buildDocx — LINK-006 link text fix: hyperlink attribute preservation
     // Link text must be updated
     expect(outXml).toContain('Go to Section 2');
 
-    // w:anchor must be preserved on the hyperlink element
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(outXml, 'application/xml');
-    const hyperlinks = Array.from(doc.getElementsByTagName('w:hyperlink'));
-    expect(hyperlinks).toHaveLength(1);
-    expect(hyperlinks[0]!.getAttributeNS(W_NS, 'anchor')).toBe('Section_2');
+    // The literal serialized string must contain the namespace-prefixed attribute.
+    // Word's hyperlink resolver reads the raw XML bytes: a bare anchor="Section_2"
+    // (without the w: prefix) is invisible to it and causes navigation to the top
+    // of the document instead of the target heading.
+    expect(outXml).toMatch(/w:anchor="Section_2"/);
   });
 
-  it('preserves both w:anchor and r:id when a hyperlink carries both attributes', async () => {
+  it('serialized XML preserves both w:anchor and r:id when a hyperlink carries both attributes', async () => {
     const zip = new JSZip();
     zip.file('word/document.xml', makeHyperlinkDocXml({
       anchor: 'Section_2',
@@ -502,6 +510,13 @@ describe('buildDocx — LINK-006 link text fix: hyperlink attribute preservation
     const outXml = await getOutputDocXml(zip, [fix]);
     expect(outXml).toContain('Updated text');
 
+    // The serialized XML must keep the w:anchor attribute literally, and must
+    // also keep the relationship id attribute in serialized form even if the
+    // serializer chooses a different namespace prefix for the relationships ns.
+    expect(outXml).toMatch(/w:anchor="Section_2"/);
+    expect(outXml).toMatch(/\s[\w.-]+:id="rId5"/);
+
+    // Also verify the namespace-correct attribute values via DOM.
     const parser = new DOMParser();
     const doc = parser.parseFromString(outXml, 'application/xml');
     const hl = doc.getElementsByTagName('w:hyperlink')[0]!;
@@ -526,10 +541,11 @@ describe('buildDocx — LINK-006 link text fix: hyperlink attribute preservation
 
     const outXml = await getOutputDocXml(zip, [fix]);
 
-    // Internal link text updated
+    // Internal link text updated; w:anchor preserved with prefix
     expect(outXml).toContain('Go to Section 2');
+    expect(outXml).toMatch(/w:anchor="Section_2"/);
 
-    // External link text and r:id attribute are untouched
+    // External link text unchanged; r:id verified via DOM (prefix may vary)
     expect(outXml).toContain('External link');
     const parser = new DOMParser();
     const doc = parser.parseFromString(outXml, 'application/xml');

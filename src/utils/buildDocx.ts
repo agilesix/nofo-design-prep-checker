@@ -266,6 +266,17 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
           for (let i = 1; i < runs.length; i++) {
             el.removeChild(runs[i]!);
           }
+
+          // Explicitly re-assert the w:anchor attribute via setAttributeNS.
+          // XMLSerializer may drop or strip the namespace prefix when serializing
+          // attributes that were only read (never written) through the DOM API —
+          // emitting `anchor="…"` instead of `w:anchor="…"`.  Word's hyperlink
+          // resolver looks for the namespace-qualified `w:anchor` attribute; a
+          // non-prefixed `anchor` attribute is invisible to it and the link
+          // silently falls back to navigating to the top of the document.
+          // setAttributeNS guarantees the attribute is written with the correct
+          // namespace URI so XMLSerializer always emits the `w:` prefix.
+          el.setAttributeNS(W, 'w:anchor', anchor);
         }
       }
     }
