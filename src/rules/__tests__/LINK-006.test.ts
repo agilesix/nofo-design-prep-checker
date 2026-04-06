@@ -704,3 +704,58 @@ describe('LINK-006 no match (broken link)', () => {
     expect(issue.inputRequired).toBeUndefined();
   });
 });
+
+// ─── Link text suggestion: "see" suppression ─────────────────────────────────
+
+describe('LINK-006 link text suggestion — "see" suppression', () => {
+  it('includes "see" in the suggestion when the preceding text does not contain "see"', () => {
+    const doc = makeDoc(
+      '<h2 id="AppendixA">Appendix A</h2>' +
+      '<p>For more information, refer to <a href="#AppendixA">the appendix</a>.</p>'
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const suggestion = results.find(r => (r as Issue).severity === 'suggestion') as Issue | undefined;
+    expect(suggestion).toBeDefined();
+    expect(suggestion!.inputRequired?.prefill).toContain('(see Appendix A)');
+  });
+
+  it('omits "see" from the suggestion when the preceding text already contains "see"', () => {
+    const doc = makeDoc(
+      '<h2 id="AppendixA">Appendix A</h2>' +
+      '<p>Please see <a href="#AppendixA">the appendix</a>.</p>'
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const suggestion = results.find(r => (r as Issue).severity === 'suggestion') as Issue | undefined;
+    expect(suggestion).toBeDefined();
+    expect(suggestion!.inputRequired?.prefill).toBe('the appendix (Appendix A)');
+    expect(suggestion!.inputRequired?.prefill).not.toContain('(see ');
+  });
+
+  it('omits "see" when it appears within 10 words before the link (fuzzy match path)', () => {
+    // Uses the fuzzy-match (Tier 2) path — anchor "AppendixA" doesn't match any
+    // HTML element id but fuzzy-matches heading "Appendix A: Overview".
+    // Link text "references" does not mention the heading, so a suggestion is
+    // produced. "see" in the preceding text should suppress "(see ...)" in the
+    // suggestion prefill.
+    const doc = makeDoc(
+      '<h2>Appendix A: Overview</h2>' +
+      '<p>As described, see <a href="#AppendixA">references</a>.</p>'
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const suggestion = results.find(r => (r as Issue).severity === 'suggestion') as Issue | undefined;
+    expect(suggestion).toBeDefined();
+    expect(suggestion!.inputRequired?.prefill).not.toContain('(see ');
+  });
+
+  it('includes "see" when "see" appears more than 10 words before the link', () => {
+    // "see" is more than 10 words before the link — should not be suppressed
+    const doc = makeDoc(
+      '<h2 id="AppendixA">Appendix A</h2>' +
+      '<p>See the overview. Here is a very long sentence with many words before <a href="#AppendixA">the appendix</a>.</p>'
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const suggestion = results.find(r => (r as Issue).severity === 'suggestion') as Issue | undefined;
+    expect(suggestion).toBeDefined();
+    expect(suggestion!.inputRequired?.prefill).toContain('(see Appendix A)');
+  });
+});

@@ -89,7 +89,11 @@ const LINK_006: Rule = {
           const headingText = (exactEl.textContent ?? '').trim();
           if (headingText && !linkTextContainsHeading(linkText, headingText)) {
             const sectionId = findSectionForElement(link, doc);
-            results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading));
+            // If the word "see" already appears in the text immediately preceding
+            // this link, omit it from the suggestion to avoid redundant phrasing
+            // like "see X (see Y)".
+            const suppressSee = hasSeeBeforeLink(link as Element);
+            results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
           }
         }
         return;
@@ -151,7 +155,11 @@ const LINK_006: Rule = {
         // surface a link-text suggestion when the link text doesn't already
         // reference that heading by name.
         if (headingText && !linkTextContainsHeading(linkText, headingText)) {
-          results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading));
+          // If the word "see" already appears in the text immediately preceding
+          // this link, omit it from the suggestion to avoid redundant phrasing
+          // like "see X (see Y)".
+          const suppressSee = hasSeeBeforeLink(link as Element);
+          results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
         }
 
         return;
@@ -502,11 +510,45 @@ function linkTextContainsHeading(linkText: string, headingText: string): boolean
 }
 
 /**
+ * Return true if the word "see" (case-insensitive, standalone) appears in the
+ * ~10 words of paragraph text immediately before `link`.  Used to suppress
+ * "see" from the suggested link text when it would create redundant phrasing
+ * like "…see roles and responsibilities (see Cooperative agreement terms)".
+ */
+function hasSeeBeforeLink(link: Element): boolean {
+  // Walk up to the nearest block-level container
+  let container: Element | null = link.parentElement;
+  while (container) {
+    const tag = container.tagName.toUpperCase();
+    if (['P', 'LI', 'TD', 'TH', 'DIV', 'BLOCKQUOTE'].includes(tag)) break;
+    container = container.parentElement;
+  }
+  if (!container) return false;
+
+  // Collect text content that precedes the link in document order
+  const textParts: string[] = [];
+  const walker = container.ownerDocument.createTreeWalker(
+    container,
+    NodeFilter.SHOW_TEXT
+  );
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    if (link.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_PRECEDING) {
+      textParts.push(node.textContent ?? '');
+    }
+  }
+
+  const preceding = textParts.join('');
+  const words = preceding.trim().split(/\s+/).filter(Boolean);
+  return words.slice(-10).some(w => /^see$/i.test(w));
+}
+
+/**
  * Build a 'suggestion' severity Issue prompting the author to add the
  * destination heading name to the link text.  The inputRequired field is
- * pre-filled with "<linkText> (see <headingText>)" and uses the targetField
- * "link.text.<anchor>" so buildDocx can patch the OOXML when the fix is
- * accepted.
+ * pre-filled with "<linkText> (see <headingText>)" (or "<linkText> (<headingText>)"
+ * when `suppressSee` is true) and uses the targetField "link.text.<anchor>" so
+ * buildDocx can patch the OOXML when the fix is accepted.
  */
 function makeLinkTextSuggestion(
   id: string,
@@ -515,9 +557,12 @@ function makeLinkTextSuggestion(
   href: string,
   anchor: string,
   sectionId: string,
-  nearestHeading: string | null
+  nearestHeading: string | null,
+  suppressSee = false
 ): Issue {
-  const suggestedText = `${linkText} (see ${headingText})`;
+  const suggestedText = suppressSee
+    ? `${linkText} (${headingText})`
+    : `${linkText} (see ${headingText})`;
   return {
     id,
     ruleId: 'LINK-006',
