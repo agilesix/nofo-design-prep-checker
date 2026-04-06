@@ -76,6 +76,16 @@ describe('CLEAN-007 trigger detection', () => {
     expect(CLEAN_007.check(doc, OPTIONS_SSJ)).toHaveLength(0);
   });
 
+  it('returns no changes when Step 1 heading text does not exactly match the anchor (safety guard)', () => {
+    // "Step 1: Something Else" starts with "step 1" but is not the expected
+    // anchor — the exact-match check must reject it.
+    const doc = makeDoc(
+      '<p>Here is the color coding for the doc: green = required</p>' +
+      '<h2>Step 1: Something Else</h2>'
+    );
+    expect(CLEAN_007.check(doc, OPTIONS_SSJ)).toHaveLength(0);
+  });
+
   it('detection is case-insensitive for the trigger phrase', () => {
     const doc = makeDoc(
       '<p>HERE IS THE COLOR CODING FOR THE DOC: green = required</p>' +

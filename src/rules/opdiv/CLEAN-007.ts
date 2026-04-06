@@ -9,7 +9,8 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
  * checking whether the document's first paragraph begins with the phrase
  * "Here is the color coding for the doc:" and, when found, silently removes
  * everything from the start of the document up to — but not including — the
- * H2 heading "Step 1: Review the Opportunity".
+ * heading whose text is exactly "Step 1: Review the Opportunity" (any heading
+ * level, case-insensitive).
  *
  * Scoped to CDC/DGHT content guides only (cdc-dght-ssj, cdc-dght-competitive).
  */
@@ -28,10 +29,10 @@ const CLEAN_007: Rule = {
     const firstParaText = (firstPara.textContent ?? '').trim().toLowerCase();
     if (!firstParaText.startsWith('here is the color coding for the doc:')) return [];
 
-    // Safety: only remove if the Step 1 heading is present to anchor the cut point.
+    // Safety: only remove if the exact Step 1 anchor heading is present.
     const headings = Array.from(htmlDoc.querySelectorAll('h1, h2, h3, h4, h5, h6'));
     const hasStep1 = headings.some(
-      h => (h.textContent ?? '').trim().toLowerCase().startsWith('step 1')
+      h => (h.textContent ?? '').trim().toLowerCase() === 'step 1: review the opportunity'
     );
     if (!hasStep1) return [];
 
