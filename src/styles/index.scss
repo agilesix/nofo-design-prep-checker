@@ -31,7 +31,7 @@ $app-green-dark: #1a4f3a;
 // Prevent the header title from wrapping onto two lines
 .usa-logo__text {
   white-space: nowrap;
-  font-size: 0.9rem;
+  font-size: 1rem;
 }
 
 // ─── Footer two-band layout ────────────────────────────────────────────────
@@ -90,9 +90,10 @@ $app-green-dark: #1a4f3a;
 }
 
 // Vertically center the logo and nav link within the header at all breakpoints.
-// USWDS --basic defaults to align-items:stretch, which leaves the inner content
-// top-aligned inside the stretched flex children.
+// USWDS --basic sets .usa-nav-container to display:block at desktop breakpoints,
+// which prevents align-items from taking effect. Force flex here so centering works.
 .usa-nav-container {
+  display: flex !important;
   align-items: center;
 }
 
