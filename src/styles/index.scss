@@ -392,6 +392,19 @@ $app-green-dark: #1a4f3a;
 }
 
 
+// Prevent :hover state from persisting on touch devices after a tap.
+// On iOS/Android, :hover sticks until another element is tapped, leaving the
+// button in the darker hover state (#2e8367, white text) instead of returning
+// to the default (#5abf95, dark text). @media (hover: none) targets devices
+// whose primary input cannot hover (touch screens), which is exactly where
+// the sticky-hover issue occurs. Values match the compiled .usa-button defaults.
+@media (hover: none) {
+  .usa-button:not([disabled]):not([aria-disabled="true"]):hover {
+    background-color: #5abf95; // mint-30 = $theme-color-primary
+    color: #171716;            // dark ink = default .usa-button text color
+  }
+}
+
 // Print styles for summary report
 @media print {
   .usa-header,
