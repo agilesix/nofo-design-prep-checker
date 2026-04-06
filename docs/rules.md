@@ -37,7 +37,6 @@ Universal rules run on every document regardless of which content guide is selec
 | Rule ID | Title | Severity | Description |
 |---------|-------|----------|-------------|
 | NOTE-001 | Footnotes present | Warning | The document appears to contain footnotes. All notes must be converted to endnotes before design. |
-| NOTE-002 | Endnotes present — verify intent | Suggestion | Endnotes detected. Verify they are intentional and not accidentally placed footnotes. |
 | NOTE-004 | Orphaned "Footnotes" heading | Warning | A heading paragraph with the text "Footnotes" (or close variation) was found, but the document contains no footnotes or endnotes. This heading is likely a leftover from the Word template and will appear as an empty section in the published NOFO. |
 
 ### Images (IMG)
