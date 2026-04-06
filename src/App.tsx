@@ -10,6 +10,7 @@ import type {
   ContentGuideId,
 } from './types';
 import { content } from './content';
+import { RULES_REFERENCE_URL } from './constants';
 import { parseDocx } from './utils/parseDocx';
 import { detectContentGuide } from './utils/detectContentGuide';
 import { buildDocx } from './utils/buildDocx';
@@ -319,15 +320,16 @@ export default function App(): React.ReactElement {
               </p>
             </div>
             <nav aria-label="Footer navigation">
-              <Link to="/about" className="font-body-sm">About this tool</Link>
               <a
-                href="https://github.com/agilesix/nofo-design-prep-checker/blob/main/docs/rules.md#rules-reference"
+                href={RULES_REFERENCE_URL}
                 target="_blank"
                 rel="noreferrer noopener"
                 className="font-body-sm"
               >
                 Rules reference
+                <span className="usa-sr-only"> (opens in a new tab)</span>
               </a>
+              <Link to="/about" className="font-body-sm">About this tool</Link>
             </nav>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import React, { useRef, useState, useCallback, useId } from 'react';
 import { useFocusHeading } from '../hooks/useFocusHeading';
 import { content } from '../content';
+import { RULES_REFERENCE_URL } from '../constants';
 
 interface UploadStepProps {
   onFileSelected: (file: File) => Promise<void>;
@@ -91,11 +92,12 @@ export default function UploadStep({
         <p>
           Upload your NOFO Word document to prepare it for design. This tool checks formatting and structural issues against a{' '}
           <a
-            href="https://github.com/agilesix/nofo-design-prep-checker/blob/main/docs/rules.md#rules-reference"
+            href={RULES_REFERENCE_URL}
             target="_blank"
             rel="noreferrer noopener"
           >
             rules reference
+            <span className="usa-sr-only"> (opens in a new tab)</span>
           </a>{' '}
           — it does not modify your document&apos;s regulatory or policy content. The downloaded file is ready for design handoff; your original remains your source of truth.
         </p>
