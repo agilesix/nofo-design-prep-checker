@@ -56,6 +56,13 @@ export async function buildDocx(
     await applyDoublespaceFix(zip);
   }
 
+  // Apply CDC/DGHT editorial scaffolding removal first — must precede tagline
+  // relocation so that any tagline paragraph in the scaffolding preamble is
+  // discarded rather than relocated into the body of the document.
+  if (hasRemoveDghtScaffolding) {
+    await applyRemoveDghtScaffolding(zip);
+  }
+
   // Apply tagline relocation
   if (hasTaglineRelocate) {
     await applyTaglineRelocation(zip);
@@ -64,11 +71,6 @@ export async function buildDocx(
   // Apply "Before You Begin" heading removal
   if (hasRemoveBybHeading) {
     await applyRemoveBeforeYouBeginHeading(zip);
-  }
-
-  // Apply CDC/DGHT editorial scaffolding removal
-  if (hasRemoveDghtScaffolding) {
-    await applyRemoveDghtScaffolding(zip);
   }
 
   // Apply date format corrections
@@ -437,11 +439,11 @@ async function applyRemoveDghtScaffolding(zip: JSZip): Promise<void> {
     n => n.nodeType === Node.ELEMENT_NODE
   ) as Element[];
 
-  // Locate the first heading paragraph whose text starts with "Step 1"
+  // Locate the first heading paragraph whose text is exactly "Step 1: Review the Opportunity"
   const step1Index = bodyChildren.findIndex(el => {
     if (el.localName !== 'p') return false;
     if (!isHeadingParagraph(el)) return false;
-    return getParaText(el).trim().toLowerCase().startsWith('step 1');
+    return getParaText(el).trim().toLowerCase() === 'step 1: review the opportunity';
   });
 
   // Safety: if the anchor heading is not found, do not remove anything
