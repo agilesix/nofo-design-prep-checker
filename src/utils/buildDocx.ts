@@ -29,6 +29,9 @@ export async function buildDocx(
   const hasRemoveBybHeading = autoAppliedChanges.some(
     c => c.targetField === 'struct.byb.removeheading'
   );
+  const hasRemoveDghtScaffolding = autoAppliedChanges.some(
+    c => c.targetField === 'struct.dght.removescaffolding'
+  );
   const hasDateCorrection = autoAppliedChanges.some(
     c => c.targetField === 'format.date.correct'
   );
@@ -61,6 +64,11 @@ export async function buildDocx(
   // Apply "Before You Begin" heading removal
   if (hasRemoveBybHeading) {
     await applyRemoveBeforeYouBeginHeading(zip);
+  }
+
+  // Apply CDC/DGHT editorial scaffolding removal
+  if (hasRemoveDghtScaffolding) {
+    await applyRemoveDghtScaffolding(zip);
   }
 
   // Apply date format corrections
@@ -396,6 +404,51 @@ async function applyRemoveBeforeYouBeginHeading(zip: JSZip): Promise<void> {
   if (toRemove.length === 0) return;
 
   for (const el of toRemove) {
+    body.removeChild(el);
+  }
+
+  const serializer = new XMLSerializer();
+  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+}
+
+// ─── CLEAN-007: Remove CDC/DGHT editorial scaffolding ────────────────────────
+
+/**
+ * Remove all body-level elements (paragraphs and tables) that appear before
+ * the first "Step 1…" heading paragraph. This strips the editorial preamble
+ * (color-coding instructions, template notes, content-guide reference table)
+ * that CDC/DGHT templates prepend before the substantive NOFO content.
+ *
+ * The cut point is the first <w:p> with a heading style whose text begins with
+ * "Step 1" (case-insensitive). If that heading is not found, nothing is removed.
+ */
+async function applyRemoveDghtScaffolding(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  const bodyChildren = Array.from(body.childNodes).filter(
+    n => n.nodeType === Node.ELEMENT_NODE
+  ) as Element[];
+
+  // Locate the first heading paragraph whose text starts with "Step 1"
+  const step1Index = bodyChildren.findIndex(el => {
+    if (el.localName !== 'p') return false;
+    if (!isHeadingParagraph(el)) return false;
+    return getParaText(el).trim().toLowerCase().startsWith('step 1');
+  });
+
+  // Safety: if the anchor heading is not found, do not remove anything
+  if (step1Index === -1) return;
+
+  // Remove every element that precedes the Step 1 heading
+  for (const el of bodyChildren.slice(0, step1Index)) {
     body.removeChild(el);
   }
 
