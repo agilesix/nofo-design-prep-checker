@@ -296,11 +296,11 @@ describe('buildDocx — metadata core.xml updates', () => {
       value: 'Jane Smith',
     };
 
-    const [docXml, coreXml] = await Promise.all([
-      getOutputDocXml(zip, [fix]),
-      getOutputCoreXml(zip, [fix]),
-    ]);
+    const blob = await buildDocx(zip, [fix]);
+    const outputZip = await JSZip.loadAsync(blob);
 
+    const docXml = await outputZip.file('word/document.xml')!.async('string');
+    const coreXml = await outputZip.file('docProps/core.xml')!.async('string');
     expect(docXml).toContain('Metadata author: Jane Smith');
     expect(coreXml).toContain('Jane Smith');
   });
