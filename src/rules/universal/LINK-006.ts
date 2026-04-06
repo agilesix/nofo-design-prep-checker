@@ -78,7 +78,7 @@ const LINK_006: Rule = {
       const href = link.getAttribute('href') ?? '';
       const anchor = href.slice(1); // strip leading #
       const linkText = (link.textContent ?? '').trim();
-      const { nearestHeading: linkNearestHeading, page: linkPage } = getContext(link);
+      const { nearestHeading: linkNearestHeading } = getContext(link);
 
       // Tier 1a: exact match — anchor ID exists in the parsed HTML
       const exactEl = htmlDoc.getElementById(anchor);
@@ -89,7 +89,7 @@ const LINK_006: Rule = {
           const headingText = (exactEl.textContent ?? '').trim();
           if (headingText && !linkTextContainsHeading(linkText, headingText)) {
             const sectionId = findSectionForElement(link, doc);
-            results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, linkPage));
+            results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading));
           }
         }
         return;
@@ -131,7 +131,6 @@ const LINK_006: Rule = {
           severity: 'warning',
           sectionId,
           nearestHeading: linkNearestHeading,
-          page: linkPage,
           location: href,
           description,
           suggestedFix: `Retarget "#${anchor}" → "#${fuzzy}"`,
@@ -152,7 +151,7 @@ const LINK_006: Rule = {
         // surface a link-text suggestion when the link text doesn't already
         // reference that heading by name.
         if (headingText && !linkTextContainsHeading(linkText, headingText)) {
-          results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, linkPage));
+          results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading));
         }
 
         return;
@@ -167,7 +166,6 @@ const LINK_006: Rule = {
           severity: 'warning',
           sectionId,
           nearestHeading: linkNearestHeading,
-          page: linkPage,
           location: href,
           description: `The anchor "#${anchor}" wasn't found, and multiple possible matches exist in the document. Resolve this link manually in Word before handoff.`,
           instructionOnly: true,
@@ -184,7 +182,6 @@ const LINK_006: Rule = {
         severity: 'warning',
         sectionId,
         nearestHeading: linkNearestHeading,
-        page: linkPage,
         description: `The link "${linkText}" points to "#${anchor}" but no matching anchor was found in the document. This link may be broken.`,
         suggestedFix: 'Verify the bookmark exists in the document, or update the link to point to the correct section.',
         location: href,
@@ -518,8 +515,7 @@ function makeLinkTextSuggestion(
   href: string,
   anchor: string,
   sectionId: string,
-  nearestHeading: string | null,
-  page: number
+  nearestHeading: string | null
 ): Issue {
   const suggestedText = `${linkText} (see ${headingText})`;
   return {
@@ -529,7 +525,6 @@ function makeLinkTextSuggestion(
     severity: 'suggestion',
     sectionId,
     nearestHeading,
-    page,
     location: href,
     description:
       `Adding the destination heading name to the link text helps readers understand where the link goes — especially useful for appendix and section references. ` +

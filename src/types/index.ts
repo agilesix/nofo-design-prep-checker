@@ -94,7 +94,6 @@ export interface Issue {
   suggestedFix?: string;
   instructionOnly?: boolean;
   location?: string;
-  page?: number | null;
   nearestHeading?: string | null;
   inputRequired?: IssueInputSpec;
   headingCard?: {

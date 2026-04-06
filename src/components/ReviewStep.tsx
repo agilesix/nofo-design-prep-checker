@@ -57,7 +57,6 @@ export default function ReviewStep({
   const UNKNOWN_SECTION_POSITION = Number.MAX_SAFE_INTEGER;
 
   function issuePosition(issue: Issue): number {
-    if (issue.page != null) return issue.page * 10000;
     const sectionIdx = sectionIndexMap.get(issue.sectionId);
     return sectionIdx != null ? sectionIdx * 10000 : UNKNOWN_SECTION_POSITION;
   }

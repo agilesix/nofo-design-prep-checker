@@ -40,7 +40,7 @@ const LINK_002: Rule = {
 
       if (isNonDescriptive) {
         const sectionId = findSectionForElement(link, doc);
-        const { nearestHeading, page } = getContext(link);
+        const { nearestHeading } = getContext(link);
 
         issues.push({
           id: `LINK-002-${index}`,
@@ -49,7 +49,6 @@ const LINK_002: Rule = {
           severity: 'error',
           sectionId,
           nearestHeading,
-          page,
           description: `A hyperlink uses non-descriptive text: "${text}". This fails accessibility requirements. Link text must describe the destination without relying on surrounding context.`,
           suggestedFix: 'Replace the link text with a descriptive phrase that identifies where the link goes.',
           location: href,
