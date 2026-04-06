@@ -45,6 +45,11 @@ const TABLE_002: Rule = {
       // Suppress for table types that are exempt per the SimplerNOFOs style guide
       if (isExemptFromCaption(table, sectionHeading)) return;
 
+      // A heading within the 3 elements directly above the table (with ≤ 50 words of
+      // intervening body text) serves as a caption substitute — common NOFO pattern:
+      // heading → short intro sentence(s) → table.
+      if (hasNearbyHeadingCaption(table)) return;
+
       const sectionId = section?.id ?? doc.sections[0]?.id ?? 'section-preamble';
       const { nearestHeading, page } = getContext(table);
 
@@ -124,6 +129,38 @@ function isExemptFromCaption(table: Element, sectionHeading: string): boolean {
     /sf.?424/.test(firstRowText) ||
     /standard\s+form\s+\d/.test(firstRowText)
   );
+}
+
+/**
+ * Returns true when a heading appears within the 3 elements directly preceding the
+ * table and the total word count of non-heading elements between that heading and
+ * the table is ≤ 50 words. In this pattern the heading serves as the table's label.
+ *
+ * Example: <h2>Key dates</h2> → <p>The following dates apply.</p> → <table>
+ *   Heading found 2 elements above, 1 short paragraph between them → skip.
+ *
+ * If intervening text exceeds 50 words the heading is too far removed to read as
+ * a caption, so the rule still flags the table.
+ */
+function hasNearbyHeadingCaption(table: Element): boolean {
+  const prev: Element[] = [];
+  let el = table.previousElementSibling;
+  while (el && prev.length < 3) {
+    prev.push(el);
+    el = el.previousElementSibling;
+  }
+
+  // Find the closest heading within the preceding 3 elements
+  const headingIdx = prev.findIndex(s => /^h[1-6]$/i.test(s.tagName));
+  if (headingIdx === -1) return false;
+
+  // prev[0..headingIdx-1] are the non-heading elements between heading and table
+  const interveningWords = prev.slice(0, headingIdx).reduce((sum, s) => {
+    const text = (s.textContent ?? '').trim();
+    return sum + (text ? text.split(/\s+/).length : 0);
+  }, 0);
+
+  return interveningWords <= 50;
 }
 
 function findSectionForElement(el: Element, doc: ParsedDocument): Section | undefined {
