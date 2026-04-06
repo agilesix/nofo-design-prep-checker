@@ -252,13 +252,18 @@ function slugifyHeading(text: string): string {
 
 /**
  * Normalize an anchor slug or heading text for fuzzy comparison:
- *  1. Lowercase
- *  2. Replace underscores and hyphens with spaces
- *  3. Strip remaining punctuation (non-alphanumeric, non-space characters)
- *  4. Collapse whitespace
+ *  1. Split CamelCase boundaries (e.g. AppendixA → Appendix A)
+ *  2. Lowercase
+ *  3. Replace underscores and hyphens with spaces
+ *  4. Strip remaining punctuation (non-alphanumeric, non-space characters)
+ *  5. Collapse whitespace
+ *
+ * The CamelCase split handles anchors like #AppendixA, #AppendixB that omit the
+ * space between the word and the letter suffix — without it, "appendixa" ≠ "appendix a".
  */
 function normalizeAnchor(value: string): string {
   return value
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
     .toLowerCase()
     .replace(/[_-]/g, ' ')
     .replace(/[^a-z0-9\s]/g, '')
