@@ -1,4 +1,5 @@
 import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from '../../types';
+import { DGHT_STEP1_ANCHOR } from './CLEAN-007-constants';
 
 /**
  * CLEAN-007: Remove CDC/DGHT editorial scaffolding (auto-apply)
@@ -32,7 +33,7 @@ const CLEAN_007: Rule = {
     // Safety: only remove if the exact Step 1 anchor heading is present.
     const headings = Array.from(htmlDoc.querySelectorAll('h1, h2, h3, h4, h5, h6'));
     const hasStep1 = headings.some(
-      h => (h.textContent ?? '').trim().toLowerCase() === 'step 1: review the opportunity'
+      h => (h.textContent ?? '').trim().toLowerCase() === DGHT_STEP1_ANCHOR
     );
     if (!hasStep1) return [];
 

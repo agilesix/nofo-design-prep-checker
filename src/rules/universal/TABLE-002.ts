@@ -28,6 +28,12 @@ const TABLE_002: Rule = {
       const caption = table.querySelector('caption');
       if (caption && caption.textContent?.trim() !== '') return;
 
+      // A paragraph directly above the table whose text starts with "Table:"
+      // (case-insensitive) is a valid caption regardless of bold or other
+      // character-level formatting — the prefix is the reliable signal.
+      const prevEl = table.previousElementSibling;
+      if (prevEl?.matches('p') && /^table:/i.test((prevEl.textContent ?? '').trim())) return;
+
       const firstRowText = table.querySelector('tr')?.textContent?.trim().slice(0, 60) ?? '';
       const section = findSectionForElement(table, doc);
       const sectionHeading = section?.heading ?? '';

@@ -125,7 +125,7 @@ export default function DownloadStep({
 
             Word content controls from your original document are not preserved in the downloaded file.
             This is expected and consistent with how files behave throughout the design process.
-            Your original document retains all content controls.
+            Your original NOFO Word document retains all content controls.
           </p>
 
           <div

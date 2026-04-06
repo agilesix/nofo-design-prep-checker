@@ -1,5 +1,6 @@
 import JSZip from 'jszip';
 import type { AcceptedFix, AutoAppliedChange } from '../types';
+import { DGHT_STEP1_ANCHOR } from '../rules/opdiv/CLEAN-007-constants';
 
 export async function buildDocx(
   originalArchive: JSZip,
@@ -417,12 +418,14 @@ async function applyRemoveBeforeYouBeginHeading(zip: JSZip): Promise<void> {
 
 /**
  * Remove all body-level elements (paragraphs and tables) that appear before
- * the first "Step 1…" heading paragraph. This strips the editorial preamble
- * (color-coding instructions, template notes, content-guide reference table)
- * that CDC/DGHT templates prepend before the substantive NOFO content.
+ * the first "Step 1: Review the Opportunity" heading paragraph. This strips
+ * the editorial preamble (color-coding instructions, template notes,
+ * content-guide reference table) that CDC/DGHT templates prepend before the
+ * substantive NOFO content.
  *
- * The cut point is the first <w:p> with a heading style whose text begins with
- * "Step 1" (case-insensitive). If that heading is not found, nothing is removed.
+ * The cut point is the first <w:p> with a heading style whose trimmed,
+ * lowercased text exactly matches DGHT_STEP1_ANCHOR. If that heading is not
+ * found, nothing is removed.
  */
 async function applyRemoveDghtScaffolding(zip: JSZip): Promise<void> {
   const docFile = zip.file('word/document.xml');
@@ -439,11 +442,11 @@ async function applyRemoveDghtScaffolding(zip: JSZip): Promise<void> {
     n => n.nodeType === Node.ELEMENT_NODE
   ) as Element[];
 
-  // Locate the first heading paragraph whose text is exactly "Step 1: Review the Opportunity"
+  // Locate the first heading paragraph whose text exactly matches the anchor
   const step1Index = bodyChildren.findIndex(el => {
     if (el.localName !== 'p') return false;
     if (!isHeadingParagraph(el)) return false;
-    return getParaText(el).trim().toLowerCase() === 'step 1: review the opportunity';
+    return getParaText(el).trim().toLowerCase() === DGHT_STEP1_ANCHOR;
   });
 
   // Safety: if the anchor heading is not found, do not remove anything

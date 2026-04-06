@@ -56,6 +56,23 @@ describe('TABLE-002 basic detection', () => {
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
 
+  it('does not flag a table preceded by a normal-text "Table:" paragraph', () => {
+    const doc = makeDoc('<p>Table: Project timeline</p>' + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a table preceded by a bold "Table:" paragraph', () => {
+    // Bold formatting is applied at the character level inside the <p> via <strong>.
+    // The "Table:" prefix is the reliable caption signal — formatting must not matter.
+    const doc = makeDoc('<p><strong>Table: Project timeline</strong></p>' + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('flags a table when the preceding paragraph starts with text other than "Table:"', () => {
+    const doc = makeDoc('<p>See the data below.</p>' + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(1);
+  });
+
   it('flags a table whose caption element is present but empty', () => {
     const doc = makeDoc(
       '<table><caption></caption><tbody><tr><td>A</td><td>B</td></tr></tbody></table>'
