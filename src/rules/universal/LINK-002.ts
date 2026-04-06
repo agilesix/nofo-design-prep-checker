@@ -3,12 +3,28 @@ import { buildLocationLookup } from '../../utils/locationContext';
 
 /**
  * LINK-002: Non-descriptive link text ("click here", "here", "this link", etc.)
+ *
+ * Two sub-cases:
+ *  - Phrase patterns ("click here", "here", "read more", …) — surfaced with an
+ *    inline text input so the user can supply replacement link text directly.
+ *  - Single generic words ("link", "website", "page", "document") — surfaced as
+ *    instruction-only because replacing just the link text won't produce a natural
+ *    sentence; the user needs to rewrite the surrounding text in Word.
  */
-const NON_DESCRIPTIVE_PATTERNS = [
+
+/** Single generic words whose surrounding sentence must be rewritten in Word. */
+const SINGLE_WORD_PATTERNS = [
+  /^link$/i,
+  /^website$/i,
+  /^page$/i,
+  /^document$/i,
+];
+
+/** Phrases where only the link text needs updating. */
+const PHRASE_PATTERNS = [
   /^click here$/i,
   /^here$/i,
   /^this link$/i,
-  /^link$/i,
   /^read more$/i,
   /^more$/i,
   /^learn more$/i,
@@ -36,12 +52,16 @@ const LINK_002: Rule = {
       const href = link.getAttribute('href') ?? '';
       const text = (link.textContent ?? '').trim();
 
-      const isNonDescriptive = NON_DESCRIPTIVE_PATTERNS.some(pattern => pattern.test(text));
+      const isSingleWord = SINGLE_WORD_PATTERNS.some(p => p.test(text));
+      const isPhrase = !isSingleWord && PHRASE_PATTERNS.some(p => p.test(text));
 
-      if (isNonDescriptive) {
-        const sectionId = findSectionForElement(link, doc);
-        const { nearestHeading } = getContext(link);
+      if (!isSingleWord && !isPhrase) return;
 
+      const sectionId = findSectionForElement(link, doc);
+      const { nearestHeading } = getContext(link);
+      const description = `A hyperlink uses non-descriptive text: "${text}". This fails accessibility requirements. Link text must describe the destination without relying on surrounding context.`;
+
+      if (isSingleWord) {
         issues.push({
           id: `LINK-002-${index}`,
           ruleId: 'LINK-002',
@@ -49,7 +69,21 @@ const LINK_002: Rule = {
           severity: 'error',
           sectionId,
           nearestHeading,
-          description: `A hyperlink uses non-descriptive text: "${text}". This fails accessibility requirements. Link text must describe the destination without relying on surrounding context.`,
+          description,
+          suggestedFix:
+            `This link text is a single generic word embedded in a sentence. Replacing just the link text won't be enough — you'll need to rewrite the surrounding sentence in your Word document so the link text describes the destination in context.`,
+          location: href,
+          instructionOnly: true,
+        });
+      } else {
+        issues.push({
+          id: `LINK-002-${index}`,
+          ruleId: 'LINK-002',
+          title: 'Non-descriptive link text',
+          severity: 'error',
+          sectionId,
+          nearestHeading,
+          description,
           suggestedFix: 'Replace the link text with a descriptive phrase that identifies where the link goes.',
           location: href,
           inputRequired: {

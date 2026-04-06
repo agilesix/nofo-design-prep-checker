@@ -82,37 +82,75 @@ export async function buildDocx(
   return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 }
 
-async function applyMetadataFixes(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
-  const coreXmlFile = zip.file('docProps/core.xml');
-  if (!coreXmlFile) return;
+/**
+ * Map each metadata targetField to the paragraph prefix used in the document body.
+ */
+const METADATA_PREFIX_MAP: Record<string, string> = {
+  'metadata.author': 'Metadata author:',
+  'metadata.subject': 'Metadata subject:',
+  'metadata.keywords': 'Metadata keywords:',
+};
 
-  const xmlStr = await coreXmlFile.async('string');
+/**
+ * Apply accepted metadata fixes to body paragraphs in word/document.xml.
+ *
+ * Metadata fields are stored as plain-text body paragraphs with the format:
+ *   "Metadata author: [value]"
+ *   "Metadata subject: [value]"
+ *   "Metadata keywords: [value]"
+ *
+ * For each fix, this function finds the matching paragraph by its prefix
+ * (case-insensitive), writes the new value into the first run's <w:t>,
+ * and clears the text content of any subsequent runs in that paragraph so
+ * only the updated text remains.
+ */
+async function applyMetadataFixes(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
 
   for (const fix of fixes) {
     if (!fix.value || !fix.targetField) continue;
 
-    if (fix.targetField === 'metadata.author') {
-      const creator = xmlDoc.getElementsByTagNameNS('http://purl.org/dc/elements/1.1/', 'creator')[0];
-      if (creator) {
-        creator.textContent = fix.value;
-      }
-    } else if (fix.targetField === 'metadata.subject') {
-      const subject = xmlDoc.getElementsByTagNameNS('http://purl.org/dc/elements/1.1/', 'subject')[0];
-      if (subject) {
-        subject.textContent = fix.value;
-      }
-    } else if (fix.targetField === 'metadata.keywords') {
-      const keywords = xmlDoc.getElementsByTagNameNS('http://schemas.openxmlformats.org/package/2006/metadata/core-properties', 'keywords')[0];
-      if (keywords) {
-        keywords.textContent = fix.value;
-      }
+    const prefix = METADATA_PREFIX_MAP[fix.targetField];
+    if (!prefix) continue;
+
+    const prefixLower = prefix.toLowerCase();
+
+    // Find the body paragraph whose text starts with this prefix
+    const para = paragraphs.find(p =>
+      getParaText(p).trim().toLowerCase().startsWith(prefixLower)
+    );
+    if (!para) continue;
+
+    const newText = `${prefix} ${fix.value}`;
+
+    // Collect all <w:t> elements across all runs in this paragraph
+    const allWTs = Array.from(para.getElementsByTagName('w:t'));
+    if (allWTs.length === 0) continue;
+
+    // Write the full replacement text into the first <w:t>
+    const firstWT = allWTs[0]!;
+    firstWT.textContent = newText;
+    if (newText !== newText.trim()) {
+      firstWT.setAttribute('xml:space', 'preserve');
+    } else {
+      firstWT.removeAttribute('xml:space');
+    }
+
+    // Clear all subsequent <w:t> elements so no stale text fragments remain
+    for (let i = 1; i < allWTs.length; i++) {
+      allWTs[i]!.textContent = '';
     }
   }
 
   const serializer = new XMLSerializer();
-  zip.file('docProps/core.xml', serializer.serializeToString(xmlDoc));
+  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
 }
 
 async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
@@ -312,9 +350,12 @@ function isHeadingParagraph(wP: Element): boolean {
 // ─── CLEAN-005: Tagline relocation ───────────────────────────────────────────
 
 /**
- * Move the standalone tagline paragraph to immediately before the first
- * heading in the document body (i.e., immediately after the metadata block).
+ * Move the standalone tagline paragraph to immediately after the
+ * "Metadata keywords:" paragraph in the document body.
  * Removes any duplicate tagline paragraphs found anywhere in the body.
+ *
+ * If either the tagline paragraph or the "Metadata keywords:" paragraph
+ * is not found, this function skips silently.
  */
 async function applyTaglineRelocation(zip: JSZip): Promise<void> {
   const docFile = zip.file('word/document.xml');
@@ -349,23 +390,22 @@ async function applyTaglineRelocation(zip: JSZip): Promise<void> {
     body.removeChild(el);
   }
 
-  // Find the first heading paragraph in the updated children.
+  // Find the "Metadata keywords:" paragraph to use as the insertion anchor.
   const updatedChildren = bodyElements();
-  const firstHeadingEl = updatedChildren.find(
-    el => el.localName === 'p' && isHeadingParagraph(el)
+  const keywordsPara = updatedChildren.find(
+    el =>
+      el.localName === 'p' &&
+      getParaText(el).trim().toLowerCase().startsWith('metadata keywords:')
   );
 
-  if (firstHeadingEl) {
-    // Insert the primary tagline just before the first heading.
-    body.insertBefore(primary, firstHeadingEl);
+  if (!keywordsPara) return;
+
+  // Insert the tagline immediately after the "Metadata keywords:" paragraph.
+  const nextSibling = keywordsPara.nextSibling;
+  if (nextSibling) {
+    body.insertBefore(primary, nextSibling);
   } else {
-    // No heading found — place before <w:sectPr> if present, otherwise append.
-    const sectPr = updatedChildren.find(el => el.localName === 'sectPr');
-    if (sectPr) {
-      body.insertBefore(primary, sectPr);
-    } else {
-      body.appendChild(primary);
-    }
+    body.appendChild(primary);
   }
 
   const serializer = new XMLSerializer();
