@@ -88,17 +88,7 @@ export default function UploadStep({
       <h1 className="usa-h1" tabIndex={-1} ref={headingRef}>{content.steps.upload.heading}</h1>
 
       <div className="usa-prose margin-bottom-3">
-        <p>
-          Upload your NOFO Word document to prepare it for design. This tool checks formatting and structural issues against a{' '}
-          <a
-            href="https://github.com/agilesix/nofo-design-prep-checker/blob/main/docs/rules.md#rules-reference"
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            rules reference
-          </a>{' '}
-          — it does not modify your document&apos;s regulatory or policy content. The downloaded file is ready for design handoff; your original remains your source of truth.
-        </p>
+        <p>{content.upload.helperText}</p>
       </div>
 
       <div
