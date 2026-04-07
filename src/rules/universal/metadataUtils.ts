@@ -24,9 +24,13 @@ export function extractMetadataBodyValue(html: string, fieldPattern: RegExp): st
   const parser = new DOMParser();
   const htmlDoc = parser.parseFromString(html, 'text/html');
   const paragraphs = Array.from(htmlDoc.querySelectorAll('p'));
+  const safeFieldPattern = new RegExp(
+    fieldPattern.source,
+    fieldPattern.flags.replace(/[gy]/g, '')
+  );
 
   const matchingPara = paragraphs.find(p =>
-    fieldPattern.test((p.textContent ?? '').trim())
+    safeFieldPattern.test((p.textContent ?? '').trim())
   );
   if (!matchingPara) return null;
 
