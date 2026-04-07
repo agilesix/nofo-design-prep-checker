@@ -9,8 +9,16 @@ import { extractMetadataBodyValue, isMetadataPlaceholder } from './metadataUtils
  * value, the rule produces no issue.
  */
 
-const SUBJECT_FIELD_PATTERN = /^(metadata\s+subject|subject)\s*:/i;
+const SUBJECT_FIELD_LABELS = ['metadata subject', 'subject'] as const;
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const SUBJECT_FIELD_PATTERN = new RegExp(
+  `^(?:${SUBJECT_FIELD_LABELS.map((label) => escapeRegex(label).replace(/\s+/g, '\\s+')).join('|')})\\s*:`,
+  'i'
+);
 const META_002: Rule = {
   id: 'META-002',
   check(doc: ParsedDocument, _options: RuleRunnerOptions): Issue[] {
