@@ -83,65 +83,36 @@ export async function buildDocx(
 }
 
 /**
- * Map each metadata targetField to the paragraph prefix used in the document body.
+ * Patterns for matching metadata field name prefixes in body paragraphs.
+ * Each pattern matches the field name followed by a colon at the start of
+ * the paragraph text, handling both the "Metadata X:" long form and the
+ * plain "X:" short form.
+ *
+ * Known variants:
+ *  metadata.author   — "Metadata author:" or "Author:"
+ *  metadata.subject  — "Metadata subject:" or "Subject:"
+ *  metadata.keywords — "Metadata keywords:" or "Keywords:"
  */
-const METADATA_PREFIX_MAP: Record<string, string> = {
-  'metadata.author': 'Metadata author:',
-  'metadata.subject': 'Metadata subject:',
-  'metadata.keywords': 'Metadata keywords:',
+const METADATA_FIELD_PATTERNS: Record<string, RegExp> = {
+  'metadata.author':   /^(metadata\s+author|author)\s*:/i,
+  'metadata.subject':  /^(metadata\s+subject|subject)\s*:/i,
+  'metadata.keywords': /^(metadata\s+keywords|keywords)\s*:/i,
 };
 
 /**
- * Apply accepted metadata fixes to both locations where metadata is stored:
+ * Apply accepted metadata fixes to the visible body paragraphs in
+ * word/document.xml.
  *
- *  1. docProps/core.xml — the standard OOXML Document Properties location
- *     (dc:creator, dc:subject, cp:keywords). Word and other consumers read
- *     these fields when displaying or indexing document properties.
+ * Locates the paragraph whose text starts with the corresponding field name
+ * prefix (case-insensitive, handles both "Metadata author:" and "Author:"
+ * variants) and replaces the text after the colon with the accepted value.
+ * The original field name prefix is preserved exactly as written in the
+ * document — a paragraph that begins with "Author:" stays "Author:", not
+ * "Metadata author:".
  *
- *  2. word/document.xml body paragraphs — template placeholder paragraphs
- *     with the format "Metadata author: [value]" etc. These are the visible
- *     placeholders that the META-001/002/003 rules flag and that users see in
- *     the document body.
- *
- * Both locations are updated so they stay consistent after an accepted fix.
- * If either file is absent in the archive, that location is skipped silently.
+ * docProps/core.xml is intentionally not modified.
  */
 async function applyMetadataFixes(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
-  await applyMetadataFixesToCoreXml(zip, fixes);
-  await applyMetadataFixesToBodyParagraphs(zip, fixes);
-}
-
-async function applyMetadataFixesToCoreXml(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
-  const coreXmlFile = zip.file('docProps/core.xml');
-  if (!coreXmlFile) return;
-
-  const xmlStr = await coreXmlFile.async('string');
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
-
-  for (const fix of fixes) {
-    if (!fix.value || !fix.targetField) continue;
-
-    if (fix.targetField === 'metadata.author') {
-      const creator = xmlDoc.getElementsByTagNameNS('http://purl.org/dc/elements/1.1/', 'creator')[0];
-      if (creator) creator.textContent = fix.value;
-    } else if (fix.targetField === 'metadata.subject') {
-      const subject = xmlDoc.getElementsByTagNameNS('http://purl.org/dc/elements/1.1/', 'subject')[0];
-      if (subject) subject.textContent = fix.value;
-    } else if (fix.targetField === 'metadata.keywords') {
-      const keywords = xmlDoc.getElementsByTagNameNS(
-        'http://schemas.openxmlformats.org/package/2006/metadata/core-properties',
-        'keywords'
-      )[0];
-      if (keywords) keywords.textContent = fix.value;
-    }
-  }
-
-  const serializer = new XMLSerializer();
-  zip.file('docProps/core.xml', serializer.serializeToString(xmlDoc));
-}
-
-async function applyMetadataFixesToBodyParagraphs(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
   const docFile = zip.file('word/document.xml');
   if (!docFile) return;
 
@@ -154,17 +125,20 @@ async function applyMetadataFixesToBodyParagraphs(zip: JSZip, fixes: AcceptedFix
   for (const fix of fixes) {
     if (!fix.value || !fix.targetField) continue;
 
-    const prefix = METADATA_PREFIX_MAP[fix.targetField];
-    if (!prefix) continue;
+    const pattern = METADATA_FIELD_PATTERNS[fix.targetField];
+    if (!pattern) continue;
 
-    const prefixLower = prefix.toLowerCase();
-
-    // Find the body paragraph whose text starts with this prefix
-    const para = paragraphs.find(p =>
-      getParaText(p).trim().toLowerCase().startsWith(prefixLower)
-    );
+    // Find the body paragraph whose text starts with any recognized variant of
+    // this field name followed by a colon
+    const para = paragraphs.find(p => pattern.test(getParaText(p).trim()));
     if (!para) continue;
 
+    // Extract the prefix exactly as written (preserves "Author:" vs
+    // "Metadata author:" etc.) by taking everything up to and including the
+    // first colon in the paragraph text
+    const paraText = getParaText(para).trim();
+    const colonIdx = paraText.indexOf(':');
+    const prefix = paraText.slice(0, colonIdx + 1);
     const newText = `${prefix} ${fix.value}`;
 
     // Collect all <w:t> elements across all runs in this paragraph

@@ -47,20 +47,6 @@ async function getOutputDocXml(
 }
 
 /**
- * Run buildDocx and return the docProps/core.xml text from the output blob.
- */
-async function getOutputCoreXml(
-  zip: JSZip,
-  acceptedFixes: AcceptedFix[] = []
-): Promise<string> {
-  const blob = await buildDocx(zip, acceptedFixes);
-  const outZip = await JSZip.loadAsync(blob);
-  const coreFile = outZip.file('docProps/core.xml');
-  if (!coreFile) throw new Error('docProps/core.xml missing from output');
-  return coreFile.async('string');
-}
-
-/**
  * Build a minimal docProps/core.xml string.
  */
 function makeCoreXml({
@@ -234,60 +220,15 @@ describe('buildDocx — metadata body paragraph fixes', () => {
   });
 });
 
-// ─── applyMetadataFixes — core.xml ───────────────────────────────────────────
+// ─── applyMetadataFixes — no core.xml modification + variant field names ──────
 
-describe('buildDocx — metadata core.xml updates', () => {
-  it('writes accepted author value to dc:creator in core.xml', async () => {
+describe('buildDocx — metadata fixes: variant field names and no core.xml modification', () => {
+  it('does not modify docProps/core.xml when a metadata fix is accepted', async () => {
+    // core.xml must be left exactly as it was — metadata fixes only touch the
+    // visible body paragraph, not the Word document properties.
+    const originalCoreXml = makeCoreXml({ creator: '[Author Name]' });
     const zip = await makeZip(['Metadata author: [Author Name]']);
-    zip.file('docProps/core.xml', makeCoreXml({ creator: '[Author Name]' }));
-
-    const fix: AcceptedFix = {
-      issueId: 'META-001-0',
-      ruleId: 'META-001',
-      targetField: 'metadata.author',
-      value: 'Jane Smith',
-    };
-
-    const coreXml = await getOutputCoreXml(zip, [fix]);
-    expect(coreXml).toContain('Jane Smith');
-    expect(coreXml).not.toContain('[Author Name]');
-  });
-
-  it('writes accepted subject value to dc:subject in core.xml', async () => {
-    const zip = await makeZip(['Metadata subject: [Subject]']);
-    zip.file('docProps/core.xml', makeCoreXml({ subject: '[Subject]' }));
-
-    const fix: AcceptedFix = {
-      issueId: 'META-002-0',
-      ruleId: 'META-002',
-      targetField: 'metadata.subject',
-      value: 'Community Health Grants',
-    };
-
-    const coreXml = await getOutputCoreXml(zip, [fix]);
-    expect(coreXml).toContain('Community Health Grants');
-    expect(coreXml).not.toContain('[Subject]');
-  });
-
-  it('writes accepted keywords value to cp:keywords in core.xml', async () => {
-    const zip = await makeZip(['Metadata keywords: [Keywords]']);
-    zip.file('docProps/core.xml', makeCoreXml({ keywords: '[Keywords]' }));
-
-    const fix: AcceptedFix = {
-      issueId: 'META-003-0',
-      ruleId: 'META-003',
-      targetField: 'metadata.keywords',
-      value: 'health, CDC',
-    };
-
-    const coreXml = await getOutputCoreXml(zip, [fix]);
-    expect(coreXml).toContain('health, CDC');
-    expect(coreXml).not.toContain('[Keywords]');
-  });
-
-  it('updates both core.xml and body paragraph in the same pass', async () => {
-    const zip = await makeZip(['Metadata author: [Author Name]']);
-    zip.file('docProps/core.xml', makeCoreXml({ creator: '[Author Name]' }));
+    zip.file('docProps/core.xml', originalCoreXml);
 
     const fix: AcceptedFix = {
       issueId: 'META-001-0',
@@ -299,15 +240,18 @@ describe('buildDocx — metadata core.xml updates', () => {
     const blob = await buildDocx(zip, [fix]);
     const outputZip = await JSZip.loadAsync(blob);
 
+    // Body paragraph must be updated
     const docXml = await outputZip.file('word/document.xml')!.async('string');
-    const coreXml = await outputZip.file('docProps/core.xml')!.async('string');
     expect(docXml).toContain('Metadata author: Jane Smith');
-    expect(coreXml).toContain('Jane Smith');
+
+    // core.xml must be unchanged — accepted value must NOT appear in it
+    const coreXml = await outputZip.file('docProps/core.xml')!.async('string');
+    expect(coreXml).not.toContain('Jane Smith');
+    expect(coreXml).toContain('[Author Name]');
   });
 
-  it('skips core.xml update silently when docProps/core.xml is absent', async () => {
-    const zip = await makeZip(['Metadata author: [Author Name]']);
-    // No core.xml added — function should not throw
+  it('matches the short "Author:" variant and updates the body paragraph', async () => {
+    const zip = await makeZip(['Author: Leave blank. Coach will insert.']);
 
     const fix: AcceptedFix = {
       issueId: 'META-001-0',
@@ -316,7 +260,65 @@ describe('buildDocx — metadata core.xml updates', () => {
       value: 'Jane Smith',
     };
 
-    // Body paragraph should still be updated
+    const xml = await getOutputDocXml(zip, [fix]);
+    expect(xml).toContain('Author: Jane Smith');
+  });
+
+  it('matches the short "Keywords:" variant and updates the body paragraph', async () => {
+    const zip = await makeZip(['Keywords: Leave blank. Coach will insert.']);
+
+    const fix: AcceptedFix = {
+      issueId: 'META-003-0',
+      ruleId: 'META-003',
+      targetField: 'metadata.keywords',
+      value: 'health, grants, CDC',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    expect(xml).toContain('Keywords: health, grants, CDC');
+  });
+
+  it('matches the short "Subject:" variant and updates the body paragraph', async () => {
+    const zip = await makeZip(['Subject: Leave blank. Coach will insert.']);
+
+    const fix: AcceptedFix = {
+      issueId: 'META-002-0',
+      ruleId: 'META-002',
+      targetField: 'metadata.subject',
+      value: 'Community Health Grants',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    expect(xml).toContain('Subject: Community Health Grants');
+  });
+
+  it('preserves the original field name prefix format in the output', async () => {
+    // "Author:" must stay "Author:" in output — must not be rewritten to "Metadata author:"
+    const zip = await makeZip(['Author: placeholder']);
+
+    const fix: AcceptedFix = {
+      issueId: 'META-001-0',
+      ruleId: 'META-001',
+      targetField: 'metadata.author',
+      value: 'Jane Smith',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    expect(xml).toContain('Author: Jane Smith');
+    expect(xml).not.toContain('Metadata author:');
+  });
+
+  it('does not throw when docProps/core.xml is absent', async () => {
+    // No core.xml added — function must not throw and must still update body
+    const zip = await makeZip(['Metadata author: [Author Name]']);
+
+    const fix: AcceptedFix = {
+      issueId: 'META-001-0',
+      ruleId: 'META-001',
+      targetField: 'metadata.author',
+      value: 'Jane Smith',
+    };
+
     const docXml = await getOutputDocXml(zip, [fix]);
     expect(docXml).toContain('Metadata author: Jane Smith');
   });
