@@ -10,7 +10,11 @@ import { extractMetadataBodyValue, isMetadataPlaceholder } from './metadataUtils
  * value, the rule produces no issue.
  */
 
-const KEYWORDS_FIELD_PATTERN = /^(metadata\s+keywords|keywords)\s*:/i;
+const KEYWORDS_FIELD_LABELS = ['metadata keywords', 'keywords'] as const;
+const KEYWORDS_FIELD_PATTERN = new RegExp(
+  `^(${KEYWORDS_FIELD_LABELS.map((label) => label.replace(/\s+/g, '\\s+')).join('|')})\\s*:`,
+  'i',
+);
 
 const META_003: Rule = {
   id: 'META-003',
