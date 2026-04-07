@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
 import META_003 from '../universal/META-003';
-import type { ParsedDocument } from '../../types';
+import type { ParsedDocument, Issue } from '../../types';
 
 const OPTIONS = { contentGuideId: null } as const;
 
@@ -59,8 +59,9 @@ describe('META-003: flags when the body paragraph has a placeholder value', () =
     const doc = makeDoc('<p>Metadata keywords: Leave blank. Coach will insert.</p>');
     const issues = META_003.check(doc, OPTIONS);
     expect(issues).toHaveLength(1);
-    expect(issues[0].ruleId).toBe('META-003');
-    expect(issues[0].severity).toBe('warning');
+    const issue = issues[0] as Issue;
+    expect(issue.ruleId).toBe('META-003');
+    expect(issue.severity).toBe('warning');
   });
 
   it('flags "Metadata keywords:" with an empty value', () => {
@@ -105,6 +106,7 @@ describe('META-003: issue shape', () => {
     const doc = makeDoc('<p>Metadata keywords: Leave blank. Coach will insert.</p>');
     const issues = META_003.check(doc, OPTIONS);
     expect(issues).toHaveLength(1);
-    expect(issues[0].inputRequired?.targetField).toBe('metadata.keywords');
+    const issue = issues[0] as Issue;
+    expect(issue.inputRequired?.targetField).toBe('metadata.keywords');
   });
 });
