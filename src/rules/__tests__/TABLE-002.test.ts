@@ -124,8 +124,11 @@ describe('TABLE-002 nearby heading caption substitute', () => {
     expect((results[0] as Issue).title).toBe('Table is missing a caption');
   });
 
-  it('flags when the heading is more than 3 elements above the table', () => {
-    // Heading + 3 paragraphs = 4 preceding elements; only 3 are scanned.
+  it('does not flag when a heading is more than 3 elements above the table but within 50 words', () => {
+    // Heading + 3 short paragraphs — total intervening text is well under 50 words.
+    // The element count between heading and table does not limit detection; only the
+    // word count matters. This was the root cause of a bug where the old code scanned
+    // only 3 siblings and missed the heading if more elements were present.
     const doc = makeDoc(
       '<h2>Key dates</h2>' +
       '<p>Para one.</p>' +
@@ -133,7 +136,17 @@ describe('TABLE-002 nearby heading caption substitute', () => {
       '<p>Para three.</p>' +
       SIMPLE_TABLE
     );
-    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(1);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag when a heading is followed by approximately 30 words of body text before the table', () => {
+    // Realistic NOFO pattern: section heading → one substantive paragraph → data table.
+    // The paragraph is ~30 words, well within the 50-word threshold.
+    const thirtyWordParagraph =
+      '<p>The following table summarizes the eligible applicant types and the ' +
+      'corresponding funding limits that apply to each category of organization.</p>';
+    const doc = makeDoc('<h2>Eligible applicants</h2>' + thirtyWordParagraph + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
 
   it('works with any heading level (h1–h6)', () => {

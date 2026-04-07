@@ -51,8 +51,8 @@ const TABLE_002: Rule = {
       // Suppress for table types that are exempt per the SimplerNOFOs style guide
       if (isExemptFromCaption(table, sectionHeading)) return;
 
-      // A heading within the 3 elements directly above the table (with ≤ 50 words of
-      // intervening body text) serves as a caption substitute — common NOFO pattern:
+      // A heading preceding the table with ≤ 50 words of body text between them
+      // serves as a caption substitute — common NOFO pattern:
       // heading → short intro sentence(s) → table.
       if (hasNearbyHeadingCaption(table)) return;
 
@@ -70,10 +70,9 @@ const TABLE_002: Rule = {
           `A table${firstRowText ? ` starting with "${firstRowText}\u2026"` : ''} does not have a caption. ` +
           `Per the SimplerNOFOs style guide, captions must follow the format \u201cTable: Title of table\u201d ` +
           `in normal (unstyled) text, placed directly above the table with no blank line. ` +
-          `A heading (H1\u2013H6) can serve as a caption substitute only when one of the three ` +
-          `elements directly above the table is a heading with 50 words or fewer of body text ` +
-          `between it and the table \u2014 this table was flagged because no heading was found ` +
-          `in that position, or the intervening text exceeded the threshold. ` +
+          `A heading (H1\u2013H6) can serve as a caption substitute when it precedes the table ` +
+          `with 50 words or fewer of body text between it and the table \u2014 this table was ` +
+          `flagged because no such heading was found, or the intervening text exceeded 50 words. ` +
           `Note: key facts tables, key dates tables, callout boxes (single-cell tables), ` +
           `application checklist, merit review criteria, standard forms, application contents, ` +
           `and reporting tables are exempt from this requirement \u2014 use your judgment if this table ` +
@@ -139,35 +138,40 @@ function isExemptFromCaption(table: Element, sectionHeading: string): boolean {
 }
 
 /**
- * Returns true when a heading appears within the 3 elements directly preceding the
- * table and the total word count of non-heading elements between that heading and
- * the table is ≤ 50 words. In this pattern the heading serves as the table's label.
+ * Returns true when a heading (h1–h6) precedes the table with ≤ 50 words of body
+ * text between them. In this pattern the heading serves as the table's label.
  *
  * Example: <h2>Key dates</h2> → <p>The following dates apply.</p> → <table>
- *   Heading found 2 elements above, 1 short paragraph between them → skip.
+ *   Heading found above, 1 short paragraph between them → skip.
  *
- * If intervening text exceeds 50 words the heading is too far removed to read as
- * a caption, so the rule still flags the table.
+ * Scans backward through all preceding siblings (not a fixed element window) so
+ * that a heading separated from the table by several short paragraphs — a common
+ * NOFO pattern — is still recognized as a valid caption substitute. Stops early
+ * once accumulated word count exceeds 50, since no heading at that distance could
+ * qualify.
  */
 function hasNearbyHeadingCaption(table: Element): boolean {
-  const prev: Element[] = [];
+  let interveningWords = 0;
   let el = table.previousElementSibling;
-  while (el && prev.length < 3) {
-    prev.push(el);
+
+  while (el) {
+    if (/^h[1-6]$/i.test(el.tagName)) {
+      // Found a heading — accept it if the accumulated body text is ≤ 50 words
+      return interveningWords <= 50;
+    }
+
+    const text = (el.textContent ?? '').trim();
+    if (text) {
+      interveningWords += text.split(/\s+/).length;
+    }
+
+    // Stop early once word count exceeds threshold — no heading at this distance qualifies
+    if (interveningWords > 50) return false;
+
     el = el.previousElementSibling;
   }
 
-  // Find the closest heading within the preceding 3 elements
-  const headingIdx = prev.findIndex(s => /^h[1-6]$/i.test(s.tagName));
-  if (headingIdx === -1) return false;
-
-  // prev[0..headingIdx-1] are the non-heading elements between heading and table
-  const interveningWords = prev.slice(0, headingIdx).reduce((sum, s) => {
-    const text = (s.textContent ?? '').trim();
-    return sum + (text ? text.split(/\s+/).length : 0);
-  }, 0);
-
-  return interveningWords <= 50;
+  return false;
 }
 
 function findSectionForElement(el: Element, doc: ParsedDocument): Section | undefined {
