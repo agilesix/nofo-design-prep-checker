@@ -149,6 +149,25 @@ describe('TABLE-002 nearby heading caption substitute', () => {
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
 
+  it('detects a heading exactly at the MAX_HEADING_SCAN_SIBLINGS boundary (20th preceding element)', () => {
+    // MAX_HEADING_SCAN_SIBLINGS = 20. The loop scans up to 20 elements back from
+    // the table. A heading that is the 20th element (with 19 empty paragraphs
+    // between it and the table) must still be found and suppress the warning.
+    // Empty paragraphs accumulate 0 words so the word-count exit does not fire.
+    const emptyParas = '<p></p>'.repeat(19); // 19 elements between heading and table
+    const doc = makeDoc('<h2>Section title</h2>' + emptyParas + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not detect a heading beyond the MAX_HEADING_SCAN_SIBLINGS cap (21st preceding element)', () => {
+    // A heading at the 21st position exceeds the 20-element scan cap and is not
+    // found, so the table is correctly flagged as uncaptioned. This test pins the
+    // cap so that accidental regressions to unbounded scanning are caught.
+    const emptyParas = '<p></p>'.repeat(20); // 20 elements between heading and table
+    const doc = makeDoc('<h2>Section title</h2>' + emptyParas + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(1);
+  });
+
   it('works with any heading level (h1–h6)', () => {
     for (const level of [1, 2, 3, 4, 5, 6]) {
       const doc = makeDoc(`<h${level}>Section title</h${level}>` + SIMPLE_TABLE);

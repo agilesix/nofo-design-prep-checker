@@ -93,11 +93,13 @@ export async function buildDocx(
  *  metadata.subject  — "Metadata subject:" or "Subject:"
  *  metadata.keywords — "Metadata keywords:" or "Keywords:"
  */
-const METADATA_FIELD_PATTERNS: Record<string, RegExp> = {
+const METADATA_FIELD_PATTERNS = {
   'metadata.author':   /^(metadata\s+author|author)\s*:/i,
   'metadata.subject':  /^(metadata\s+subject|subject)\s*:/i,
   'metadata.keywords': /^(metadata\s+keywords|keywords)\s*:/i,
-};
+} as const;
+
+type MetadataTargetField = keyof typeof METADATA_FIELD_PATTERNS;
 
 /**
  * Returns true if paraText starts with any recognized field name variant for
@@ -106,9 +108,8 @@ const METADATA_FIELD_PATTERNS: Record<string, RegExp> = {
  * the long form ("Metadata keywords:") and the short form ("Keywords:") are
  * recognized consistently.
  */
-function matchesMetadataField(paraText: string, targetField: string): boolean {
-  const pattern = METADATA_FIELD_PATTERNS[targetField];
-  return pattern !== undefined && pattern.test(paraText.trim());
+function matchesMetadataField(paraText: string, targetField: MetadataTargetField): boolean {
+  return METADATA_FIELD_PATTERNS[targetField].test(paraText.trim());
 }
 
 /**
@@ -137,12 +138,12 @@ async function applyMetadataFixes(zip: JSZip, fixes: AcceptedFix[]): Promise<voi
   for (const fix of fixes) {
     if (!fix.value || !fix.targetField) continue;
 
-    const pattern = METADATA_FIELD_PATTERNS[fix.targetField];
-    if (!pattern) continue;
+    if (!(fix.targetField in METADATA_FIELD_PATTERNS)) continue;
+    const targetField = fix.targetField as MetadataTargetField;
 
     // Find the body paragraph whose text starts with any recognized variant of
     // this field name followed by a colon
-    const para = paragraphs.find(p => pattern.test(getParaText(p).trim()));
+    const para = paragraphs.find(p => matchesMetadataField(getParaText(p), targetField));
     if (!para) continue;
 
     // Extract the prefix exactly as written (preserves "Author:" vs
@@ -389,12 +390,13 @@ function isHeadingParagraph(wP: Element): boolean {
 // ─── CLEAN-005: Tagline relocation ───────────────────────────────────────────
 
 /**
- * Move the standalone tagline paragraph to immediately after the
- * "Metadata keywords:" paragraph in the document body.
+ * Move the standalone tagline paragraph to immediately after the keywords
+ * paragraph in the document body. The keywords paragraph is matched by
+ * either the long form ("Metadata keywords:") or the short form ("Keywords:").
  * Removes any duplicate tagline paragraphs found anywhere in the body.
  *
- * If either the tagline paragraph or the "Metadata keywords:" paragraph
- * is not found, this function skips silently.
+ * If either the tagline paragraph or the keywords paragraph is not found,
+ * this function skips silently.
  */
 async function applyTaglineRelocation(zip: JSZip): Promise<void> {
   const docFile = zip.file('word/document.xml');
@@ -429,7 +431,7 @@ async function applyTaglineRelocation(zip: JSZip): Promise<void> {
     body.removeChild(el);
   }
 
-  // Find the keywords paragraph (matches both "Metadata keywords:" and "Keywords:")
+  // Find the keywords paragraph (matches "Metadata keywords:" or "Keywords:")
   // to use as the insertion anchor.
   const updatedChildren = bodyElements();
   const keywordsPara = updatedChildren.find(
