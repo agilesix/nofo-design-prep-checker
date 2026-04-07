@@ -10,8 +10,12 @@ import { extractMetadataBodyValue, isMetadataPlaceholder } from './metadataUtils
  * value, the rule produces no issue.
  */
 
-const AUTHOR_FIELD_PATTERN = /^(metadata\s+author|author)\s*:/i;
+function buildMetadataFieldPattern(labels: readonly string[]): RegExp {
+  return new RegExp(`^(?:${labels.join('|')})\\s*:`, 'i');
+}
 
+const AUTHOR_METADATA_FIELD_LABELS = ['metadata\\s+author', 'author'] as const;
+const AUTHOR_FIELD_PATTERN = buildMetadataFieldPattern(AUTHOR_METADATA_FIELD_LABELS);
 const META_001: Rule = {
   id: 'META-001',
   check(doc: ParsedDocument, options: RuleRunnerOptions): Issue[] {
