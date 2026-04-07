@@ -144,13 +144,12 @@ function isExemptFromCaption(table: Element, sectionHeading: string): boolean {
  * Example: <h2>Key dates</h2> → <p>The following dates apply.</p> → <table>
  *   Heading found above, 1 short paragraph between them → skip.
  *
- * Scans backward through preceding siblings (not a fixed element window) so
- * that a heading separated from the table by several short paragraphs — a common
- * NOFO pattern — is still recognized as a valid caption substitute. Stops early
- * once accumulated word count exceeds 50, since no heading at that distance could
- * qualify. A hard cap of MAX_HEADING_SCAN_SIBLINGS prevents worst-case O(n²)
- * behavior across many tables in documents with large stretches of empty elements
- * before a table that has no nearby heading.
+ * Scans backward up to MAX_HEADING_SCAN_SIBLINGS preceding siblings, with an
+ * additional early exit once the accumulated word count exceeds 50 words. The
+ * sibling cap prevents worst-case O(n²) behavior across many tables in documents
+ * with large stretches of low-text elements before a table that has no nearby
+ * heading; the word-count exit avoids scanning the cap on normal text-heavy
+ * content.
  */
 const MAX_HEADING_SCAN_SIBLINGS = 20;
 
