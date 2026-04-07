@@ -423,6 +423,28 @@ describe('buildDocx — tagline relocation', () => {
     const taglineCount = paragraphs.filter(t => /^tagline\s*:/i.test(t)).length;
     expect(taglineCount).toBe(1);
   });
+
+  it('relocates the tagline when the keywords paragraph uses the short "Keywords:" variant', async () => {
+    // Regression: applyTaglineRelocation previously hardcoded "metadata keywords:"
+    // and silently skipped documents that use the short "Keywords:" form instead.
+    const zip = await makeZip([
+      'Author: Jane Smith',
+      'Subject: Community Health',
+      'Keywords: health, CDC',
+      'Step 1: Review the Opportunity',
+      'Some body paragraph',
+      'Tagline: Improving health outcomes',
+    ]);
+
+    const xml = await getOutputDocXml(zip, [], [TAGLINE_AUTO_CHANGE]);
+    const paragraphs = extractParagraphTexts(xml);
+
+    const keywordsIdx = paragraphs.findIndex(t => /^keywords\s*:/i.test(t));
+    const taglineIdx = paragraphs.findIndex(t => /^tagline\s*:/i.test(t));
+
+    expect(keywordsIdx).toBeGreaterThanOrEqual(0);
+    expect(taglineIdx).toBe(keywordsIdx + 1);
+  });
 });
 
 // ─── LINK-006 link text fix: hyperlink attribute preservation ─────────────────

@@ -44,7 +44,7 @@ const META_001: Rule = {
       severity: 'warning',
       sectionId: 'section-preamble',
       description: 'The document Author field should follow the format: "Full OpDiv Name (ABBREVIATION)", e.g., "Administration for Children and Families (ACF)".',
-      suggestedFix: 'Update the Author field in Document Properties.',
+      suggestedFix: 'Replace the placeholder value after "Metadata author:" or "Author:" in the document with the correct author name.',
       inputRequired: {
         type: 'text',
         label: 'Document author',
