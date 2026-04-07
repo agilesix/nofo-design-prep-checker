@@ -100,6 +100,18 @@ const METADATA_FIELD_PATTERNS: Record<string, RegExp> = {
 };
 
 /**
+ * Returns true if paraText starts with any recognized field name variant for
+ * the given targetField, followed by a colon. Used everywhere the metadata
+ * block needs to be located (fixes, tagline relocation, etc.) so that both
+ * the long form ("Metadata keywords:") and the short form ("Keywords:") are
+ * recognized consistently.
+ */
+function matchesMetadataField(paraText: string, targetField: string): boolean {
+  const pattern = METADATA_FIELD_PATTERNS[targetField];
+  return pattern !== undefined && pattern.test(paraText.trim());
+}
+
+/**
  * Apply accepted metadata fixes to the visible body paragraphs in
  * word/document.xml.
  *
@@ -417,12 +429,13 @@ async function applyTaglineRelocation(zip: JSZip): Promise<void> {
     body.removeChild(el);
   }
 
-  // Find the "Metadata keywords:" paragraph to use as the insertion anchor.
+  // Find the keywords paragraph (matches both "Metadata keywords:" and "Keywords:")
+  // to use as the insertion anchor.
   const updatedChildren = bodyElements();
   const keywordsPara = updatedChildren.find(
     el =>
       el.localName === 'p' &&
-      getParaText(el).trim().toLowerCase().startsWith('metadata keywords:')
+      matchesMetadataField(getParaText(el), 'metadata.keywords')
   );
 
   if (!keywordsPara) return;

@@ -24,7 +24,7 @@ const META_003: Rule = {
       sectionId: 'section-preamble',
       description:
         'The document Keywords field should contain 8–10 specific terms or phrases drawn directly from the language of the NOFO, separated by commas. These should be fine-grained search terms, not high-level category words.',
-      suggestedFix: 'Update the Keywords field in Document Properties.',
+      suggestedFix: 'Replace the placeholder value after "Metadata keywords:" or "Keywords:" in the document with the correct keywords.',
       inputRequired: {
         type: 'textarea',
         label: 'Keywords',

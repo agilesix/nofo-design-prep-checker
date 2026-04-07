@@ -20,7 +20,7 @@ const META_002: Rule = {
       sectionId: 'section-preamble',
       description:
         'The document Subject field should follow the formula: "A notice of funding opportunity from the [Agency or OpDiv] [purpose of the NOFO]." It should be a broad, high-level statement of purpose in one line (~25 words or less).',
-      suggestedFix: 'Update the Subject field in Document Properties.',
+      suggestedFix: 'Replace the placeholder value after "Metadata subject:" or "Subject:" in the document with the correct subject.',
       inputRequired: {
         type: 'textarea',
         label: 'Document subject',
