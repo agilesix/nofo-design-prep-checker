@@ -3,13 +3,20 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
 /**
  * FORMAT-002: Date format correction (auto-apply)
  *
- * Scans paragraph text for dates that do not follow the SimplerNOFOs style
- * guide format of "Month D, YYYY" (e.g. "April 2, 2024"). Automatically
- * corrects dates in these non-standard formats:
+ * Scans text nodes in `doc.html` for dates that do not follow the
+ * SimplerNOFOs style guide format of "Month D, YYYY" (e.g. "April 2, 2024").
+ * Automatically corrects dates in these non-standard formats:
  *
- *  - MM/DD/YYYY (4-digit year required)  →  Month D, YYYY
- *  - Month DD, YYYY (leading-zero day)   →  Month D, YYYY  (e.g. "April 02, 2024" → "April 2, 2024")
- *  - YYYY-MM-DD                          →  Month D, YYYY
+ *  Numeric formats:
+ *   - MM/DD/YYYY (4-digit year required)      →  Month D, YYYY
+ *   - YYYY-MM-DD                              →  Month D, YYYY
+ *
+ *  Month-name formats (any combination of the following):
+ *   - Month DD, YYYY (leading-zero day)       →  Month D, YYYY  (e.g. "April 02, 2024")
+ *   - Month Dth, YYYY (ordinal suffix)        →  Month D, YYYY  (e.g. "April 16th, 2024")
+ *   - Month D YYYY (missing comma)            →  Month D, YYYY  (e.g. "April 16 2024")
+ *   - Abbr. D, YYYY (abbreviated month name) →  Month D, YYYY  (e.g. "Apr. 2, 2024")
+ *   - Abbr D, YYYY (no trailing period)      →  Month D, YYYY  (e.g. "Apr 2, 2024")
  *
  * Note: MM/DD/YY (2-digit year) is intentionally NOT corrected — there is no
  * reliable way to expand a 2-digit year without potentially introducing an
@@ -28,12 +35,50 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
  * Produces no entry in the auto-applied list when zero corrections are needed.
  */
 
-const MONTHS = [
+const MONTHS_FULL = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ] as const;
 
-const MONTH_PATTERN = MONTHS.join('|');
+// Standard abbreviations — Sept before Sep so the longer form is preferred in alternation.
+// May omitted: it is both abbreviation and full name and is already in MONTHS_FULL.
+const MONTHS_ABBR = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Jun', 'Jul', 'Aug', 'Sept', 'Sep', 'Oct', 'Nov', 'Dec',
+] as const;
+
+const FULL_MONTH_SET = new Set(MONTHS_FULL.map(m => m.toLowerCase()));
+
+// Full names first in alternation so they take priority over abbreviations.
+const MONTH_ALT = [...MONTHS_FULL, ...MONTHS_ABBR].join('|');
+
+/**
+ * Create a fresh regex for unified month-style date matching.
+ * Captures: (1) month name, (2) optional trailing period, (3) day digits (1–31),
+ * (4) optional ordinal suffix (st/nd/rd/th), (5) separator between day and year,
+ * (6) 4-digit year.
+ * A fresh instance is created each call to avoid stale lastIndex state.
+ */
+function makeMonthDateRegex(): RegExp {
+  return new RegExp(
+    `\\b(${MONTH_ALT})(\\.?)\\s+(0?[1-9]|[12]\\d|3[01])((?:st|nd|rd|th)?)(,\\s*|\\s+)(\\d{4})\\b`,
+    'g'
+  );
+}
+
+/**
+ * Returns true when a month-style date match is not in the canonical form
+ * "FullMonthName D, YYYY" (no abbreviation, no ordinal, no leading zero, has comma).
+ */
+function isNonStandardMonthDate(
+  month: string, day: string, ordinal: string, separator: string
+): boolean {
+  return (
+    !FULL_MONTH_SET.has(month.toLowerCase()) ||
+    ordinal !== '' ||
+    day.startsWith('0') ||
+    !separator.startsWith(',')
+  );
+}
 
 /**
  * Scan text for non-standard date formats and return the number of matches.
@@ -43,23 +88,19 @@ function countNonStandardDates(text: string): number {
   let count = 0;
 
   // Pattern A: YYYY-MM-DD
-  const patternA = /\b\d{4}-(?:0?[1-9]|1[0-2])-(?:0?[1-9]|[12]\d|3[01])\b/g;
-  const matchesA = text.match(patternA);
-  if (matchesA) count += matchesA.length;
+  count += (text.match(/\b\d{4}-(?:0?[1-9]|1[0-2])-(?:0?[1-9]|[12]\d|3[01])\b/g) ?? []).length;
 
   // Pattern B: MM/DD/YYYY (4-digit year only — 2-digit years are not corrected
   // because there is no reliable way to determine the correct century).
-  const patternB = /\b(?:0?[1-9]|1[0-2])\/(?:0?[1-9]|[12]\d|3[01])\/\d{4}\b/g;
-  const matchesB = text.match(patternB);
-  if (matchesB) count += matchesB.length;
+  count += (text.match(/\b(?:0?[1-9]|1[0-2])\/(?:0?[1-9]|[12]\d|3[01])\/\d{4}\b/g) ?? []).length;
 
-  // Pattern C: Month DD, YYYY with leading zero on day (01–09 only)
-  const patternC = new RegExp(
-    `\\b(?:${MONTH_PATTERN})\\s+0[1-9],\\s*\\d{4}\\b`,
-    'g'
-  );
-  const matchesC = text.match(patternC);
-  if (matchesC) count += matchesC.length;
+  // Pattern D: Month-style dates — count only non-canonical matches.
+  for (const match of text.matchAll(makeMonthDateRegex())) {
+    const [, month, , day, ordinal, separator] = match;
+    if (isNonStandardMonthDate(month!, day!, ordinal ?? '', separator ?? '')) {
+      count++;
+    }
+  }
 
   return count;
 }

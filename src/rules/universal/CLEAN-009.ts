@@ -6,9 +6,8 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
  * Detects the presence of tracked changes (w:ins, w:del, w:moveFrom, w:moveTo,
  * and formatting-change records) or comment annotations in the document's OOXML.
  *
- * When either is found, the downloaded output is silently cleaned across all
- * relevant XML parts (document.xml, footnotes.xml, endnotes.xml, headers,
- * and footers):
+ * When either is found, the downloaded output is silently cleaned across
+ * document.xml, footnotes.xml, endnotes.xml, and any header/footer parts:
  *   - Tracked insertions (w:ins, w:moveTo): wrapper removed, content kept
  *   - Tracked deletions (w:del, w:moveFrom): element and all content removed
  *   - Formatting change records (w:rPrChange, w:pPrChange, w:sectPrChange,
@@ -17,9 +16,12 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
  *   - word/comments.xml and word/commentsExtended.xml: removed from ZIP
  *   - Corresponding relationship entries: removed from word/_rels/document.xml.rels
  *
- * Detection is performed against the raw OOXML strings (documentXml,
- * footnotesXml, endnotesXml) because mammoth strips tracked changes and
- * comments during HTML conversion.
+ * Detection is performed against documentXml, footnotesXml, and endnotesXml
+ * because mammoth strips tracked changes and comments during HTML conversion.
+ * Header/footer parts are cleaned by the patch if the rule triggers, but they
+ * are not inspected during detection (ParsedDocument does not expose them).
+ * Tracked changes or comments that exist only in headers/footers and nowhere
+ * else in the document will therefore not trigger this rule.
  *
  * Produces no output when neither tracked changes nor comments are found.
  */

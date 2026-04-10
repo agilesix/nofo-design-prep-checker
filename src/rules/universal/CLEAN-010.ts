@@ -1,4 +1,5 @@
 import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from '../../types';
+import { groupListParagraphs } from '../../utils/listHelpers';
 
 /**
  * CLEAN-010: Add trailing periods to list items for consistency (auto-apply)
@@ -17,6 +18,10 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
  * Detection uses doc.documentXml (raw OOXML) because list structure is not
  * preserved in the mammoth-generated HTML.
  *
+ * List grouping uses the shared groupListParagraphs helper from
+ * src/utils/listHelpers.ts — the same helper used by the OOXML patch in
+ * buildDocx.ts — so detection and patching always apply the same grouping rules.
+ *
  * Produces no output when no list meets the conditions.
  */
 const CLEAN_010: Rule = {
@@ -30,7 +35,7 @@ const CLEAN_010: Rule = {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xml, 'application/xml');
 
-    const groups = groupListParagraphs(xmlDoc);
+    const groups = groupListParagraphs(Array.from(xmlDoc.getElementsByTagName('w:p')));
     let totalToFix = 0;
 
     for (const group of groups) {
@@ -53,43 +58,6 @@ const CLEAN_010: Rule = {
     ];
   },
 };
-
-/**
- * Group consecutive <w:p> elements that share the same w:numId value into
- * arrays. A non-list paragraph (or a change in numId) closes the current group.
- */
-function groupListParagraphs(xmlDoc: Document): Element[][] {
-  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
-  const groups: Element[][] = [];
-  let currentGroup: Element[] = [];
-  let currentNumId: string | null = null;
-
-  for (const para of paragraphs) {
-    const numId = getListNumId(para);
-    if (numId !== null && numId === currentNumId) {
-      currentGroup.push(para);
-    } else {
-      if (currentGroup.length > 0) groups.push(currentGroup);
-      currentGroup = numId !== null ? [para] : [];
-      currentNumId = numId;
-    }
-  }
-  if (currentGroup.length > 0) groups.push(currentGroup);
-
-  return groups;
-}
-
-/** Return the w:numId value for a list paragraph, or null if not a list item. */
-function getListNumId(para: Element): string | null {
-  const pPr = Array.from(para.children).find(c => c.localName === 'pPr');
-  if (!pPr) return null;
-  const numPr = Array.from(pPr.children).find(c => c.localName === 'numPr');
-  if (!numPr) return null;
-  const numIdEl = Array.from(numPr.children).find(c => c.localName === 'numId');
-  if (!numIdEl) return null;
-  const val = numIdEl.getAttribute('w:val') ?? '';
-  return !val || val === '0' ? null : val;
-}
 
 /** Concatenate text content of all w:t descendants of a paragraph. */
 function getItemText(para: Element): string {
