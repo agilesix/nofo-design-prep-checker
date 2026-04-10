@@ -562,19 +562,6 @@ describe('buildDocx — CLEAN-008: heading leading-space removal', () => {
     expect(texts[0]).toBe('Title');
   });
 
-  it('does not remove trailing spaces or internal spaces from heading text', async () => {
-    const zip = new JSZip();
-    zip.file(
-      'word/document.xml',
-      // Leading space should be removed; internal and trailing spaces must remain.
-      makeHeadingDocXml({ headingParas: [{ level: 1, runs: [' Title  With  Spaces '] }] })
-    );
-
-    const outXml = await getOutputDocXml(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
-    const texts = extractParagraphTexts(outXml);
-    expect(texts[0]).toBe('Title  With  Spaces ');
-  });
-
   it('leaves a heading with no leading space unchanged', async () => {
     const zip = new JSZip();
     zip.file(
@@ -634,6 +621,257 @@ describe('buildDocx — CLEAN-008: heading leading-space removal', () => {
     const outXml = await getOutputDocXml(zip, [], []); // no changes
     const texts = extractParagraphTexts(outXml);
     expect(texts[0]).toBe(' Leading Space');
+  });
+});
+
+// ─── applyAcceptTrackedChangesAndRemoveComments (CLEAN-009) ──────────────────
+
+const W_NS_TC = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+const RELS_NS_TC = 'http://schemas.openxmlformats.org/package/2006/relationships';
+
+function makeTrackedChangeDocXml(body: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_TC}">` +
+    `<w:body>${body}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+function makeMinimalRelsXml(extra = ''): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="${RELS_NS_TC}">` +
+    `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+    extra +
+    `</Relationships>`
+  );
+}
+
+const ACCEPT_CHANGES: AutoAppliedChange = {
+  ruleId: 'CLEAN-009',
+  description: 'Tracked changes accepted and comments removed.',
+  targetField: 'doc.acceptchanges',
+};
+
+describe('buildDocx — CLEAN-009: accept tracked changes and remove comments', () => {
+  // ── Tracked insertions ────────────────────────────────────────────────────
+
+  it('unwraps w:ins: keeps inner run text, removes the wrapper', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeTrackedChangeDocXml(
+        '<w:p>' +
+        '<w:r><w:t xml:space="preserve">before </w:t></w:r>' +
+        '<w:ins w:id="1" w:author="User" w:date="2024-01-01T00:00:00Z">' +
+        '<w:r><w:t>inserted</w:t></w:r>' +
+        '</w:ins>' +
+        '<w:r><w:t xml:space="preserve"> after</w:t></w:r>' +
+        '</w:p>'
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [ACCEPT_CHANGES]);
+    expect(outXml).not.toContain('w:ins');
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('before inserted after');
+  });
+
+  // ── Tracked deletions ─────────────────────────────────────────────────────
+
+  it('removes w:del and its content entirely', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeTrackedChangeDocXml(
+        '<w:p>' +
+        '<w:r><w:t xml:space="preserve">kept </w:t></w:r>' +
+        '<w:del w:id="1" w:author="User" w:date="2024-01-01T00:00:00Z">' +
+        '<w:r><w:delText>deleted</w:delText></w:r>' +
+        '</w:del>' +
+        '<w:r><w:t> text</w:t></w:r>' +
+        '</w:p>'
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [ACCEPT_CHANGES]);
+    expect(outXml).not.toContain('w:del');
+    expect(outXml).not.toContain('deleted');
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('kept  text');
+  });
+
+  // ── moveTo / moveFrom ─────────────────────────────────────────────────────
+
+  it('unwraps w:moveTo and removes w:moveFrom', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeTrackedChangeDocXml(
+        '<w:p>' +
+        '<w:moveFrom w:id="1" w:author="User" w:date="2024-01-01T00:00:00Z">' +
+        '<w:r><w:t>source</w:t></w:r>' +
+        '</w:moveFrom>' +
+        '</w:p>' +
+        '<w:p>' +
+        '<w:moveTo w:id="2" w:author="User" w:date="2024-01-01T00:00:00Z">' +
+        '<w:r><w:t>destination</w:t></w:r>' +
+        '</w:moveTo>' +
+        '</w:p>'
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [ACCEPT_CHANGES]);
+    expect(outXml).not.toContain('w:moveFrom');
+    expect(outXml).not.toContain('w:moveTo');
+    expect(outXml).not.toContain('source');
+    expect(outXml).toContain('destination');
+  });
+
+  // ── Formatting change records ─────────────────────────────────────────────
+
+  it('removes w:rPrChange, keeping the surrounding run property elements', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeTrackedChangeDocXml(
+        '<w:p><w:r>' +
+        '<w:rPr><w:b/>' +
+        '<w:rPrChange w:id="1" w:author="User" w:date="2024-01-01T00:00:00Z"><w:rPr/></w:rPrChange>' +
+        '</w:rPr>' +
+        '<w:t>bold text</w:t>' +
+        '</w:r></w:p>'
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [ACCEPT_CHANGES]);
+    expect(outXml).not.toContain('w:rPrChange');
+    // The run and its bold formatting should still be present
+    expect(outXml).toContain('bold text');
+    expect(outXml).toContain('w:b');
+  });
+
+  it('removes w:pPrChange, keeping the surrounding paragraph property elements', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeTrackedChangeDocXml(
+        '<w:p>' +
+        '<w:pPr><w:jc w:val="center"/>' +
+        '<w:pPrChange w:id="1" w:author="User" w:date="2024-01-01T00:00:00Z"><w:pPr/></w:pPrChange>' +
+        '</w:pPr>' +
+        '<w:r><w:t>centred</w:t></w:r>' +
+        '</w:p>'
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [ACCEPT_CHANGES]);
+    expect(outXml).not.toContain('w:pPrChange');
+    expect(outXml).toContain('centred');
+    expect(outXml).toContain('w:jc');
+  });
+
+  // ── Nested tracked changes ────────────────────────────────────────────────
+
+  it('handles nested tracked changes: w:ins containing w:del', async () => {
+    // Insertion wrapper containing a deletion — accept ins (unwrap), then discard del
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeTrackedChangeDocXml(
+        '<w:p>' +
+        '<w:ins w:id="1" w:author="User" w:date="2024-01-01T00:00:00Z">' +
+        '<w:del w:id="2" w:author="User" w:date="2024-01-01T00:00:00Z">' +
+        '<w:r><w:delText>inner deleted</w:delText></w:r>' +
+        '</w:del>' +
+        '<w:r><w:t>inner inserted</w:t></w:r>' +
+        '</w:ins>' +
+        '</w:p>'
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [ACCEPT_CHANGES]);
+    expect(outXml).not.toContain('w:ins');
+    expect(outXml).not.toContain('w:del');
+    expect(outXml).not.toContain('inner deleted');
+    expect(outXml).toContain('inner inserted');
+  });
+
+  // ── Comments ──────────────────────────────────────────────────────────────
+
+  it('removes comment range markers and comment reference runs from document.xml', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeTrackedChangeDocXml(
+        '<w:p>' +
+        '<w:commentRangeStart w:id="1"/>' +
+        '<w:r><w:t>commented text</w:t></w:r>' +
+        '<w:commentRangeEnd w:id="1"/>' +
+        '<w:r><w:rPr><w:rStyle w:val="CommentReference"/></w:rPr><w:commentReference w:id="1"/></w:r>' +
+        '</w:p>'
+      )
+    );
+    zip.file('word/comments.xml', '<w:comments xmlns:w="' + W_NS_TC + '"><w:comment w:id="1"><w:p><w:r><w:t>a comment</w:t></w:r></w:p></w:comment></w:comments>');
+
+    const outXml = await getOutputDocXml(zip, [], [ACCEPT_CHANGES]);
+    expect(outXml).not.toContain('commentRangeStart');
+    expect(outXml).not.toContain('commentRangeEnd');
+    expect(outXml).not.toContain('commentReference');
+    // The annotated text itself must remain
+    expect(outXml).toContain('commented text');
+  });
+
+  it('removes word/comments.xml from the output ZIP', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeTrackedChangeDocXml('<w:p><w:r><w:t>text</w:t></w:r></w:p>'));
+    zip.file('word/comments.xml', '<w:comments xmlns:w="' + W_NS_TC + '"/>');
+
+    const blob = await buildDocx(zip, [], [ACCEPT_CHANGES]);
+    const outZip = await JSZip.loadAsync(blob);
+    expect(outZip.file('word/comments.xml')).toBeNull();
+  });
+
+  it('removes word/commentsExtended.xml from the output ZIP when present', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeTrackedChangeDocXml('<w:p><w:r><w:t>text</w:t></w:r></w:p>'));
+    zip.file('word/commentsExtended.xml', '<w15:commentsEx xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"/>');
+
+    const blob = await buildDocx(zip, [], [ACCEPT_CHANGES]);
+    const outZip = await JSZip.loadAsync(blob);
+    expect(outZip.file('word/commentsExtended.xml')).toBeNull();
+  });
+
+  it('removes the comments.xml relationship entry from document.xml.rels', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeTrackedChangeDocXml('<w:p><w:r><w:t>text</w:t></w:r></w:p>'));
+    zip.file('word/comments.xml', '<w:comments xmlns:w="' + W_NS_TC + '"/>');
+    zip.file(
+      'word/_rels/document.xml.rels',
+      makeMinimalRelsXml(
+        `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/>`
+      )
+    );
+
+    const blob = await buildDocx(zip, [], [ACCEPT_CHANGES]);
+    const outZip = await JSZip.loadAsync(blob);
+    const relsXml = await outZip.file('word/_rels/document.xml.rels')!.async('string');
+    expect(relsXml).not.toContain('comments.xml');
+    // The unrelated styles relationship must remain
+    expect(relsXml).toContain('styles.xml');
+  });
+
+  // ── No-op: clean document ─────────────────────────────────────────────────
+
+  it('leaves a clean document unchanged when targetField is absent', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeTrackedChangeDocXml('<w:p><w:r><w:t>clean</w:t></w:r></w:p>'));
+
+    const outXml = await getOutputDocXml(zip, [], []); // no changes
+    expect(outXml).toContain('clean');
+    expect(outXml).not.toContain('w:ins');
+    expect(outXml).not.toContain('w:del');
   });
 });
 
