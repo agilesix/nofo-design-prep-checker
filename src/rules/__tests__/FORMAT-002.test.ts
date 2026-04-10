@@ -17,7 +17,7 @@ function makeDoc(html: string): ParsedDocument {
 }
 
 const OPTIONS = { contentGuideId: null } as const;
-const HRSA_OPTIONS = { contentGuideId: 'hrsa-nofo' } as const;
+const HRSA_OPTIONS = { contentGuideId: 'hrsa-bhw' } as const;
 
 // ─── Detection: numeric formats ───────────────────────────────────────────────
 

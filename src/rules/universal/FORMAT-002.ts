@@ -46,16 +46,6 @@ const MONTHS_ABBR = [
   'Jan', 'Feb', 'Mar', 'Apr', 'Jun', 'Jul', 'Aug', 'Sept', 'Sep', 'Oct', 'Nov', 'Dec',
 ] as const;
 
-/** Map of lowercase month name or standard abbreviation → proper-cased full month name. */
-const MONTH_NAME_MAP: Record<string, string> = {
-  january: 'January', february: 'February', march: 'March', april: 'April',
-  may: 'May', june: 'June', july: 'July', august: 'August',
-  september: 'September', october: 'October', november: 'November', december: 'December',
-  jan: 'January', feb: 'February', mar: 'March', apr: 'April',
-  jun: 'June', jul: 'July', aug: 'August', sep: 'September', sept: 'September',
-  oct: 'October', nov: 'November', dec: 'December',
-};
-
 const FULL_MONTH_SET = new Set(MONTHS_FULL.map(m => m.toLowerCase()));
 
 // Full names first in alternation so they take priority over abbreviations.
