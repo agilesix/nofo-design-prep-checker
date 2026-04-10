@@ -886,6 +886,177 @@ describe('buildDocx — CLEAN-009: accept tracked changes and remove comments', 
   });
 });
 
+// ─── applyListPeriodFix (CLEAN-010) ──────────────────────────────────────────
+
+const W_NS_LIST = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function makeListDocXml(groups: Array<{ numId: string; items: string[] }>): string {
+  const paras = groups
+    .flatMap(({ numId, items }) =>
+      items.map(
+        text =>
+          `<w:p>` +
+          `<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="${numId}"/></w:numPr></w:pPr>` +
+          `<w:r><w:t>${text}</w:t></w:r>` +
+          `</w:p>`
+      )
+    )
+    .join('');
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_LIST}">` +
+    `<w:body>${paras}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+const LIST_PERIOD_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-010',
+  description: 'Missing periods added to 2 list items for consistency.',
+  targetField: 'list.periodfix',
+};
+
+describe('buildDocx — CLEAN-010: list period normalization', () => {
+  it('adds a period to items missing one when the list has at least one period', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeListDocXml([{ numId: '1', items: ['Item 1.', 'Item 2', 'Item 3.', 'Item 4'] }])
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [LIST_PERIOD_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Item 1.');
+    expect(texts[1]).toBe('Item 2.');
+    expect(texts[2]).toBe('Item 3.');
+    expect(texts[3]).toBe('Item 4.');
+  });
+
+  it('leaves all items unchanged when every item already ends with a period', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeListDocXml([{ numId: '1', items: ['Item 1.', 'Item 2.', 'Item 3.'] }])
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [LIST_PERIOD_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Item 1.');
+    expect(texts[1]).toBe('Item 2.');
+    expect(texts[2]).toBe('Item 3.');
+  });
+
+  it('leaves all items unchanged when no items end with a period', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeListDocXml([{ numId: '1', items: ['Item 1', 'Item 2', 'Item 3'] }])
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [LIST_PERIOD_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Item 1');
+    expect(texts[1]).toBe('Item 2');
+    expect(texts[2]).toBe('Item 3');
+  });
+
+  it('does not modify a list with fewer than 3 items', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeListDocXml([{ numId: '1', items: ['Item 1.', 'Item 2'] }])
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [LIST_PERIOD_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Item 1.');
+    expect(texts[1]).toBe('Item 2'); // unchanged — list has only 2 items
+  });
+
+  it('only modifies the qualifying list when two lists are present', async () => {
+    // List 1 (numId=1, 3 items, no periods) → should NOT be modified
+    // List 2 (numId=2, 3 items, 1 has period) → items 2 and 3 should get periods
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      (() => {
+        const list1Paras = ['Alpha', 'Beta', 'Gamma']
+          .map(
+            t =>
+              `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>` +
+              `<w:r><w:t>${t}</w:t></w:r></w:p>`
+          )
+          .join('');
+        const bodyPara = `<w:p><w:r><w:t>A paragraph between the lists.</w:t></w:r></w:p>`;
+        const list2Paras = ['X.', 'Y', 'Z']
+          .map(
+            t =>
+              `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr></w:pPr>` +
+              `<w:r><w:t>${t}</w:t></w:r></w:p>`
+          )
+          .join('');
+        return (
+          `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+          `<w:document xmlns:w="${W_NS_LIST}">` +
+          `<w:body>${list1Paras}${bodyPara}${list2Paras}<w:sectPr/></w:body>` +
+          `</w:document>`
+        );
+      })()
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [LIST_PERIOD_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    // List 1: no periods in any item → untouched
+    expect(texts[0]).toBe('Alpha');
+    expect(texts[1]).toBe('Beta');
+    expect(texts[2]).toBe('Gamma');
+    // Body paragraph: untouched
+    expect(texts[3]).toBe('A paragraph between the lists.');
+    // List 2: X. already has period; Y and Z get periods
+    expect(texts[4]).toBe('X.');
+    expect(texts[5]).toBe('Y.');
+    expect(texts[6]).toBe('Z.');
+  });
+
+  it('appends period to the last non-empty run in a multi-run list item', async () => {
+    // Item text split across two runs: "Item" + " 2" — period goes after "2"
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_LIST}">` +
+      `<w:body>` +
+      `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>` +
+      `<w:r><w:t>Item 1.</w:t></w:r></w:p>` +
+      `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>` +
+      `<w:r><w:t xml:space="preserve">Item </w:t></w:r><w:r><w:t>2</w:t></w:r></w:p>` +
+      `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>` +
+      `<w:r><w:t>Item 3.</w:t></w:r></w:p>` +
+      `<w:sectPr/></w:body></w:document>`
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [LIST_PERIOD_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Item 1.');
+    expect(texts[1]).toBe('Item 2.');  // period appended to the "2" run
+    expect(texts[2]).toBe('Item 3.');
+  });
+
+  it('does not modify the document when targetField is absent', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeListDocXml([{ numId: '1', items: ['Item 1.', 'Item 2', 'Item 3'] }])
+    );
+
+    const outXml = await getOutputDocXml(zip, [], []); // no changes
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Item 1.');
+    expect(texts[1]).toBe('Item 2');  // unchanged
+    expect(texts[2]).toBe('Item 3');  // unchanged
+  });
+});
+
 // ─── LINK-006 link text fix: hyperlink attribute preservation ─────────────────
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
