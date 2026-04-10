@@ -588,7 +588,7 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
     if (allWTs.length === 0) continue;
 
     // Only process paragraphs whose full text starts with a space
-    const paraText = allWTs.map(t => t.textContent ?? '').join('');
+    const paraText = getParaText(wP);
     if (paraText.length === 0 || paraText[0] !== ' ') continue;
 
     // Walk <w:t> nodes from the front, stripping leading spaces until we hit
