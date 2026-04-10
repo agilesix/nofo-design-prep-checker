@@ -254,7 +254,13 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
 
   if (keywords.length === 0) return null;
 
-  const unique = [...new Set(keywords.map(k => k.trim()).filter(Boolean))].slice(0, 10);
+  const unique = [
+    ...new Set(
+      keywords
+        .map(k => k.trim().replace(/,+$/, '').trim())
+        .filter(Boolean)
+    ),
+  ].slice(0, 10);
   return unique.join(', ');
 }
 
