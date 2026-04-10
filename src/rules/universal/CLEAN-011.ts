@@ -94,7 +94,7 @@ function getHeadingLevel(styleVal: string): number | null {
  * trimmed text matches /application\s+checklist/i and ends when another
  * heading at the same or higher level is encountered.
  */
-export function findChecklistTables(xmlDoc: Document): Element[] {
+function findChecklistTables(xmlDoc: Document): Element[] {
   const body = xmlDoc.getElementsByTagName('w:body')[0];
   if (!body) return [];
 
