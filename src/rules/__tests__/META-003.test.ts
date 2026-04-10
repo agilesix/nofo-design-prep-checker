@@ -159,7 +159,8 @@ describe('META-003: prefill value never contains double commas or trailing comma
     };
 
     const issues = META_003.check(docWithRaw, OPTIONS);
-    const prefill = (issues[0] as Issue | undefined)?.inputRequired?.prefill ?? '';
+    expect(issues).toHaveLength(1);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
     expect(prefill).not.toMatch(/,\s*$/);
     expect(prefill).not.toMatch(/,,/);
   });
