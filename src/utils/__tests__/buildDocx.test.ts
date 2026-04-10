@@ -447,6 +447,196 @@ describe('buildDocx — tagline relocation', () => {
   });
 });
 
+// ─── applyHeadingLeadingSpaceFix (CLEAN-008) ─────────────────────────────────
+
+const W_NS_HEADING = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+/**
+ * Build a minimal word/document.xml containing a mix of heading and body
+ * paragraphs for CLEAN-008 testing.
+ *
+ * headingParas: array of { level, runs } where runs is an array of text strings
+ *   that become separate <w:r><w:t> nodes within a single paragraph.
+ * bodyParas: array of plain text strings that become unstyled body paragraphs.
+ *
+ * Heading paragraphs get <w:pPr><w:pStyle w:val="HeadingN"/></w:pPr> so that
+ * isHeadingParagraph() in buildDocx.ts recognises them.
+ *
+ * Text runs whose content starts with a space get xml:space="preserve" so that
+ * the space is not collapsed by XML parsers before we even inspect it.
+ */
+function makeHeadingDocXml(opts: {
+  headingParas?: Array<{ level: number; runs: string[] }>;
+  bodyParas?: string[];
+}): string {
+  const headings = (opts.headingParas ?? []).map(({ level, runs }) => {
+    const wRuns = runs
+      .map(text => {
+        const preserve = text !== text.trimStart() || text !== text.trimEnd()
+          ? ' xml:space="preserve"'
+          : '';
+        return `<w:r><w:t${preserve}>${text}</w:t></w:r>`;
+      })
+      .join('');
+    return (
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading${level}"/></w:pPr>` +
+      wRuns +
+      `</w:p>`
+    );
+  });
+
+  const bodies = (opts.bodyParas ?? []).map(text => {
+    const preserve = text !== text.trimStart() || text !== text.trimEnd()
+      ? ' xml:space="preserve"'
+      : '';
+    return `<w:p><w:r><w:t${preserve}>${text}</w:t></w:r></w:p>`;
+  });
+
+  const allParagraphs = [...headings, ...bodies].join('');
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_HEADING}">` +
+    `<w:body>${allParagraphs}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+const HEADING_LEADING_SPACE_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-008',
+  description: 'Leading spaces removed from 1 heading.',
+  targetField: 'heading.leadingspace',
+};
+
+describe('buildDocx — CLEAN-008: heading leading-space removal', () => {
+  it('removes a single leading space from a single-run heading', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingDocXml({ headingParas: [{ level: 1, runs: [' Introduction'] }] })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Introduction');
+  });
+
+  it('removes multiple leading spaces from a single-run heading', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingDocXml({ headingParas: [{ level: 2, runs: ['   Section Title'] }] })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Section Title');
+  });
+
+  it('handles the multi-run edge case: first run is entirely spaces, content in second run', async () => {
+    // Word sometimes splits a heading into multiple runs — e.g. a leading-space
+    // run followed by a run with the actual heading text.
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingDocXml({ headingParas: [{ level: 1, runs: ['   ', 'Introduction'] }] })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    // The combined text of all <w:t> nodes in the paragraph must have no
+    // leading spaces regardless of which run(s) originally contained them.
+    expect(texts[0]).toBe('Introduction');
+  });
+
+  it('handles the multi-run edge case: leading spaces span across two runs', async () => {
+    // Spaces split across run boundary: run 1 = "  ", run 2 = "  Title"
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingDocXml({ headingParas: [{ level: 2, runs: ['  ', '  Title'] }] })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Title');
+  });
+
+  it('does not remove trailing spaces or internal spaces from heading text', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      // Leading space should be removed; internal and trailing spaces must remain.
+      makeHeadingDocXml({ headingParas: [{ level: 1, runs: [' Title  With  Spaces '] }] })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Title  With  Spaces ');
+  });
+
+  it('leaves a heading with no leading space unchanged', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingDocXml({ headingParas: [{ level: 1, runs: ['Clean Heading'] }] })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Clean Heading');
+  });
+
+  it('does not modify body paragraphs that have leading spaces', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingDocXml({
+        headingParas: [{ level: 1, runs: ['Clean Heading'] }],
+        bodyParas: [' Body paragraph with leading space'],
+      })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    // Body paragraph (index 1) must retain its leading space
+    expect(texts[1]).toBe(' Body paragraph with leading space');
+  });
+
+  it('applies fix to multiple headings in the same document', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingDocXml({
+        headingParas: [
+          { level: 1, runs: [' First Heading'] },
+          { level: 2, runs: ['Clean Heading'] },
+          { level: 2, runs: [' Third Heading'] },
+        ],
+      })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('First Heading');
+    expect(texts[1]).toBe('Clean Heading');
+    expect(texts[2]).toBe('Third Heading');
+  });
+
+  it('does not call the patch when targetField is absent from autoAppliedChanges', async () => {
+    // If no CLEAN-008 change is in the list, the document must be unmodified.
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingDocXml({ headingParas: [{ level: 1, runs: [' Leading Space'] }] })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], []); // no changes
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe(' Leading Space');
+  });
+});
+
 // ─── LINK-006 link text fix: hyperlink attribute preservation ─────────────────
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
