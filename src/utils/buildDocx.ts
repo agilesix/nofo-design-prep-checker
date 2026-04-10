@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import type { AcceptedFix, AutoAppliedChange } from '../types';
 import { DGHT_STEP1_ANCHOR } from '../rules/opdiv/CLEAN-007-constants';
+import { groupListParagraphs } from './listHelpers';
 
 export async function buildDocx(
   originalArchive: JSZip,
@@ -44,6 +45,9 @@ export async function buildDocx(
   );
   const hasListPeriodFix = autoAppliedChanges.some(
     c => c.targetField === 'list.periodfix'
+  );
+  const hasChecklistFix = autoAppliedChanges.some(
+    c => c.targetField === 'checklist.checkbox'
   );
 
   // Apply metadata patches
@@ -101,6 +105,11 @@ export async function buildDocx(
   // Add trailing periods to list items for consistency
   if (hasListPeriodFix) {
     await applyListPeriodFix(zip);
+  }
+
+  // Normalize application checklist checkboxes
+  if (hasChecklistFix) {
+    await applyChecklistCheckboxFix(zip);
   }
 
   return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
@@ -646,27 +655,42 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
 
 // ─── FORMAT-002: Date format corrections ─────────────────────────────────────
 
-const DATE_MONTHS = [
+const DATE_MONTHS_FULL = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ] as const;
 
-const DATE_MONTH_PATTERN = DATE_MONTHS.join('|');
+// Standard abbreviations — Sept before Sep so the longer form is preferred in alternation.
+const DATE_MONTHS_ABBR = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Jun', 'Jul', 'Aug', 'Sept', 'Sep', 'Oct', 'Nov', 'Dec',
+] as const;
+
+const DATE_MONTH_NAME_MAP: Record<string, string> = {
+  january: 'January', february: 'February', march: 'March', april: 'April',
+  may: 'May', june: 'June', july: 'July', august: 'August',
+  september: 'September', october: 'October', november: 'November', december: 'December',
+  jan: 'January', feb: 'February', mar: 'March', apr: 'April',
+  jun: 'June', jul: 'July', aug: 'August', sep: 'September', sept: 'September',
+  oct: 'October', nov: 'November', dec: 'December',
+};
+
+const DATE_MONTH_ALT = [...DATE_MONTHS_FULL, ...DATE_MONTHS_ABBR].join('|');
 
 /**
  * Reformat non-standard dates within a single text string.
  * Returns the corrected string (unchanged if no non-standard dates found).
  *
  * Patterns corrected:
- *  A. YYYY-MM-DD                              →  Month D, YYYY
- *  B. MM/DD/YYYY (4-digit year only)          →  Month D, YYYY
- *  C. Month DD, YYYY (leading-zero day 01–09) →  Month D, YYYY
+ *  A. YYYY-MM-DD                                           →  Month D, YYYY
+ *  B. MM/DD/YYYY (4-digit year only)                      →  Month D, YYYY
+ *  D. Month-style dates (any combination of the below)    →  Month D, YYYY
+ *       - abbreviated month (Jan, Jan., etc.)
+ *       - ordinal day suffix (1st, 2nd, 3rd, 16th, etc.)
+ *       - leading-zero day (01–09)
+ *       - missing comma between day and year
  *
  * MM/DD/YY (2-digit year) is intentionally not corrected — there is no
  * reliable way to determine the correct century.
- *
- * Day names preceding the date (e.g. "Monday, ") are preserved because the
- * regexes match only the date portion.
  */
 function applyDateFormatsToText(text: string): string {
   let result = text;
@@ -675,7 +699,7 @@ function applyDateFormatsToText(text: string): string {
   result = result.replace(
     /\b(\d{4})-(0?[1-9]|1[0-2])-(0?[1-9]|[12]\d|3[01])\b/g,
     (_match, year, month, day) => {
-      const monthName = DATE_MONTHS[parseInt(month, 10) - 1] ?? month;
+      const monthName = DATE_MONTHS_FULL[parseInt(month, 10) - 1] ?? month;
       return `${monthName} ${parseInt(day, 10)}, ${year}`;
     }
   );
@@ -685,24 +709,31 @@ function applyDateFormatsToText(text: string): string {
   result = result.replace(
     /\b(0?[1-9]|1[0-2])\/(0?[1-9]|[12]\d|3[01])\/(\d{4})\b/g,
     (_match, month, day, year) => {
-      const monthName = DATE_MONTHS[parseInt(month, 10) - 1] ?? month;
-      return `${monthName} ${parseInt(day, 10)}, ${parseInt(year, 10)}`;
+      const monthName = DATE_MONTHS_FULL[parseInt(month, 10) - 1] ?? month;
+      return `${monthName} ${parseInt(day, 10)}, ${year}`;
     }
   );
 
-  // Pattern C: Month DD, YYYY with leading-zero day (01–09 only)
+  // Pattern D: Month-style dates — handles abbreviated names, ordinal suffixes,
+  // leading-zero days, and missing commas in a single unified pass.
   result = result.replace(
-    new RegExp(`\\b(${DATE_MONTH_PATTERN})\\s+(0[1-9]),\\s*(\\d{4})\\b`, 'g'),
-    (_match, monthName, day, year) => `${monthName} ${parseInt(day, 10)}, ${year}`
+    new RegExp(
+      `\\b(${DATE_MONTH_ALT})(\\.?)\\s+(0?[1-9]|[12]\\d|3[01])((?:st|nd|rd|th)?)(,?)\\s+(\\d{4})\\b`,
+      'g'
+    ),
+    (_match, month, _abbPeriod, day, _ordinal, _comma, year) => {
+      const fullMonth = DATE_MONTH_NAME_MAP[month.toLowerCase()] ?? month;
+      return `${fullMonth} ${parseInt(day, 10)}, ${year}`;
+    }
   );
 
   return result;
 }
 
 /**
- * Scan all <w:t> elements in body paragraphs and reformat any non-standard
- * dates in their text content. Excludes headings and code/preformatted
- * paragraphs via isExcludedParagraph().
+ * Scan all <w:t> elements in body paragraphs and table cells, and reformat
+ * any non-standard dates in their text content. Excludes headings and
+ * code/preformatted paragraphs via isExcludedParagraph().
  */
 async function applyDateFormatCorrections(zip: JSZip): Promise<void> {
   const docFile = zip.file('word/document.xml');
@@ -719,12 +750,10 @@ async function applyDateFormatCorrections(zip: JSZip): Promise<void> {
     const text = wT.textContent ?? '';
     if (!text) continue;
 
-    // Skip heading paragraphs and table cells (mirrors CLEAN-004 exclusion logic).
+    // Skip heading and code/preformatted paragraphs.
     const wP = findAncestorByLocalName(wT, 'p');
     if (wP && isExcludedParagraph(wP)) continue;
 
-    const wTc = findAncestorByLocalName(wT, 'tc');
-    if (wTc) continue;
     const corrected = applyDateFormatsToText(text);
     if (corrected !== text) {
       wT.textContent = corrected;
@@ -943,9 +972,11 @@ function applyTrackedChangesAndCommentsToXmlDoc(xmlDoc: Document): boolean {
 
 /**
  * Accept all tracked changes and remove all comment annotations from the
- * cloned DOCX archive. Processes all XML parts that may contain tracked-change
- * or comment markup: document.xml, footnotes.xml, endnotes.xml, and all header
- * and footer parts.
+ * cloned DOCX archive. Processes document.xml, footnotes.xml, endnotes.xml,
+ * and any header/footer parts found in the ZIP. Note: the rule (CLEAN-009)
+ * only detects tracked changes in document.xml, footnotes.xml, and
+ * endnotes.xml — changes that exist exclusively in headers/footers will still
+ * be cleaned here if the rule triggered on any other part.
  *
  * ZIP-level cleanup:
  *   word/comments.xml           → removed if present
@@ -1035,7 +1066,7 @@ async function applyListPeriodFix(zip: JSZip): Promise<void> {
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
 
   const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
-  const groups = buildListGroups(paragraphs);
+  const groups = groupListParagraphs(paragraphs);
   let changed = false;
 
   for (const group of groups) {
@@ -1073,37 +1104,132 @@ async function applyListPeriodFix(zip: JSZip): Promise<void> {
   }
 }
 
-/**
- * Group consecutive <w:p> elements sharing the same w:numId value into arrays.
- * A non-list paragraph (or a change in numId) closes the current group.
- */
-function buildListGroups(paragraphs: Element[]): Element[][] {
-  const groups: Element[][] = [];
-  let currentGroup: Element[] = [];
-  let currentNumId: string | null = null;
+// ─── CLEAN-011: Application checklist checkbox normalization ──────────────────
 
-  for (const para of paragraphs) {
-    const numId = getListParagraphNumId(para);
-    if (numId !== null && numId === currentNumId) {
-      currentGroup.push(para);
-    } else {
-      if (currentGroup.length > 0) groups.push(currentGroup);
-      currentGroup = numId !== null ? [para] : [];
-      currentNumId = numId;
-    }
+const CHECKLIST_TARGET_GLYPH = '◻'; // U+25FB WHITE MEDIUM SQUARE
+const CHECKLIST_ALWAYS_REPLACE = new Set(['☐', '☑', '☒', '□', '•']);
+const CHECKLIST_REPLACE_IF_SPACE = new Set(['o', 'O']);
+
+function checklistNeedsGlyphFix(text: string): boolean {
+  const trimmed = text.trimStart();
+  if (!trimmed) return false;
+  const first = trimmed[0]!;
+  if (first === CHECKLIST_TARGET_GLYPH) return false;
+  if (CHECKLIST_ALWAYS_REPLACE.has(first)) return true;
+  if (trimmed.length >= 2 && trimmed[1] === ' ') {
+    if (CHECKLIST_REPLACE_IF_SPACE.has(first)) return true;
+    if (!/[a-zA-Z0-9]/.test(first)) return true;
   }
-  if (currentGroup.length > 0) groups.push(currentGroup);
-
-  return groups;
+  return false;
 }
 
-function getListParagraphNumId(para: Element): string | null {
+function checklistIsListStyle(styleVal: string): boolean {
+  return /list|bullet/i.test(styleVal);
+}
+
+function checklistGetPStyle(para: Element): string {
   const pPr = Array.from(para.children).find(c => c.localName === 'pPr');
-  if (!pPr) return null;
-  const numPr = Array.from(pPr.children).find(c => c.localName === 'numPr');
-  if (!numPr) return null;
-  const numIdEl = Array.from(numPr.children).find(c => c.localName === 'numId');
-  if (!numIdEl) return null;
-  const val = numIdEl.getAttribute('w:val') ?? '';
-  return !val || val === '0' ? null : val;
+  if (!pPr) return '';
+  const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+  return pStyle?.getAttribute('w:val') ?? '';
+}
+
+function checklistGetParaText(para: Element): string {
+  return Array.from(para.getElementsByTagName('w:t'))
+    .map(t => t.textContent ?? '')
+    .join('');
+}
+
+function checklistGetHeadingLevel(styleVal: string): number | null {
+  const match = styleVal.match(/^Heading(\d)/);
+  return match ? parseInt(match[1]!, 10) : null;
+}
+
+function checklistFindTables(xmlDoc: Document): Element[] {
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return [];
+
+  const tables: Element[] = [];
+  let inChecklist = false;
+  let checklistLevel = 0;
+
+  for (const child of Array.from(body.children)) {
+    if (child.localName === 'p') {
+      const styleVal = checklistGetPStyle(child);
+      const level = checklistGetHeadingLevel(styleVal);
+      if (level !== null) {
+        if (inChecklist && level <= checklistLevel) {
+          inChecklist = false;
+        }
+        const text = checklistGetParaText(child).trim();
+        if ((level === 2 || level === 3) && /application\s+checklist/i.test(text)) {
+          inChecklist = true;
+          checklistLevel = level;
+        }
+      }
+    } else if (child.localName === 'tbl' && inChecklist) {
+      tables.push(child);
+    }
+  }
+
+  return tables;
+}
+
+/**
+ * Normalize application checklist checkbox glyphs and remove list paragraph
+ * styles from first-column cells of tables within the Application checklist
+ * section.
+ */
+async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const tables = checklistFindTables(xmlDoc);
+  let changed = false;
+
+  for (const table of tables) {
+    for (const row of Array.from(table.children).filter(c => c.localName === 'tr')) {
+      const firstCell = Array.from(row.children).find(c => c.localName === 'tc');
+      if (!firstCell) continue;
+      const firstPara = Array.from(firstCell.children).find(c => c.localName === 'p');
+      if (!firstPara) continue;
+
+      // Fix 1: Glyph correction — replace the first non-whitespace character
+      const cellText = checklistGetParaText(firstPara);
+      if (checklistNeedsGlyphFix(cellText)) {
+        const wTs = Array.from(firstPara.getElementsByTagName('w:t'));
+        for (const wT of wTs) {
+          const text = wT.textContent ?? '';
+          const trimmed = text.trimStart();
+          if (!trimmed) continue;
+          const leadingWs = text.length - trimmed.length;
+          wT.textContent = text.slice(0, leadingWs) + CHECKLIST_TARGET_GLYPH + trimmed.slice(1);
+          changed = true;
+          break;
+        }
+      }
+
+      // Fix 2: List style → Normal
+      const styleVal = checklistGetPStyle(firstPara);
+      if (checklistIsListStyle(styleVal)) {
+        const pPr = Array.from(firstPara.children).find(c => c.localName === 'pPr');
+        if (pPr) {
+          const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+          if (pStyle) {
+            pStyle.setAttribute('w:val', 'Normal');
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
 }
