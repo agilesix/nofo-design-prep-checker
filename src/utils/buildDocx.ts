@@ -42,6 +42,9 @@ export async function buildDocx(
   const hasAcceptChanges = autoAppliedChanges.some(
     c => c.targetField === 'doc.acceptchanges'
   );
+  const hasListPeriodFix = autoAppliedChanges.some(
+    c => c.targetField === 'list.periodfix'
+  );
 
   // Apply metadata patches
   if (metaFixes.length > 0) {
@@ -93,6 +96,11 @@ export async function buildDocx(
   // Accept tracked changes and remove comments
   if (hasAcceptChanges) {
     await applyAcceptTrackedChangesAndRemoveComments(zip);
+  }
+
+  // Add trailing periods to list items for consistency
+  if (hasListPeriodFix) {
+    await applyListPeriodFix(zip);
   }
 
   return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
@@ -862,43 +870,21 @@ async function applyEmailMailtoFixes(zip: JSZip, emails: string[]): Promise<void
 // ─── CLEAN-009: Accept tracked changes and remove comments ───────────────────
 
 /**
- * Accept all tracked changes and remove all comment annotations from the
- * cloned DOCX archive.
+ * Mutate an already-parsed XML document in place: accept all tracked changes
+ * and remove all comment annotations.
  *
- * Tracked changes — document.xml:
  *   w:ins, w:moveTo   → unwrap (keep children, remove the wrapper element)
  *   w:del, w:moveFrom → remove entirely (discard content)
  *   w:rPrChange, w:pPrChange, w:sectPrChange, w:tblPrChange
  *                     → remove entirely (formatting change records)
- *
- * All tracked-change elements are collected in document order and processed
- * in a single pass. The `!el.parentNode` guard handles elements that were
- * already discarded as children of a removed ancestor (e.g. a w:del inside
- * a w:del).
- *
- * Comment annotations — document.xml:
  *   w:commentRangeStart, w:commentRangeEnd → removed
  *   w:r containing w:commentReference      → entire run removed
  *
- * ZIP-level cleanup:
- *   word/comments.xml           → removed if present
- *   word/commentsExtended.xml   → removed if present
- *   word/_rels/document.xml.rels → relationship entries for comments files removed
+ * Returns true if any modifications were made.
  */
-async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<void> {
-  // ── word/document.xml ─────────────────────────────────────────────────────
-  const docFile = zip.file('word/document.xml');
-  if (!docFile) return;
-
-  const xmlStr = await docFile.async('string');
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
-
-  // Collect all elements in document order (depth-first traversal).
-  // Processing in this order means a parent is visited before its children.
-  // The `!el.parentNode` guard ensures we skip any element that was removed
-  // as part of discarding one of its ancestors earlier in the same pass.
+function applyTrackedChangesAndCommentsToXmlDoc(xmlDoc: Document): boolean {
   const allElements = Array.from(xmlDoc.getElementsByTagName('*'));
+  let changed = false;
 
   for (const el of allElements) {
     if (!el.parentNode) continue;
@@ -915,6 +901,7 @@ async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<v
       name === 'tblPrChange'
     ) {
       el.parentNode.removeChild(el);
+      changed = true;
       continue;
     }
 
@@ -925,18 +912,19 @@ async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<v
         parent.insertBefore(el.firstChild, el);
       }
       parent.removeChild(el);
+      changed = true;
       continue;
     }
 
     // ── Comment range markers ──────────────────────────────────────────────
     if (name === 'commentRangeStart' || name === 'commentRangeEnd') {
       el.parentNode.removeChild(el);
+      changed = true;
       continue;
     }
 
     // ── Comment reference runs: remove the enclosing <w:r> ────────────────
     if (name === 'commentReference') {
-      // Walk up to the nearest <w:r> run and remove it entirely.
       let run: Element | null = el.parentElement;
       while (run && run.localName !== 'r') {
         run = run.parentElement;
@@ -946,11 +934,47 @@ async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<v
       } else {
         el.parentNode?.removeChild(el);
       }
+      changed = true;
     }
   }
 
+  return changed;
+}
+
+/**
+ * Accept all tracked changes and remove all comment annotations from the
+ * cloned DOCX archive. Processes all XML parts that may contain tracked-change
+ * or comment markup: document.xml, footnotes.xml, endnotes.xml, and all header
+ * and footer parts.
+ *
+ * ZIP-level cleanup:
+ *   word/comments.xml           → removed if present
+ *   word/commentsExtended.xml   → removed if present
+ *   word/_rels/document.xml.rels → relationship entries for comments files removed
+ */
+async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<void> {
+  const parser = new DOMParser();
   const serializer = new XMLSerializer();
-  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+
+  // ── Collect all XML parts to process ──────────────────────────────────────
+  const fixedParts = ['word/document.xml', 'word/footnotes.xml', 'word/endnotes.xml'];
+  const headerFooterParts = Object.keys(zip.files).filter(name =>
+    /^word\/(header|footer)\d*\.xml$/.test(name)
+  );
+  const allParts = [...fixedParts, ...headerFooterParts];
+
+  // ── Process each part ─────────────────────────────────────────────────────
+  for (const path of allParts) {
+    const file = zip.file(path);
+    if (!file) continue;
+
+    const xmlStr = await file.async('string');
+    const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+    const changed = applyTrackedChangesAndCommentsToXmlDoc(xmlDoc);
+    if (changed) {
+      zip.file(path, serializer.serializeToString(xmlDoc));
+    }
+  }
 
   // ── Remove comments files from the ZIP ────────────────────────────────────
   if (zip.file('word/comments.xml')) {
@@ -987,4 +1011,99 @@ async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<v
     }
     zip.file(relsPath, serializer.serializeToString(relsDoc));
   }
+}
+
+// ─── CLEAN-010: Add trailing periods to list items for consistency ─────────────
+
+/**
+ * For each bulleted or numbered list (consecutive <w:p> elements sharing the
+ * same w:numId) with 3 or more items: if at least one item already ends with a
+ * period, append a period to every item that does not.
+ *
+ * "Ends with a period" means the last non-whitespace character of the
+ * concatenated <w:t> text is '.'. The period is appended to the trimmed end of
+ * the last <w:t> element that contains non-whitespace text.
+ *
+ * Empty list items (no text content) are skipped.
+ */
+async function applyListPeriodFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  const groups = buildListGroups(paragraphs);
+  let changed = false;
+
+  for (const group of groups) {
+    if (group.length < 3) continue;
+
+    const texts = group.map(p => getParaText(p).trimEnd());
+    const withPeriod = texts.filter(t => t.endsWith('.')).length;
+    if (withPeriod === 0) continue;
+
+    for (let i = 0; i < group.length; i++) {
+      const text = texts[i]!;
+      if (text.length === 0 || text.endsWith('.')) continue;
+
+      // Find the last <w:t> with non-whitespace content and append '.'
+      const wTs = Array.from(group[i]!.getElementsByTagName('w:t'));
+      for (let j = wTs.length - 1; j >= 0; j--) {
+        const wT = wTs[j]!;
+        const content = wT.textContent ?? '';
+        if (content.trim().length === 0) continue;
+
+        const newContent = content.trimEnd() + '.';
+        wT.textContent = newContent;
+        if (newContent === newContent.trim()) {
+          wT.removeAttribute('xml:space');
+        }
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+/**
+ * Group consecutive <w:p> elements sharing the same w:numId value into arrays.
+ * A non-list paragraph (or a change in numId) closes the current group.
+ */
+function buildListGroups(paragraphs: Element[]): Element[][] {
+  const groups: Element[][] = [];
+  let currentGroup: Element[] = [];
+  let currentNumId: string | null = null;
+
+  for (const para of paragraphs) {
+    const numId = getListParagraphNumId(para);
+    if (numId !== null && numId === currentNumId) {
+      currentGroup.push(para);
+    } else {
+      if (currentGroup.length > 0) groups.push(currentGroup);
+      currentGroup = numId !== null ? [para] : [];
+      currentNumId = numId;
+    }
+  }
+  if (currentGroup.length > 0) groups.push(currentGroup);
+
+  return groups;
+}
+
+function getListParagraphNumId(para: Element): string | null {
+  const pPr = Array.from(para.children).find(c => c.localName === 'pPr');
+  if (!pPr) return null;
+  const numPr = Array.from(pPr.children).find(c => c.localName === 'numPr');
+  if (!numPr) return null;
+  const numIdEl = Array.from(numPr.children).find(c => c.localName === 'numId');
+  if (!numIdEl) return null;
+  const val = numIdEl.getAttribute('w:val') ?? '';
+  return !val || val === '0' ? null : val;
 }
