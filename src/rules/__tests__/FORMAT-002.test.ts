@@ -156,7 +156,7 @@ describe('FORMAT-002: does not detect standard or excluded dates', () => {
 // ─── Description field ───────────────────────────────────────────────────────
 
 describe('FORMAT-002: AutoAppliedChange shape', () => {
-  it('uses singular "instance" when only one date is corrected', () => {
+  it('includes the count in the description for a single instance', () => {
     const doc = makeDoc('<p>Due: 2026-04-16.</p>');
     const change = FORMAT_002.check(doc, OPTIONS)[0] as AutoAppliedChange;
     expect(change.description).toContain('1 instance(s)');
