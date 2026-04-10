@@ -1145,34 +1145,49 @@ function checklistGetHeadingLevel(styleVal: string): number | null {
   return match ? parseInt(match[1]!, 10) : null;
 }
 
-function checklistFindTables(xmlDoc: Document): Element[] {
+function checklistIsApplicationChecklistHeading(paragraph: Element): boolean {
+  const styleVal = checklistGetPStyle(paragraph);
+  const level = checklistGetHeadingLevel(styleVal);
+  if (level !== 2 && level !== 3) return false;
+
+  const text = checklistGetParaText(paragraph).trim();
+  return /application\s+checklist/i.test(text);
+}
+
+function checklistCollectTablesInSection(
+  xmlDoc: Document,
+  isSectionStart: (paragraph: Element) => boolean
+): Element[] {
   const body = xmlDoc.getElementsByTagName('w:body')[0];
   if (!body) return [];
 
   const tables: Element[] = [];
-  let inChecklist = false;
-  let checklistLevel = 0;
+  let inSection = false;
+  let sectionLevel = 0;
 
   for (const child of Array.from(body.children)) {
     if (child.localName === 'p') {
       const styleVal = checklistGetPStyle(child);
       const level = checklistGetHeadingLevel(styleVal);
       if (level !== null) {
-        if (inChecklist && level <= checklistLevel) {
-          inChecklist = false;
+        if (inSection && level <= sectionLevel) {
+          inSection = false;
         }
-        const text = checklistGetParaText(child).trim();
-        if ((level === 2 || level === 3) && /application\s+checklist/i.test(text)) {
-          inChecklist = true;
-          checklistLevel = level;
+        if (isSectionStart(child)) {
+          inSection = true;
+          sectionLevel = level;
         }
       }
-    } else if (child.localName === 'tbl' && inChecklist) {
+    } else if (child.localName === 'tbl' && inSection) {
       tables.push(child);
     }
   }
 
   return tables;
+}
+
+function checklistFindTables(xmlDoc: Document): Element[] {
+  return checklistCollectTablesInSection(xmlDoc, checklistIsApplicationChecklistHeading);
 }
 
 /**
