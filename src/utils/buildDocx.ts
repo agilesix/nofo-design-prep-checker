@@ -960,6 +960,32 @@ async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<v
     zip.remove('word/commentsExtended.xml');
   }
 
+  // ── Remove stale content type overrides for deleted comment parts ─────────
+  const contentTypesPath = '[Content_Types].xml';
+  const contentTypesFile = zip.file(contentTypesPath);
+  if (contentTypesFile) {
+    const contentTypesStr = await contentTypesFile.async('string');
+    const contentTypesDoc = parser.parseFromString(contentTypesStr, 'application/xml');
+    const TYPES_NS = 'http://schemas.openxmlformats.org/package/2006/content-types';
+    const commentPartNames = new Set([
+      '/word/comments.xml',
+      '/word/commentsExtended.xml',
+    ]);
+
+    const overridesToRemove = Array.from(
+      contentTypesDoc.getElementsByTagNameNS(TYPES_NS, 'Override')
+    ).filter(el => {
+      const partName = el.getAttribute('PartName') ?? '';
+      return commentPartNames.has(partName);
+    });
+
+    if (overridesToRemove.length > 0) {
+      for (const el of overridesToRemove) {
+        el.parentNode?.removeChild(el);
+      }
+      zip.file(contentTypesPath, serializer.serializeToString(contentTypesDoc));
+    }
+  }
   // ── Clean comment relationship entries ────────────────────────────────────
   const relsPath = 'word/_rels/document.xml.rels';
   const relsFile = zip.file(relsPath);
