@@ -5,9 +5,9 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
  *
  * Scans all heading elements (h1–h6) in the document for text content that
  * begins with one or more space characters. Silently removes all leading
- * whitespace from any such heading.
+ * spaces from any such heading.
  *
- * Only leading whitespace is removed — trailing spaces and spaces within the
+ * Only leading spaces are removed — trailing spaces and spaces within the
  * heading text are left intact. Applies to headings only; body paragraphs,
  * captions, list items, and other paragraph styles are unaffected.
  *
