@@ -118,7 +118,7 @@ npm run lint
 
 **Wrong Node version causes install or build failures.** If you see errors during `npm install` or `npm run build`, run `nvm use` to switch to the correct Node version (20.19+) and then re-run the failing command.
 
-**Pre-push hook blocks a push to main.** If you see "Direct push to main is not allowed", create a branch and open a pull request instead. The hook cannot be bypassed — this is intentional to keep the main branch stable.
+**Pre-push hook blocks a push to main.** If you see "Direct push to main is not allowed", create a branch and open a pull request instead. The hook is a local safeguard to discourage direct pushes to `main`; if server-side branch protection is enabled, that is what actually prevents direct pushes and helps keep the branch stable.
 
 ## Technology
 
