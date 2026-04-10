@@ -39,6 +39,9 @@ export async function buildDocx(
   const hasHeadingLeadingSpaceFix = autoAppliedChanges.some(
     c => c.targetField === 'heading.leadingspace'
   );
+  const hasAcceptChanges = autoAppliedChanges.some(
+    c => c.targetField === 'doc.acceptchanges'
+  );
 
   // Apply metadata patches
   if (metaFixes.length > 0) {
@@ -85,6 +88,11 @@ export async function buildDocx(
   // Apply heading leading-space removal
   if (hasHeadingLeadingSpaceFix) {
     await applyHeadingLeadingSpaceFix(zip);
+  }
+
+  // Accept tracked changes and remove comments
+  if (hasAcceptChanges) {
+    await applyAcceptTrackedChangesAndRemoveComments(zip);
   }
 
   return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
@@ -849,4 +857,160 @@ async function applyEmailMailtoFixes(zip: JSZip, emails: string[]): Promise<void
   }
 
   zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+}
+
+// ─── CLEAN-009: Accept tracked changes and remove comments ───────────────────
+
+/**
+ * Accept all tracked changes and remove all comment annotations from the
+ * cloned DOCX archive.
+ *
+ * Tracked changes — document.xml:
+ *   w:ins, w:moveTo   → unwrap (keep children, remove the wrapper element)
+ *   w:del, w:moveFrom → remove entirely (discard content)
+ *   w:rPrChange, w:pPrChange, w:sectPrChange, w:tblPrChange
+ *                     → remove entirely (formatting change records)
+ *
+ * All tracked-change elements are collected in document order and processed
+ * in a single pass. The `!el.parentNode` guard handles elements that were
+ * already discarded as children of a removed ancestor (e.g. a w:del inside
+ * a w:del).
+ *
+ * Comment annotations — document.xml:
+ *   w:commentRangeStart, w:commentRangeEnd → removed
+ *   w:r containing w:commentReference      → entire run removed
+ *
+ * ZIP-level cleanup:
+ *   word/comments.xml           → removed if present
+ *   word/commentsExtended.xml   → removed if present
+ *   word/_rels/document.xml.rels → relationship entries for comments files removed
+ */
+async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<void> {
+  // ── word/document.xml ─────────────────────────────────────────────────────
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  // Collect all elements in document order (depth-first traversal).
+  // Processing in this order means a parent is visited before its children.
+  // The `!el.parentNode` guard ensures we skip any element that was removed
+  // as part of discarding one of its ancestors earlier in the same pass.
+  const allElements = Array.from(xmlDoc.getElementsByTagName('*'));
+
+  for (const el of allElements) {
+    if (!el.parentNode) continue;
+
+    const name = el.localName;
+
+    // ── Remove entirely (discard element + all descendants) ────────────────
+    if (
+      name === 'del' ||
+      name === 'moveFrom' ||
+      name === 'rPrChange' ||
+      name === 'pPrChange' ||
+      name === 'sectPrChange' ||
+      name === 'tblPrChange'
+    ) {
+      el.parentNode.removeChild(el);
+      continue;
+    }
+
+    // ── Unwrap (keep children, remove the tracked-change wrapper) ──────────
+    if (name === 'ins' || name === 'moveTo') {
+      const parent = el.parentNode;
+      while (el.firstChild) {
+        parent.insertBefore(el.firstChild, el);
+      }
+      parent.removeChild(el);
+      continue;
+    }
+
+    // ── Comment range markers ──────────────────────────────────────────────
+    if (name === 'commentRangeStart' || name === 'commentRangeEnd') {
+      el.parentNode.removeChild(el);
+      continue;
+    }
+
+    // ── Comment reference runs: remove the enclosing <w:r> ────────────────
+    if (name === 'commentReference') {
+      // Walk up to the nearest <w:r> run and remove it entirely.
+      let run: Element | null = el.parentElement;
+      while (run && run.localName !== 'r') {
+        run = run.parentElement;
+      }
+      if (run?.parentNode) {
+        run.parentNode.removeChild(run);
+      } else {
+        el.parentNode?.removeChild(el);
+      }
+    }
+  }
+
+  const serializer = new XMLSerializer();
+  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+
+  // ── Remove comments files from the ZIP ────────────────────────────────────
+  if (zip.file('word/comments.xml')) {
+    zip.remove('word/comments.xml');
+  }
+  if (zip.file('word/commentsExtended.xml')) {
+    zip.remove('word/commentsExtended.xml');
+  }
+
+  // ── Remove stale content type overrides for deleted comment parts ─────────
+  const contentTypesPath = '[Content_Types].xml';
+  const contentTypesFile = zip.file(contentTypesPath);
+  if (contentTypesFile) {
+    const contentTypesStr = await contentTypesFile.async('string');
+    const contentTypesDoc = parser.parseFromString(contentTypesStr, 'application/xml');
+    const TYPES_NS = 'http://schemas.openxmlformats.org/package/2006/content-types';
+    const commentPartNames = new Set([
+      '/word/comments.xml',
+      '/word/commentsExtended.xml',
+    ]);
+
+    const overridesToRemove = Array.from(
+      contentTypesDoc.getElementsByTagNameNS(TYPES_NS, 'Override')
+    ).filter(el => {
+      const partName = el.getAttribute('PartName') ?? '';
+      return commentPartNames.has(partName);
+    });
+
+    if (overridesToRemove.length > 0) {
+      for (const el of overridesToRemove) {
+        el.parentNode?.removeChild(el);
+      }
+      zip.file(contentTypesPath, serializer.serializeToString(contentTypesDoc));
+    }
+  }
+  // ── Clean comment relationship entries ────────────────────────────────────
+  const relsPath = 'word/_rels/document.xml.rels';
+  const relsFile = zip.file(relsPath);
+  if (!relsFile) return;
+
+  const relsStr = await relsFile.async('string');
+  const relsDoc = parser.parseFromString(relsStr, 'application/xml');
+  const RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+
+  const commentRels = Array.from(
+    relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship')
+  ).filter(el => {
+    const target = el.getAttribute('Target') ?? '';
+    return (
+      target === 'comments.xml' ||
+      target === 'commentsExtended.xml' ||
+      target.endsWith('/comments.xml') ||
+      target.endsWith('/commentsExtended.xml')
+    );
+  });
+
+  if (commentRels.length > 0) {
+    for (const el of commentRels) {
+      el.parentNode?.removeChild(el);
+    }
+    zip.file(relsPath, serializer.serializeToString(relsDoc));
+  }
 }
