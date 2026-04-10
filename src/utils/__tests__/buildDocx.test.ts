@@ -1057,6 +1057,207 @@ describe('buildDocx — CLEAN-010: list period normalization', () => {
   });
 });
 
+// ─── applyChecklistCheckboxFix (CLEAN-011) ───────────────────────────────────
+
+const W_NS_CHECKLIST = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+/**
+ * Build a minimal document.xml with an Application checklist heading followed
+ * by a table. Each entry in `rows` specifies the first-column cell's glyph
+ * (used as the leading character of the cell text) and optional paragraph style.
+ */
+function makeChecklistDocXml(
+  rows: Array<{ glyph: string; style?: string }>,
+  headingStyle = 'Heading2'
+): string {
+  const tableRows = rows
+    .map(({ glyph, style = '' }) => {
+      const pStyle = style ? `<w:pPr><w:pStyle w:val="${style}"/></w:pPr>` : '';
+      return (
+        `<w:tr>` +
+        `<w:tc><w:p>${pStyle}<w:r><w:t>${glyph} Item text</w:t></w:r></w:p></w:tc>` +
+        `<w:tc><w:p><w:r><w:t>Second column</w:t></w:r></w:p></w:tc>` +
+        `</w:tr>`
+      );
+    })
+    .join('');
+
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_CHECKLIST}">` +
+    `<w:body>` +
+    `<w:p><w:pPr><w:pStyle w:val="${headingStyle}"/></w:pPr>` +
+    `<w:r><w:t>Application checklist</w:t></w:r></w:p>` +
+    `<w:tbl>${tableRows}</w:tbl>` +
+    `<w:sectPr/></w:body></w:document>`
+  );
+}
+
+/**
+ * Extract info about the first-column cell of each table row that appears
+ * under the Application checklist heading in the given document XML.
+ * Returns `{ text, style }` per row, where `style` is the w:pStyle value
+ * (empty string if none set).
+ */
+function extractChecklistFirstColInfo(
+  xml: string
+): Array<{ text: string; style: string }> {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'application/xml');
+  const body = doc.getElementsByTagName('w:body')[0];
+  if (!body) return [];
+
+  const results: Array<{ text: string; style: string }> = [];
+  let inChecklist = false;
+  let checklistLevel = 0;
+
+  for (const child of Array.from(body.children)) {
+    if (child.localName === 'p') {
+      const pPr = Array.from(child.children).find(c => c.localName === 'pPr');
+      const styleEl = pPr && Array.from(pPr.children).find(c => c.localName === 'pStyle');
+      const styleVal = styleEl?.getAttribute('w:val') ?? '';
+      const m = styleVal.match(/^Heading(\d)/);
+      const level = m ? parseInt(m[1]!, 10) : null;
+      if (level !== null) {
+        if (inChecklist && level <= checklistLevel) inChecklist = false;
+        const text = Array.from(child.getElementsByTagName('w:t'))
+          .map(t => t.textContent ?? '')
+          .join('');
+        if ((level === 2 || level === 3) && /application\s+checklist/i.test(text)) {
+          inChecklist = true;
+          checklistLevel = level;
+        }
+      }
+    } else if (child.localName === 'tbl' && inChecklist) {
+      for (const row of Array.from(child.children).filter(c => c.localName === 'tr')) {
+        const firstCell = Array.from(row.children).find(c => c.localName === 'tc');
+        if (!firstCell) continue;
+        const firstPara = Array.from(firstCell.children).find(c => c.localName === 'p');
+        if (!firstPara) continue;
+
+        const text = Array.from(firstPara.getElementsByTagName('w:t'))
+          .map(t => t.textContent ?? '')
+          .join('');
+        const pPr = Array.from(firstPara.children).find(c => c.localName === 'pPr');
+        const styleEl = pPr && Array.from(pPr.children).find(c => c.localName === 'pStyle');
+        const style = styleEl?.getAttribute('w:val') ?? '';
+
+        results.push({ text, style });
+      }
+    }
+  }
+
+  return results;
+}
+
+const CHECKLIST_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-011',
+  description: 'Application checklist checkboxes normalized — 1 cell corrected.',
+  targetField: 'checklist.checkbox',
+};
+
+describe('buildDocx — CLEAN-011: checklist checkbox normalization', () => {
+  it('replaces U+2610 BALLOT BOX (☐) with ◻ in first-column cells', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeChecklistDocXml([{ glyph: '☐' }]));
+
+    const outXml = await getOutputDocXml(zip, [], [CHECKLIST_CHANGE]);
+    const rows = extractChecklistFirstColInfo(outXml);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.text).toBe('◻ Item text');
+  });
+
+  it('replaces □ (U+25A1 WHITE SQUARE) with ◻', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeChecklistDocXml([{ glyph: '□' }]));
+
+    const outXml = await getOutputDocXml(zip, [], [CHECKLIST_CHANGE]);
+    const rows = extractChecklistFirstColInfo(outXml);
+    expect(rows[0]!.text).toBe('◻ Item text');
+  });
+
+  it('replaces bullet (•) with ◻', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeChecklistDocXml([{ glyph: '•' }]));
+
+    const outXml = await getOutputDocXml(zip, [], [CHECKLIST_CHANGE]);
+    const rows = extractChecklistFirstColInfo(outXml);
+    expect(rows[0]!.text).toBe('◻ Item text');
+  });
+
+  it('changes ListParagraph style to Normal', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeChecklistDocXml([{ glyph: '◻', style: 'ListParagraph' }])
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [CHECKLIST_CHANGE]);
+    const rows = extractChecklistFirstColInfo(outXml);
+    expect(rows[0]!.style).toBe('Normal');
+    // Glyph must not have been altered
+    expect(rows[0]!.text).toBe('◻ Item text');
+  });
+
+  it('applies both glyph fix and style fix in the same cell', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeChecklistDocXml([{ glyph: '☐', style: 'ListBullet' }])
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [CHECKLIST_CHANGE]);
+    const rows = extractChecklistFirstColInfo(outXml);
+    expect(rows[0]!.text).toBe('◻ Item text');
+    expect(rows[0]!.style).toBe('Normal');
+  });
+
+  it('leaves a cell unchanged when glyph is already correct and style is not a list style', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeChecklistDocXml([{ glyph: '◻' }]));
+
+    const outXml = await getOutputDocXml(zip, [], [CHECKLIST_CHANGE]);
+    const rows = extractChecklistFirstColInfo(outXml);
+    expect(rows[0]!.text).toBe('◻ Item text');
+    expect(rows[0]!.style).toBe('');
+  });
+
+  it('does not touch a table that precedes the Application checklist heading', async () => {
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_CHECKLIST}"><w:body>` +
+      // Out-of-scope table BEFORE the heading
+      `<w:tbl><w:tr>` +
+      `<w:tc><w:p><w:r><w:t>☐ Should not change</w:t></w:r></w:p></w:tc>` +
+      `</w:tr></w:tbl>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:r><w:t>Application checklist</w:t></w:r></w:p>` +
+      `<w:tbl><w:tr>` +
+      `<w:tc><w:p><w:r><w:t>◻ Already correct</w:t></w:r></w:p></w:tc>` +
+      `</w:tr></w:tbl>` +
+      `<w:sectPr/></w:body></w:document>`;
+
+    const zip = new JSZip();
+    zip.file('word/document.xml', xml);
+
+    const outXml = await getOutputDocXml(zip, [], [CHECKLIST_CHANGE]);
+    // The out-of-scope table cell must be untouched
+    expect(outXml).toContain('☐ Should not change');
+    // The in-scope cell is already correct and should remain
+    expect(outXml).toContain('◻ Already correct');
+  });
+
+  it('does not modify the patch when targetField is absent (no-op guard)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeChecklistDocXml([{ glyph: '☐' }]));
+
+    // Pass no autoAppliedChanges — patch must not run
+    const outXml = await getOutputDocXml(zip, [], []);
+    const rows = extractChecklistFirstColInfo(outXml);
+    expect(rows[0]!.text).toBe('☐ Item text');
+  });
+});
+
 // ─── LINK-006 link text fix: hyperlink attribute preservation ─────────────────
 
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';

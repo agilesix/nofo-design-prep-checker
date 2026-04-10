@@ -110,3 +110,58 @@ describe('META-003: issue shape', () => {
     expect(issue.inputRequired?.targetField).toBe('metadata.keywords');
   });
 });
+
+// ─── Keyword prefill formatting ───────────────────────────────────────────────
+
+describe('META-003: prefill value never contains double commas or trailing commas', () => {
+  it('produces no double commas when a keyword candidate has a trailing comma', () => {
+    // Simulate an opportunity name line whose raw capture ends with a comma,
+    // which is the real-world source of "keyword,, next keyword" output.
+    const doc = makeDoc(
+      '<p>Metadata keywords: Leave blank. Coach will insert.</p>\n' +
+      'Opportunity name: Making America safer,\n' +
+      'Tagline: Funding strategy,'
+    );
+    // rawText is derived from the html in makeDoc, but we need rawText to
+    // contain the opportunity name / tagline lines for the prefill generator.
+    // Override the doc with explicit rawText.
+    const docWithRaw: typeof doc = {
+      ...doc,
+      rawText:
+        'Metadata keywords: Leave blank. Coach will insert.\n' +
+        'Opportunity name: Making America safer,\n' +
+        'Tagline: Funding strategy,',
+    };
+
+    const issues = META_003.check(docWithRaw, OPTIONS);
+    expect(issues).toHaveLength(1);
+    const issue = issues[0] as Issue;
+    const prefill = issue.inputRequired?.prefill ?? '';
+
+    // Must not contain consecutive commas
+    expect(prefill).not.toMatch(/,,/);
+    // Must not end with a comma (with or without trailing whitespace)
+    expect(prefill).not.toMatch(/,\s*$/);
+    // Each comma-separated segment must be non-empty
+    if (prefill) {
+      for (const segment of prefill.split(',')) {
+        expect(segment.trim()).not.toBe('');
+      }
+    }
+  });
+
+  it('produces no trailing comma when the last keyword candidate has a trailing comma', () => {
+    const docWithRaw = {
+      ...makeDoc('<p>Metadata keywords: Leave blank. Coach will insert.</p>'),
+      rawText:
+        'Metadata keywords: Leave blank. Coach will insert.\n' +
+        'Opportunity name: Rural health initiative,',
+    };
+
+    const issues = META_003.check(docWithRaw, OPTIONS);
+    expect(issues).toHaveLength(1);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    expect(prefill).not.toMatch(/,\s*$/);
+    expect(prefill).not.toMatch(/,,/);
+  });
+});
