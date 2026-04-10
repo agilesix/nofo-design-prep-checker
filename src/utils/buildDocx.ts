@@ -718,10 +718,10 @@ function applyDateFormatsToText(text: string): string {
   // leading-zero days, and missing commas in a single unified pass.
   result = result.replace(
     new RegExp(
-      `\\b(${DATE_MONTH_ALT})(\\.?)\\s+(0?[1-9]|[12]\\d|3[01])((?:st|nd|rd|th)?)(,?)\\s+(\\d{4})\\b`,
+      `\\b(${DATE_MONTH_ALT})(\\.?)\\s+(0?[1-9]|[12]\\d|3[01])((?:st|nd|rd|th)?)(?:,\\s*|\\s+)(\\d{4})\\b`,
       'g'
     ),
-    (_match, month, _abbPeriod, day, _ordinal, _comma, year) => {
+    (_match, month, _abbPeriod, day, _ordinal, year) => {
       const fullMonth = DATE_MONTH_NAME_MAP[month.toLowerCase()] ?? month;
       return `${fullMonth} ${parseInt(day, 10)}, ${year}`;
     }
