@@ -562,6 +562,17 @@ describe('buildDocx — CLEAN-008: heading leading-space removal', () => {
     expect(texts[0]).toBe('Title');
   });
 
+  it('preserves internal and trailing spaces in a heading while removing only leading spaces', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingDocXml({ headingParas: [{ level: 2, runs: ['   Section  Title  '] }] })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Section  Title  ');
+  });
   it('leaves a heading with no leading space unchanged', async () => {
     const zip = new JSZip();
     zip.file(
