@@ -3,9 +3,9 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
 /**
  * FORMAT-002: Date format correction (auto-apply)
  *
- * Scans paragraph text for dates that do not follow the SimplerNOFOs style
- * guide format of "Month D, YYYY" (e.g. "April 2, 2024"). Automatically
- * corrects dates in these non-standard formats:
+ * Scans text nodes in `doc.html` for dates that do not follow the
+ * SimplerNOFOs style guide format of "Month D, YYYY" (e.g. "April 2, 2024").
+ * Automatically corrects dates in these non-standard formats:
  *
  *  Numeric formats:
  *   - MM/DD/YYYY (4-digit year required)      →  Month D, YYYY
