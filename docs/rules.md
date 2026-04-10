@@ -57,6 +57,7 @@ Universal rules run on every document regardless of which content guide is selec
 |---------|-------|----------|-------------|
 | CLEAN-004 | Collapse double spaces in body text (auto-apply) | — | Two or more consecutive spaces between words in body paragraphs are silently collapsed to a single space. Excludes headings, table cells, and code/preformatted blocks. |
 | CLEAN-005 | Tagline relocation (auto-apply) | — | Checks whether the document's standalone tagline paragraph is positioned immediately after the metadata block (immediately before the first heading). If not, silently moves it there. Also removes any duplicate tagline paragraphs found elsewhere in the document. Skips when no standalone tagline is found, when no headings are present, or when the tagline is already in the correct position. Applies to all NOFOs. |
+| CLEAN-008 | Remove leading spaces from heading text (auto-apply) | — | Heading paragraphs (Heading 1 through Heading 6) whose text content begins with one or more space characters have those leading spaces silently removed. Only leading spaces are removed — trailing spaces and spaces within the heading text are left intact. Applies to headings only; body paragraphs, captions, list items, and other paragraph styles are unaffected. No entry appears in the auto-applied list when no headings have leading spaces. |
 
 ### Text formatting (FORMAT)
 

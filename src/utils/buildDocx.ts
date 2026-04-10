@@ -36,6 +36,9 @@ export async function buildDocx(
   const hasDateCorrection = autoAppliedChanges.some(
     c => c.targetField === 'format.date.correct'
   );
+  const hasHeadingLeadingSpaceFix = autoAppliedChanges.some(
+    c => c.targetField === 'heading.leadingspace'
+  );
 
   // Apply metadata patches
   if (metaFixes.length > 0) {
@@ -77,6 +80,11 @@ export async function buildDocx(
   // Apply date format corrections
   if (hasDateCorrection) {
     await applyDateFormatCorrections(zip);
+  }
+
+  // Apply heading leading-space removal
+  if (hasHeadingLeadingSpaceFix) {
+    await applyHeadingLeadingSpaceFix(zip);
   }
 
   return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
@@ -544,6 +552,80 @@ async function applyRemoveDghtScaffolding(zip: JSZip): Promise<void> {
 
   const serializer = new XMLSerializer();
   zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+}
+
+// ─── CLEAN-008: Remove leading spaces from heading text ──────────────────────
+
+/**
+ * Strip leading space characters from the text content of all heading-style
+ * paragraphs in word/document.xml.
+ *
+ * Walks through the <w:t> elements of each heading paragraph from front to
+ * back, removing leading spaces from each text node until a non-space
+ * character is reached. This handles the uncommon case where the leading
+ * spaces span more than one adjacent <w:t> run.
+ *
+ * Only removes space characters (U+0020). Trailing spaces and internal spaces
+ * are left intact. The xml:space="preserve" attribute is removed from any
+ * text node that no longer contains leading or trailing whitespace after the
+ * fix is applied.
+ */
+async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  let changed = false;
+
+  for (const wP of paragraphs) {
+    if (!isHeadingParagraph(wP)) continue;
+
+    const allWTs = Array.from(wP.getElementsByTagName('w:t'));
+    if (allWTs.length === 0) continue;
+
+    // Only process paragraphs whose full text starts with a space
+    const paraText = allWTs.map(t => t.textContent ?? '').join('');
+    if (paraText.length === 0 || paraText[0] !== ' ') continue;
+
+    // Walk <w:t> nodes from the front, stripping leading spaces until we hit
+    // content. This correctly handles leading spaces spread across multiple runs.
+    let stillTrimming = true;
+    for (const wT of allWTs) {
+      if (!stillTrimming) break;
+      const text = wT.textContent ?? '';
+      if (text.length === 0) continue;
+
+      const trimmed = text.replace(/^ +/, '');
+      if (trimmed === text) {
+        // No leading spaces in this run — stop trimming
+        stillTrimming = false;
+        continue;
+      }
+
+      wT.textContent = trimmed;
+      changed = true;
+
+      if (trimmed.length === 0) {
+        // Entire run was spaces — clear xml:space and continue to next run
+        wT.removeAttribute('xml:space');
+      } else {
+        // Remaining content after trimming — remove preserve attr if unneeded
+        if (trimmed === trimmed.trim()) {
+          wT.removeAttribute('xml:space');
+        }
+        stillTrimming = false;
+      }
+    }
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
 }
 
 // ─── FORMAT-002: Date format corrections ─────────────────────────────────────
