@@ -54,12 +54,13 @@ const MONTH_ALT = [...MONTHS_FULL, ...MONTHS_ABBR].join('|');
 /**
  * Create a fresh regex for unified month-style date matching.
  * Captures: (1) month name, (2) optional trailing period, (3) day digits (1–31),
- * (4) optional ordinal suffix (st/nd/rd/th), (5) optional comma, (6) 4-digit year.
+ * (4) optional ordinal suffix (st/nd/rd/th), (5) separator between day and year,
+ * (6) 4-digit year.
  * A fresh instance is created each call to avoid stale lastIndex state.
  */
 function makeMonthDateRegex(): RegExp {
   return new RegExp(
-    `\\b(${MONTH_ALT})(\\.?)\\s+(0?[1-9]|[12]\\d|3[01])((?:st|nd|rd|th)?)(,?)\\s+(\\d{4})\\b`,
+    `\\b(${MONTH_ALT})(\\.?)\\s+(0?[1-9]|[12]\\d|3[01])((?:st|nd|rd|th)?)(,\\s*|\\s+)(\\d{4})\\b`,
     'g'
   );
 }
@@ -69,13 +70,13 @@ function makeMonthDateRegex(): RegExp {
  * "FullMonthName D, YYYY" (no abbreviation, no ordinal, no leading zero, has comma).
  */
 function isNonStandardMonthDate(
-  month: string, day: string, ordinal: string, comma: string
+  month: string, day: string, ordinal: string, separator: string
 ): boolean {
   return (
     !FULL_MONTH_SET.has(month.toLowerCase()) ||
     ordinal !== '' ||
     day.startsWith('0') ||
-    comma === ''
+    !separator.startsWith(',')
   );
 }
 
@@ -95,8 +96,8 @@ function countNonStandardDates(text: string): number {
 
   // Pattern D: Month-style dates — count only non-canonical matches.
   for (const match of text.matchAll(makeMonthDateRegex())) {
-    const [, month, , day, ordinal, comma] = match;
-    if (isNonStandardMonthDate(month!, day!, ordinal ?? '', comma ?? '')) {
+    const [, month, , day, ordinal, separator] = match;
+    if (isNonStandardMonthDate(month!, day!, ordinal ?? '', separator ?? '')) {
       count++;
     }
   }
