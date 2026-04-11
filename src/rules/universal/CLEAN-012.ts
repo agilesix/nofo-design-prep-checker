@@ -9,7 +9,7 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
  * silently bolded in the downloaded output.
  *
  * Scope:
- *  - Only applies to content under H2–H6 headings whose text exactly matches
+ *  - Only applies to content under H1–H6 headings whose text exactly matches
  *    "Approach" or "Program logic model" (and their subheadings).
  *  - Scope ends when a heading at the same or higher level is encountered.
  *  - No changes are made outside these sections.
