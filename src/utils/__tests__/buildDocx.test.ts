@@ -1390,3 +1390,243 @@ describe('buildDocx — LINK-006 link text fix: hyperlink attribute preservation
     expect(externalHl!.getAttributeNS(R_NS, 'id')).toBe('rId99');
   });
 });
+
+// ─── LINK-007: [PDF] label OOXML patch ────────────────────────────────────────
+
+const RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+const HYPERLINK_TYPE_URI =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
+
+/**
+ * Minimal word/document.xml with one external hyperlink carrying the given
+ * relationship ID and link text.
+ */
+function makePdfHyperlinkDocXml(rId: string, linkText: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}">` +
+    `<w:body>` +
+    `<w:p><w:hyperlink r:id="${rId}" w:history="1">` +
+    `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>${linkText}</w:t></w:r>` +
+    `</w:hyperlink></w:p>` +
+    `<w:sectPr/></w:body></w:document>`
+  );
+}
+
+/**
+ * Minimal word/_rels/document.xml.rels with one hyperlink relationship.
+ */
+function makePdfRelsXml(
+  rId: string,
+  target: string,
+  targetMode = 'External',
+  type = HYPERLINK_TYPE_URI
+): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="${RELS_NS}">` +
+    `<Relationship Id="${rId}" Type="${type}" Target="${target}" TargetMode="${targetMode}"/>` +
+    `</Relationships>`
+  );
+}
+
+/**
+ * Return the concatenated text of all <w:t> elements within the first
+ * <w:hyperlink> with the given r:id in a serialized document.xml string.
+ */
+function getHyperlinkText(xml: string, rId: string): string | null {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'application/xml');
+  const hyperlinks = Array.from(doc.getElementsByTagName('w:hyperlink'));
+  const hl = hyperlinks.find(el => el.getAttributeNS(R_NS, 'id') === rId);
+  if (!hl) return null;
+  return Array.from(hl.getElementsByTagName('w:t'))
+    .map(t => t.textContent ?? '')
+    .join('');
+}
+
+const PDF_LABEL_CHANGE: AutoAppliedChange = {
+  ruleId: 'LINK-007',
+  description: '[PDF] label added.',
+  targetField: 'link.pdf.label',
+  value: '1',
+};
+
+describe('buildDocx — LINK-007: [PDF] label OOXML patch', () => {
+  it('appends " [PDF]" to a PDF hyperlink whose text does not end with [PDF]', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePdfHyperlinkDocXml('rId1', 'Annual Report'));
+    zip.file('word/_rels/document.xml.rels',
+      makePdfRelsXml('rId1', 'https://example.com/annual-report.pdf'));
+
+    const outXml = await getOutputDocXml(zip, [], [PDF_LABEL_CHANGE]);
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('Annual Report [PDF]');
+  });
+
+  it('does not append [PDF] when link text already ends with [PDF]', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePdfHyperlinkDocXml('rId1', 'Annual Report [PDF]'));
+    zip.file('word/_rels/document.xml.rels',
+      makePdfRelsXml('rId1', 'https://example.com/annual-report.pdf'));
+
+    const outXml = await getOutputDocXml(zip, [], [PDF_LABEL_CHANGE]);
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('Annual Report [PDF]');
+  });
+
+  it('does not modify a non-PDF hyperlink', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePdfHyperlinkDocXml('rId1', 'Visit our website'));
+    zip.file('word/_rels/document.xml.rels',
+      makePdfRelsXml('rId1', 'https://example.com/page.html'));
+
+    const outXml = await getOutputDocXml(zip, [], [PDF_LABEL_CHANGE]);
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('Visit our website');
+  });
+
+  it('does not label a relationship missing TargetMode="External"', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePdfHyperlinkDocXml('rId1', 'Internal PDF'));
+    zip.file('word/_rels/document.xml.rels',
+      // TargetMode defaults to empty string → not "External"
+      makePdfRelsXml('rId1', 'https://example.com/internal.pdf', ''));
+
+    const outXml = await getOutputDocXml(zip, [], [PDF_LABEL_CHANGE]);
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('Internal PDF');
+  });
+
+  it('does not label a relationship whose Target is not an http(s) URL', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePdfHyperlinkDocXml('rId1', 'File PDF'));
+    zip.file('word/_rels/document.xml.rels',
+      makePdfRelsXml('rId1', 'mailto:user@example.pdf'));
+
+    const outXml = await getOutputDocXml(zip, [], [PDF_LABEL_CHANGE]);
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('File PDF');
+  });
+
+  it('does not label a relationship with a non-hyperlink Type', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePdfHyperlinkDocXml('rId1', 'Image PDF'));
+    zip.file('word/_rels/document.xml.rels',
+      makePdfRelsXml(
+        'rId1',
+        'https://example.com/image.pdf',
+        'External',
+        'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image'
+      ));
+
+    const outXml = await getOutputDocXml(zip, [], [PDF_LABEL_CHANGE]);
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('Image PDF');
+  });
+});
+
+// ─── CLEAN-012: asterisked bold OOXML patch ───────────────────────────────────
+
+/**
+ * Minimal word/document.xml with a heading paragraph (Heading2 by default)
+ * followed by a body paragraph containing the given text.
+ */
+function makeAsteriskedDocXml(bodyText: string, headingStyle = 'Heading2'): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS}">` +
+    `<w:body>` +
+    `<w:p><w:pPr><w:pStyle w:val="${headingStyle}"/></w:pPr>` +
+    `<w:r><w:t>Approach</w:t></w:r></w:p>` +
+    `<w:p><w:r><w:t>${bodyText}</w:t></w:r></w:p>` +
+    `<w:sectPr/></w:body></w:document>`
+  );
+}
+
+/**
+ * Return the text of all runs that have w:b in their w:rPr.
+ */
+function getBoldRunTexts(xml: string): string[] {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'application/xml');
+  const runs = Array.from(doc.getElementsByTagName('w:r'));
+  const bold: string[] = [];
+  for (const run of runs) {
+    const rPr = Array.from(run.children).find(c => c.localName === 'rPr');
+    if (!rPr) continue;
+    if (!Array.from(rPr.children).some(c => c.localName === 'b')) continue;
+    const text = Array.from(run.getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '').join('');
+    if (text) bold.push(text);
+  }
+  return bold;
+}
+
+const ASTERISKED_BOLD_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-012',
+  description: '"asterisked ( * )" bolded.',
+  targetField: 'text.asterisked.bold',
+  value: '1',
+};
+
+describe('buildDocx — CLEAN-012: asterisked bold OOXML patch', () => {
+  it('bolds the phrase "asterisked ( * )" inside a run under the Approach heading', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeAsteriskedDocXml('Items marked asterisked ( * ) are required.')
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [ASTERISKED_BOLD_CHANGE]);
+    const boldTexts = getBoldRunTexts(outXml);
+    expect(boldTexts).toContain('asterisked ( * )');
+  });
+
+  it('does not bold surrounding text — only the exact phrase', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeAsteriskedDocXml('Items marked asterisked ( * ) are required.')
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [ASTERISKED_BOLD_CHANGE]);
+    const boldTexts = getBoldRunTexts(outXml);
+    // Surrounding text should not be bold
+    for (const t of boldTexts) {
+      expect(t).toBe('asterisked ( * )');
+    }
+  });
+
+  it('does not bold a paragraph outside the scoped section', async () => {
+    const zip = new JSZip();
+    // "Eligibility" is not a scoped heading → phrase should NOT be bolded
+    zip.file(
+      'word/document.xml',
+      (
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<w:document xmlns:w="${W_NS}">` +
+        `<w:body>` +
+        `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Eligibility</w:t></w:r></w:p>` +
+        `<w:p><w:r><w:t>Items marked asterisked ( * ) here.</w:t></w:r></w:p>` +
+        `<w:sectPr/></w:body></w:document>`
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [ASTERISKED_BOLD_CHANGE]);
+    expect(getBoldRunTexts(outXml)).toHaveLength(0);
+  });
+
+  it('bolds the phrase under "Program logic model" heading', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      (
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+        `<w:document xmlns:w="${W_NS}">` +
+        `<w:body>` +
+        `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+        `<w:r><w:t>Program logic model</w:t></w:r></w:p>` +
+        `<w:p><w:r><w:t>Fields asterisked ( * ) are required.</w:t></w:r></w:p>` +
+        `<w:sectPr/></w:body></w:document>`
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [ASTERISKED_BOLD_CHANGE]);
+    expect(getBoldRunTexts(outXml)).toContain('asterisked ( * )');
+  });
+});

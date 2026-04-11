@@ -7,7 +7,7 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
  * "[PDF]" at the end of the link text so readers know the link opens a PDF.
  *
  * Three cases are handled:
- *  1. Link text does not contain "[PDF]" or "[pdf]" anywhere
+ *  1. Link text does not already end with "[PDF]" (case-insensitive)
  *     → Append " [PDF]" to the link text in the downloaded document.
  *  2. Link text already ends with "[PDF]" (case-insensitive)
  *     → No change needed.

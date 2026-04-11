@@ -80,6 +80,16 @@ describe('CLEAN-012: detection', () => {
     expect((results[0] as AutoAppliedChange).description).toContain('2 instances');
   });
 
+  it('counts multiple unbolded occurrences within a single paragraph', () => {
+    const doc = makeDoc(
+      `<h2>Approach</h2>` +
+      `<p>The ${PHRASE} items and also ${PHRASE} entries must be completed.</p>`
+    );
+    const results = CLEAN_012.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as AutoAppliedChange).value).toBe('2');
+  });
+
   it('is case-insensitive for the heading match', () => {
     const doc = makeDoc(
       `<h2>approach</h2>` +
@@ -116,6 +126,16 @@ describe('CLEAN-012: no changes when phrase is already bold', () => {
       `<p>The <b>${PHRASE}</b> items are required.</p>`
     );
     expect(CLEAN_012.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('counts only non-bold occurrences when some are already bold', () => {
+    const doc = makeDoc(
+      `<h2>Approach</h2>` +
+      `<p>The <strong>${PHRASE}</strong> and also ${PHRASE} entries.</p>`
+    );
+    const results = CLEAN_012.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as AutoAppliedChange).value).toBe('1');
   });
 });
 

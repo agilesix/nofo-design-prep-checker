@@ -24,59 +24,32 @@ const PHRASE_LC = PHRASE.toLowerCase();
 const SCOPE_PATTERN = /^(approach|program logic model)$/i;
 
 /**
- * Returns true only if every occurrence of the phrase within the given element
- * is fully contained within a <strong> or <b> ancestor.
+ * Count how many times phraseLC appears in text (case-sensitive substring search).
  */
-function isPhraseFullyBold(el: Element, phraseLC: string): boolean {
-  const doc = el.ownerDocument;
-  const walker = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-  const parts: string[] = [];
-  const boldMask: boolean[] = [];
-
-  let node = walker.nextNode();
-  while (node) {
-    const text = node.textContent ?? '';
-    if (text) {
-      parts.push(text.toLowerCase());
-
-      let parent: Node | null = node.parentNode;
-      let isBold = false;
-      while (parent && parent !== el) {
-        if (
-          parent.nodeType === Node.ELEMENT_NODE &&
-          ['strong', 'b'].includes((parent as Element).tagName.toLowerCase())
-        ) {
-          isBold = true;
-          break;
-        }
-        parent = parent.parentNode;
-      }
-
-      for (let i = 0; i < text.length; i++) {
-        boldMask.push(isBold);
-      }
-    }
-
-    node = walker.nextNode();
+function countOccurrences(text: string, phraseLC: string): number {
+  let count = 0;
+  let pos = 0;
+  while ((pos = text.indexOf(phraseLC, pos)) !== -1) {
+    count++;
+    pos++;
   }
+  return count;
+}
 
-  const fullText = parts.join('');
-  let found = false;
-  let fromIndex = 0;
+/**
+ * Count the number of non-bold occurrences of phraseLC in the given element.
+ * Total occurrences minus those found inside <strong> or <b> children.
+ * Uses Math.max(0, …) to guard against over-subtraction from nested bold elements.
+ */
+function countNonBoldOccurrences(el: Element, phraseLC: string): number {
+  const total = countOccurrences((el.textContent ?? '').toLowerCase(), phraseLC);
+  if (total === 0) return 0;
 
-  while (true) {
-    const idx = fullText.indexOf(phraseLC, fromIndex);
-    if (idx === -1) break;
-    found = true;
-
-    for (let i = idx; i < idx + phraseLC.length; i++) {
-      if (!boldMask[i]) return false;
-    }
-
-    fromIndex = idx + phraseLC.length;
+  let boldCount = 0;
+  for (const bold of Array.from(el.querySelectorAll('strong, b'))) {
+    boldCount += countOccurrences((bold.textContent ?? '').toLowerCase(), phraseLC);
   }
-
-  return found;
+  return Math.max(0, total - boldCount);
 }
 
 const CLEAN_012: Rule = {
@@ -114,13 +87,9 @@ const CLEAN_012: Rule = {
 
       if (!inScope) continue;
 
-      const paraText = (el.textContent ?? '').toLowerCase();
-      if (!paraText.includes(PHRASE_LC)) continue;
-
-      // Phrase is present — check if already fully bold
-      if (isPhraseFullyBold(el, PHRASE_LC)) continue;
-
-      count++;
+      // Count non-bold occurrences so the reported total matches what buildDocx
+      // actually changes (multiple occurrences in one element all get bolded).
+      count += countNonBoldOccurrences(el, PHRASE_LC);
     }
 
     if (count === 0) return [];

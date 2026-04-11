@@ -153,6 +153,42 @@ describe('FORMAT-002: does not detect standard or excluded dates', () => {
   });
 });
 
+// ─── List item coverage ──────────────────────────────────────────────────────
+
+describe('FORMAT-002: detects non-standard dates in list items', () => {
+  it('detects MM/DD/YYYY in an unordered list item', () => {
+    const doc = makeDoc('<ul><li>Due date: 04/16/2026.</li></ul>');
+    const results = FORMAT_002.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as AutoAppliedChange).value).toBe('1');
+  });
+
+  it('detects ordinal suffix date in a list item', () => {
+    const doc = makeDoc('<ul><li>Submit by April 16th, 2026.</li></ul>');
+    const results = FORMAT_002.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as AutoAppliedChange).value).toBe('1');
+  });
+
+  it('detects YYYY-MM-DD in an ordered list item', () => {
+    const doc = makeDoc('<ol><li>Deadline: 2026-04-01.</li></ol>');
+    const results = FORMAT_002.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as AutoAppliedChange).value).toBe('1');
+  });
+
+  it('detects abbreviated month in a list item', () => {
+    const doc = makeDoc('<ul><li>Applications due Apr. 2, 2026.</li></ul>');
+    const results = FORMAT_002.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+  });
+
+  it('does not flag an already-correct date in a list item', () => {
+    const doc = makeDoc('<ul><li>Due: April 16, 2026.</li></ul>');
+    expect(FORMAT_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+});
+
 // ─── Description field ───────────────────────────────────────────────────────
 
 describe('FORMAT-002: AutoAppliedChange shape', () => {

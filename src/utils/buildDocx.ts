@@ -55,6 +55,9 @@ export async function buildDocx(
   const hasAsteriskedBoldFix = autoAppliedChanges.some(
     c => c.targetField === 'text.asterisked.bold'
   );
+  const hasTimeCorrection = autoAppliedChanges.some(
+    c => c.targetField === 'format.time.correct'
+  );
 
   // Apply metadata patches
   if (metaFixes.length > 0) {
@@ -126,6 +129,11 @@ export async function buildDocx(
   // Bold "asterisked ( * )" in Approach / Program logic model sections
   if (hasAsteriskedBoldFix) {
     await applyAsteriskedBoldFix(zip);
+  }
+
+  // Apply time format corrections
+  if (hasTimeCorrection) {
+    await applyTimeFormatCorrections(zip);
   }
 
   return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
@@ -1097,6 +1105,10 @@ async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<v
  * concatenated <w:t> text is '.'. The period is appended to the trimmed end of
  * the last <w:t> element that contains non-whitespace text.
  *
+ * Items that already end with ':' or ';' are also skipped — only a missing
+ * period triggers the fix (other terminal punctuation such as '?' or '!'
+ * is treated the same as no period).
+ *
  * Empty list items (no text content) are skipped.
  */
 async function applyListPeriodFix(zip: JSZip): Promise<void> {
@@ -1146,6 +1158,90 @@ async function applyListPeriodFix(zip: JSZip): Promise<void> {
   }
 }
 
+// ─── FORMAT-003: Time format corrections ─────────────────────────────────────
+
+const TIME_TZ_MAP: Record<string, string> = {
+  est: 'ET', edt: 'ET', cst: 'CT', cdt: 'CT',
+  mst: 'MT', mdt: 'MT', pst: 'PT', pdt: 'PT',
+};
+
+/**
+ * Reformat non-standard time expressions within a single text string.
+ * Returns the corrected string (unchanged if no non-standard times found).
+ *
+ * Steps applied in order:
+ *  1. Normalize AM/PM variants → a.m. / p.m.
+ *     Handles: AM, PM, A.M., P.M., A.M, P.M, am, pm (with or without space)
+ *  2. Remove :00 from exact hours (e.g., 11:00 a.m. → 11 a.m.)
+ *     Only fires when minutes are exactly 00; 3:30 p.m. is left unchanged.
+ *  3. Normalize timezone abbreviations after time expressions:
+ *     EST/EDT → ET, CST/CDT → CT, MST/MDT → MT, PST/PDT → PT
+ *
+ * Uses (?!\w) instead of trailing \b so that forms ending in "." (e.g., "A.M.")
+ * are correctly bounded without requiring a word character at the boundary.
+ */
+function applyTimeFormatsToText(text: string): string {
+  let result = text;
+
+  // Step 1: Normalize non-standard AM/PM forms → a.m. / p.m.
+  // Deliberately excludes already-correct a.m./p.m. to avoid re-processing.
+  result = result.replace(
+    /\b(\d{1,2}(?::\d{2})?)\s*(A\.M\.|P\.M\.|A\.M|P\.M|AM|PM|am|pm)(?!\w)/g,
+    (_match, time, ampm) => {
+      const normalized = /^[Aa]/.test(ampm) ? 'a.m.' : 'p.m.';
+      return `${time} ${normalized}`;
+    }
+  );
+
+  // Step 2: Remove :00 from exact hours, applied after Step 1 ensures
+  // a.m./p.m. are in the correct lowercase form.
+  result = result.replace(
+    /\b(\d{1,2}):00\s+(a\.m\.|p\.m\.)(?!\w)/g,
+    (_match, hour, ampm) => `${hour} ${ampm}`
+  );
+
+  // Step 3: Normalize timezone abbreviations that immediately follow a time
+  // expression. Only fires after Step 1 normalizes the preceding AM/PM form.
+  result = result.replace(
+    /\b(a\.m\.|p\.m\.)\s+(EST|EDT|CST|CDT|MST|MDT|PST|PDT)\b/gi,
+    (_match, ampm, tz) => `${ampm} ${TIME_TZ_MAP[tz.toLowerCase()]!}`
+  );
+
+  return result;
+}
+
+/**
+ * Scan all <w:t> elements and reformat any non-standard time expressions.
+ * Applies to all paragraph types — no exclusions for headings or code blocks.
+ */
+async function applyTimeFormatCorrections(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const wTElements = Array.from(xmlDoc.getElementsByTagName('w:t'));
+  let changed = false;
+
+  for (const wT of wTElements) {
+    const text = wT.textContent ?? '';
+    if (!text) continue;
+
+    const corrected = applyTimeFormatsToText(text);
+    if (corrected !== text) {
+      wT.textContent = corrected;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
 // ─── LINK-007: Add [PDF] label to external PDF links ─────────────────────────
 
 /**
@@ -1154,7 +1250,8 @@ async function applyListPeriodFix(zip: JSZip): Promise<void> {
  * link text does not already end with "[PDF]" (case-insensitive).
  *
  * Three cases are handled:
- *  1. Link text does not contain "[PDF]" anywhere → " [PDF]" is appended.
+ *  1. Link text does not already end with "[PDF]" (case-insensitive)
+ *     → " [PDF]" is appended to the link text.
  *  2. Link text already ends with "[PDF]" (case-insensitive) → no change.
  *  3. "[PDF]" appears as plain text in the run immediately following the
  *     hyperlink element → " [PDF]" is appended to the link text AND the
@@ -1173,13 +1270,25 @@ async function applyPdfLabelFix(zip: JSZip): Promise<void> {
   const parser = new DOMParser();
   const relsDoc = parser.parseFromString(relsStr, 'application/xml');
 
+  const HYPERLINK_TYPE_URI = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
+
   const pdfRelIds = new Set<string>();
   for (const rel of Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'))) {
+    const type = rel.getAttribute('Type') ?? '';
+    const targetMode = rel.getAttribute('TargetMode') ?? '';
     const target = rel.getAttribute('Target') ?? '';
-    if (target.toLowerCase().includes('.pdf')) {
-      const id = rel.getAttribute('Id') ?? '';
-      if (id) pdfRelIds.add(id);
-    }
+
+    // Only process external hyperlinks to http(s) URLs containing ".pdf".
+    // This guards against non-hyperlink relationships and non-HTTP(S) targets
+    // (e.g. mailto:, relative paths, or other relationship types) that happen
+    // to contain ".pdf" in their Target string.
+    if (type !== HYPERLINK_TYPE_URI) continue;
+    if (targetMode !== 'External') continue;
+    if (!/^https?:\/\//i.test(target)) continue;
+    if (!target.toLowerCase().includes('.pdf')) continue;
+
+    const id = rel.getAttribute('Id') ?? '';
+    if (id) pdfRelIds.add(id);
   }
 
   if (pdfRelIds.size === 0) return;
@@ -1346,9 +1455,8 @@ function asteriskedBoldPhraseInParagraph(xmlDoc: Document, W: string, para: Elem
     let splitDone = false;
     let search = 0;
 
-    while (true) {
-      const mi = fullLC.indexOf(ASTERISKED_PHRASE_LC, search);
-      if (mi === -1) break;
+    let mi = fullLC.indexOf(ASTERISKED_PHRASE_LC, search);
+    while (mi !== -1) {
       const me = mi + ASTERISKED_PHRASE_LC.length;
 
       // Find runs that overlap [mi, me)
@@ -1356,49 +1464,48 @@ function asteriskedBoldPhraseInParagraph(xmlDoc: Document, W: string, para: Elem
       for (let i = 0; i < runs.length; i++) {
         if (offsets[i]! < me && offsets[i + 1]! > mi) span.push(i);
       }
-      if (span.length === 0) { search = me; continue; }
 
-      // Already fully bold? Skip this occurrence.
-      if (span.every(i => asteriskedRunIsBold(runs[i]!))) { search = me; continue; }
+      if (span.length > 0 && !span.every(i => asteriskedRunIsBold(runs[i]!))) {
+        if (span.length === 1) {
+          const ri = span[0]!;
+          const rs = offsets[ri]!;
+          const re = offsets[ri + 1]!;
+          let phraseRun = runs[ri]!;
 
-      if (span.length === 1) {
-        const ri = span[0]!;
-        const rs = offsets[ri]!;
-        const re = offsets[ri + 1]!;
-        let phraseRun = runs[ri]!;
-
-        // Split off the after part first (so re aligns with phrase end)
-        if (me < re) {
-          const [bp] = asteriskedSplitRun(para, phraseRun, me - rs);
-          phraseRun = bp; // bp covers [rs..me); afterRun covers [me..re)
-          splitDone = true;
-          changed = true;
-          break; // Re-read DOM next pass
-        }
-
-        // Split off the before part (so rs aligns with phrase start)
-        if (mi > rs) {
-          const [, ap] = asteriskedSplitRun(para, phraseRun, mi - rs);
-          phraseRun = ap; // ap covers [mi..re==me)
-          splitDone = true;
-          changed = true;
-          break; // Re-read DOM next pass
-        }
-
-        // Phrase exactly fills the run — bold it
-        asteriskedEnsureBold(xmlDoc, W, phraseRun);
-        changed = true;
-      } else {
-        // Multi-run span: bold all overlapping runs without splitting
-        for (const i of span) {
-          if (!asteriskedRunIsBold(runs[i]!)) {
-            asteriskedEnsureBold(xmlDoc, W, runs[i]!);
+          // Split off the after part first (so re aligns with phrase end)
+          if (me < re) {
+            const [bp] = asteriskedSplitRun(para, phraseRun, me - rs);
+            phraseRun = bp; // bp covers [rs..me); afterRun covers [me..re)
+            splitDone = true;
             changed = true;
+            break; // Re-read DOM next pass
+          }
+
+          // Split off the before part (so rs aligns with phrase start)
+          if (mi > rs) {
+            const [, ap] = asteriskedSplitRun(para, phraseRun, mi - rs);
+            phraseRun = ap; // ap covers [mi..re==me)
+            splitDone = true;
+            changed = true;
+            break; // Re-read DOM next pass
+          }
+
+          // Phrase exactly fills the run — bold it
+          asteriskedEnsureBold(xmlDoc, W, phraseRun);
+          changed = true;
+        } else {
+          // Multi-run span: bold all overlapping runs without splitting
+          for (const i of span) {
+            if (!asteriskedRunIsBold(runs[i]!)) {
+              asteriskedEnsureBold(xmlDoc, W, runs[i]!);
+              changed = true;
+            }
           }
         }
       }
 
       search = me;
+      mi = fullLC.indexOf(ASTERISKED_PHRASE_LC, search);
     }
 
     if (!splitDone) break;
