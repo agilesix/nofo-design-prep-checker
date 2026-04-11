@@ -144,6 +144,10 @@ See [docs/rules.md](docs/rules.md) for a complete list of all checks performed b
 
 See [docs/decisions.md](docs/decisions.md) for a log of significant architecture and implementation decisions — what was decided, why, and what alternatives were considered.
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for a history of notable changes to this project.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for branching conventions, commit message format, and instructions for adding new rules.
