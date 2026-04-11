@@ -37,9 +37,10 @@ const META_003: Rule = {
         severity: 'warning',
         sectionId: 'section-preamble',
         description:
-          'The document Keywords field should contain 8\u201310 specific terms or phrases drawn ' +
+          'The document Keywords field should contain at least 6 specific terms or phrases drawn ' +
           'directly from the language of the NOFO, separated by commas. These should be ' +
-          'fine-grained search terms, not high-level category words.',
+          'fine-grained search terms that are specific to this opportunity \u2014 not generic headings ' +
+          'that appear in every NOFO.',
         suggestedFix:
           'Replace the placeholder value after "Metadata keywords:" or "Keywords:" in the document ' +
           'with the correct keywords.',
@@ -47,15 +48,15 @@ const META_003: Rule = {
           type: 'textarea',
           label: 'Keywords',
           placeholder: 'keyword one, keyword two, keyword three',
-          hint: '8\u201310 keywords, separated by commas. Use specific terms from the NOFO.',
+          hint: 'At least 6 keywords, separated by commas. Use specific terms from this NOFO.',
           targetField: 'metadata.keywords',
           maxLength: 500,
           prefill: prefill ?? undefined,
           prefillNote: prefill
             ? 'Suggested based on your document content. Review carefully and edit before accepting \u2014 you know your NOFO better than this tool does.'
             : undefined,
-          termCountRange: '8\u201310',
-          minTermCount: 5,
+          termCountRange: '6\u201310',
+          minTermCount: 6,
         },
       },
     ];
@@ -65,8 +66,8 @@ const META_003: Rule = {
 // ─── Keyword suggestion helpers ───────────────────────────────────────────────
 
 /**
- * Words that, on their own, are too generic to serve as keywords.
- * Headings that consist entirely of these words are excluded.
+ * Words that are too generic to serve as keywords on their own.
+ * A phrase where every content word appears in this set is excluded.
  */
 const GENERIC_TERMS = new Set([
   'grant', 'grants', 'federal', 'notice', 'funding', 'opportunity', 'application',
@@ -78,23 +79,46 @@ const GENERIC_TERMS = new Set([
 ]);
 
 /**
- * Stop words removed when extracting a short representative phrase from a
- * longer text (e.g. opportunity name, tagline).
+ * Stop words removed when extracting short representative phrases and when
+ * scanning program description text for repeated n-grams.
  */
 const PHRASE_STOP_WORDS = new Set([
   'a', 'an', 'the', 'of', 'for', 'and', 'or', 'in', 'to', 'on', 'at', 'by', 'with',
+  'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had',
+  'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might',
+  'this', 'these', 'those', 'that', 'which', 'who', 'what', 'its',
+  'from', 'into', 'over', 'under', 'through', 'between', 'among',
+  'as', 'if', 'but', 'not', 'no', 'nor', 'so', 'yet', 'also',
 ]);
 
 /**
- * Structural and navigational section headings that should never appear as
- * keyword suggestions regardless of word count.
+ * Structural and generic NOFO section headings that must never appear as
+ * keyword suggestions — these terms appear in every NOFO regardless of
+ * the specific program content.
  */
-const SKIP_HEADINGS = new Set([
+const EXCLUDED_HEADINGS = new Set([
+  // Structural headings that are universal to all NOFOs
+  'funding strategy',
+  'funding amounts',
+  'component funding',
+  'statutory authority',
+  'eligible applicants',
+  'delivery location',
+  'application deadline',
+  'merit review',
+  'award information',
+  'period of performance',
+  'budget narrative',
+  'project narrative',
+  'grants management',
+  'reporting requirements',
   // Standard NOFO structural sections
   'before you begin',
   'basic information',
   'funding details',
   'program description',
+  'program summary',
+  'program overview',
   'eligibility',
   'eligibility requirements',
   'eligibility information',
@@ -107,7 +131,7 @@ const SKIP_HEADINGS = new Set([
   'evaluation criteria',
   'selection criteria',
   'award administration information',
-  'award information',
+  'award administration',
   'contacts and support',
   'contact information',
   'other information',
@@ -127,7 +151,7 @@ const SKIP_HEADINGS = new Set([
   'timeline',
   'key dates',
   'important dates',
-  // Content-control field labels (visible after artifact stripping)
+  // Content-control field labels
   'funding opportunity title',
   'opportunity title',
   'opportunity name',
@@ -179,19 +203,114 @@ function shortFormOf(text: string, maxWords: number): string | null {
   return result.length > 0 ? result.join(' ') : null;
 }
 
-function isNavigationalHeading(heading: string): boolean {
-  if (SKIP_HEADINGS.has(heading.toLowerCase().trim())) return true;
-  return /^(step|part|section|appendix|attachment|exhibit|tab)\s+[\dA-Za-z]/i.test(heading);
-}
-
 function isDuplicate(term: string, existing: string[]): boolean {
   const lower = term.toLowerCase();
   return existing.some(k => k.toLowerCase() === lower);
 }
 
+/**
+ * Returns true when `word` (already lowercased) is a content word:
+ * at least 3 characters, not a stop word, and not in the generic-terms list.
+ */
+function isContentWord(word: string): boolean {
+  return word.length >= 3 && !PHRASE_STOP_WORDS.has(word) && !GENERIC_TERMS.has(word);
+}
+
+/**
+ * Extract agency/subagency/bureau/division names from metadata field lines in rawText.
+ * Looks for lines formatted as "Agency: Name" or "Subagency: Name".
+ * Values longer than 3 words are shortened to the first 3 content words.
+ */
+function extractAgencyTerms(rawText: string): string[] {
+  const AGENCY_FIELD_RE = /^(?:agency|subagency|sub-agency|bureau|division)\s*:\s*(.+)/gim;
+  const terms: string[] = [];
+  const seen = new Set<string>();
+
+  let m: RegExpExecArray | null;
+  while ((m = AGENCY_FIELD_RE.exec(rawText)) !== null) {
+    const raw = (m[1] ?? '').trim().replace(/\s+/g, ' ');
+    if (!raw) continue;
+    const sanitized = sanitizeKeywordCandidate(raw);
+    const candidate = sanitized ?? shortFormOf(stripArtifacts(raw), 3);
+    if (!candidate) continue;
+    const key = candidate.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    terms.push(candidate);
+  }
+  return terms;
+}
+
+/**
+ * Extract subject-matter keyword candidates from program description and summary
+ * sections by counting repeated 2- and 3-word phrases (n-grams).
+ *
+ * A phrase must appear at least twice to be treated as intentional terminology
+ * specific to this NOFO, which filters out one-off sentence starters and generic
+ * structural language. At least one word in each phrase must be a content word
+ * (not generic, not a stop word). Output is title-cased for display; capped at 6.
+ */
+function extractProgramSectionTerms(sections: Section[]): string[] {
+  const PROGRAM_SECTION_RE =
+    /^(program\s+(description|summary|overview|narrative|purpose)|about\s+(the\s+)?program|project\s+(description|summary|narrative))/i;
+
+  const relevantText = sections
+    .filter(s => PROGRAM_SECTION_RE.test(s.heading.trim()))
+    .map(s => s.rawText)
+    .join('\n');
+
+  if (!relevantText) return [];
+
+  // Tokenize: lowercase, treat hyphens as word boundaries, keep 3+ char alpha tokens.
+  const words = relevantText
+    .toLowerCase()
+    .replace(/-/g, ' ')
+    .match(/\b[a-z]{3,}\b/g) ?? [];
+
+  const ngrams = new Map<string, number>();
+
+  for (let i = 0; i < words.length; i++) {
+    const w1 = words[i]!;
+    if (PHRASE_STOP_WORDS.has(w1)) continue;
+
+    // 2-gram: w1 + w2
+    if (i + 1 < words.length) {
+      const w2 = words[i + 1]!;
+      if (!PHRASE_STOP_WORDS.has(w2) && (isContentWord(w1) || isContentWord(w2))) {
+        const key = `${w1} ${w2}`;
+        ngrams.set(key, (ngrams.get(key) ?? 0) + 1);
+      }
+    }
+
+    // 3-gram: w1 + w2 + w3 (no stop words in any position)
+    if (i + 2 < words.length) {
+      const w2 = words[i + 1]!;
+      const w3 = words[i + 2]!;
+      if (
+        !PHRASE_STOP_WORDS.has(w2) &&
+        !PHRASE_STOP_WORDS.has(w3) &&
+        (isContentWord(w1) || isContentWord(w2) || isContentWord(w3))
+      ) {
+        const key = `${w1} ${w2} ${w3}`;
+        ngrams.set(key, (ngrams.get(key) ?? 0) + 1);
+      }
+    }
+  }
+
+  return [...ngrams.entries()]
+    .filter(([phrase, count]) => count >= 2 && !EXCLUDED_HEADINGS.has(phrase))
+    .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
+    .slice(0, 6)
+    .map(([phrase]) =>
+      // Title-case for display; user reviews before accepting
+      phrase.replace(/\b\w/g, c => c.toUpperCase())
+    );
+}
+
 function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | null): string | null {
   const keywords: string[] = [];
 
+  // 1. OpDiv name and abbreviation (from content guide detection)
   let guide = contentGuideId
     ? contentGuides.find(g => g.id === contentGuideId) ?? null
     : null;
@@ -226,6 +345,13 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
 
   const MAX_KEYWORD_CHARS = 60;
 
+  // 2. Agency/subagency/bureau/division names from metadata field lines
+  for (const term of extractAgencyTerms(doc.rawText)) {
+    if (keywords.length >= 10) break;
+    if (!isDuplicate(term, keywords)) keywords.push(term);
+  }
+
+  // 3. Opportunity name
   const oppNameMatch = doc.rawText.match(/opportunity\s+name\s*:?\s*(.+?)(?:\n|$)/i);
   if (oppNameMatch?.[1]) {
     const oppNameRaw = oppNameMatch[1].trim().replace(/\s+/g, ' ');
@@ -236,6 +362,7 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
     }
   }
 
+  // 4. Tagline
   const taglineMatch = doc.rawText.match(/tagline\s*:?\s*(.+?)(?:\n|$)/i);
   if (taglineMatch?.[1]) {
     const taglineRaw = taglineMatch[1].trim().replace(/\s+/g, ' ');
@@ -246,8 +373,8 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
     }
   }
 
-  const headingTerms = extractHeadingTerms(doc.sections);
-  for (const term of headingTerms) {
+  // 5. Subject-matter terms from program description / summary sections
+  for (const term of extractProgramSectionTerms(doc.sections)) {
     if (keywords.length >= 10) break;
     if (!isDuplicate(term, keywords)) keywords.push(term);
   }
@@ -262,33 +389,6 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
     ),
   ].slice(0, 10);
   return unique.join(', ');
-}
-
-/**
- * Extract up to 6 keyword candidates from document section headings.
- */
-function extractHeadingTerms(sections: Section[]): string[] {
-  const terms: string[] = [];
-
-  for (const section of sections) {
-    if (section.headingLevel < 2) continue;
-
-    const sanitized = sanitizeKeywordCandidate(section.heading);
-    if (!sanitized) continue;
-
-    if (isNavigationalHeading(sanitized)) continue;
-
-    const meaningfulWords = sanitized.split(/\s+/).filter(w => {
-      const lower = w.toLowerCase().replace(/[^a-z]/g, '');
-      return lower.length > 2 && !GENERIC_TERMS.has(lower);
-    });
-    if (meaningfulWords.length === 0) continue;
-
-    terms.push(sanitized);
-    if (terms.length >= 6) break;
-  }
-
-  return terms;
 }
 
 export default META_003;

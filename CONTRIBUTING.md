@@ -45,6 +45,30 @@ scripts/          Shell scripts (install-hooks.sh, pre-push hook)
 - PR titles should be concise and in sentence case: "Add LINK-007 external link indicator rule"
 - PRs require review from `@agilesix/nofo-maintainers` before merging (see CODEOWNERS)
 
+## Commit message format
+
+This project uses the [Conventional Commits](https://www.conventionalcommits.org/) format. All commit messages must use one of the following prefixes:
+
+- `feat:` — a new rule, feature, or user-facing capability
+- `fix:` — a bug fix
+- `docs:` — changes to documentation only (README, CONTRIBUTING, rules.md, decisions.md)
+- `chore:` — maintenance, dependency updates, config changes, refactoring with no behavior change
+- `refactor:` — code restructuring with no behavior change and no new features
+- `test:` — adding or updating tests only
+
+Examples:
+
+```
+feat: add auto-fix rule to remove empty list items
+fix: resolve constant condition lint error in buildDocx
+docs: update README with new rules and local dev guidance
+chore: update release-please config
+```
+
+**Why this matters:** release-please reads commit messages to auto-generate `CHANGELOG.md` and determine version bumps. Commit messages that don't follow this format will not be grouped correctly in the changelog.
+
+**When using Claude Code:** always instruct it to use conventional commit format. Claude Code commit messages that don't follow this format will not be grouped correctly in the auto-generated changelog.
+
 ## Code conventions
 
 ### TypeScript
