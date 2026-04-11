@@ -209,6 +209,16 @@ function shortFormOf(text: string, maxWords: number, excludeGeneric = false): st
   return result.length > 0 ? result.join(' ') : null;
 }
 
+/**
+ * Normalize a keyword candidate: trim whitespace, condense internal whitespace,
+ * and strip trailing punctuation (commas, periods). Applied once before exclusion
+ * and duplicate checks so that candidates like "Funding strategy," are correctly
+ * recognized as excluded rather than slipping through as a non-matching string.
+ */
+function normalizeCandidate(term: string): string {
+  return term.trim().replace(/[,.]+$/, '').trim().replace(/\s+/g, ' ');
+}
+
 function isDuplicate(term: string, existing: string[]): boolean {
   const lower = term.toLowerCase();
   return existing.some(k => k.toLowerCase() === lower);
@@ -358,19 +368,22 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
   const MAX_KEYWORD_CHARS = 60;
 
   // 2. Agency/subagency/bureau/division names from metadata field lines
-  for (const term of extractAgencyTerms(doc.rawText)) {
+  for (const raw of extractAgencyTerms(doc.rawText)) {
     if (keywords.length >= 10) break;
-    if (!isExcluded(term) && !isDuplicate(term, keywords)) keywords.push(term);
+    const term = normalizeCandidate(raw);
+    if (term && !isExcluded(term) && !isDuplicate(term, keywords)) keywords.push(term);
   }
 
   // 3. Opportunity name
   const oppNameMatch = doc.rawText.match(/opportunity\s+name\s*:?\s*(.+?)(?:\n|$)/i);
   if (oppNameMatch?.[1]) {
     const oppNameRaw = oppNameMatch[1].trim().replace(/\s+/g, ' ');
-    const sanitized = sanitizeKeywordCandidate(oppNameRaw);
-    const candidate = sanitized ?? shortFormOf(stripArtifacts(oppNameRaw), 3);
-    if (candidate && candidate.length <= MAX_KEYWORD_CHARS && !isExcluded(candidate) && !isDuplicate(candidate, keywords)) {
-      keywords.push(candidate);
+    const raw = sanitizeKeywordCandidate(oppNameRaw) ?? shortFormOf(stripArtifacts(oppNameRaw), 3);
+    if (raw) {
+      const candidate = normalizeCandidate(raw);
+      if (candidate && candidate.length <= MAX_KEYWORD_CHARS && !isExcluded(candidate) && !isDuplicate(candidate, keywords)) {
+        keywords.push(candidate);
+      }
     }
   }
 
@@ -378,30 +391,27 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
   const taglineMatch = doc.rawText.match(/tagline\s*:?\s*(.+?)(?:\n|$)/i);
   if (taglineMatch?.[1]) {
     const taglineRaw = taglineMatch[1].trim().replace(/\s+/g, ' ');
-    const sanitized = sanitizeKeywordCandidate(taglineRaw);
-    const candidate = sanitized ?? shortFormOf(stripArtifacts(taglineRaw), 3);
-    if (candidate && candidate.length <= MAX_KEYWORD_CHARS && !isExcluded(candidate) && !isDuplicate(candidate, keywords)) {
-      keywords.push(candidate);
+    const raw = sanitizeKeywordCandidate(taglineRaw) ?? shortFormOf(stripArtifacts(taglineRaw), 3);
+    if (raw) {
+      const candidate = normalizeCandidate(raw);
+      if (candidate && candidate.length <= MAX_KEYWORD_CHARS && !isExcluded(candidate) && !isDuplicate(candidate, keywords)) {
+        keywords.push(candidate);
+      }
     }
   }
 
   // 5. Subject-matter terms from program description / summary sections
   // (extractProgramSectionTerms applies EXCLUDED_HEADINGS internally; the
   // isExcluded guard here ensures consistency if the function ever changes)
-  for (const term of extractProgramSectionTerms(doc.sections)) {
+  for (const raw of extractProgramSectionTerms(doc.sections)) {
     if (keywords.length >= 10) break;
-    if (!isExcluded(term) && !isDuplicate(term, keywords)) keywords.push(term);
+    const term = normalizeCandidate(raw);
+    if (term && !isExcluded(term) && !isDuplicate(term, keywords)) keywords.push(term);
   }
 
   if (keywords.length === 0) return null;
 
-  const unique = [
-    ...new Set(
-      keywords
-        .map(k => k.trim().replace(/,+$/, '').trim())
-        .filter(Boolean)
-    ),
-  ].slice(0, 10);
+  const unique = [...new Set(keywords.filter(Boolean))].slice(0, 10);
   return unique.join(', ');
 }
 

@@ -307,6 +307,19 @@ describe('META-003: extracts repeated subject-matter terms from program descript
 // ─── Structural heading exclusion ────────────────────────────────────────────
 
 describe('META-003: never suggests structural NOFO headings as keywords', () => {
+  it('does not suggest "Funding strategy," (with trailing comma) from a tagline', () => {
+    const doc = {
+      ...makeDoc('<p>Metadata keywords: Leave blank. Coach will insert.</p>'),
+      rawText:
+        'Metadata keywords: Leave blank. Coach will insert.\n' +
+        'Tagline: Funding strategy,',
+    };
+    const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    expect(prefill.toLowerCase()).not.toContain('funding strategy');
+  });
+
   it('does not suggest "Funding strategy" even when present in program section text', () => {
     const doc: ParsedDocument = {
       html: '<p>Metadata keywords: Leave blank. Coach will insert.</p>',
