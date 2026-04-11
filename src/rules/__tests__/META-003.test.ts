@@ -165,3 +165,193 @@ describe('META-003: prefill value never contains double commas or trailing comma
     expect(prefill).not.toMatch(/,,/);
   });
 });
+
+// ─── Agency term extraction ───────────────────────────────────────────────────
+
+describe('META-003: extracts agency/subagency terms from metadata field lines', () => {
+  it('includes an Agency: field value in the prefill', () => {
+    const doc = {
+      ...makeDoc('<p>Metadata keywords: Leave blank. Coach will insert.</p>'),
+      rawText:
+        'Metadata keywords: Leave blank. Coach will insert.\n' +
+        'Agency: National Cancer Institute',
+    };
+    const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    expect(prefill).toContain('National Cancer Institute');
+  });
+
+  it('includes a Subagency: field value in the prefill', () => {
+    const doc = {
+      ...makeDoc('<p>Metadata keywords: Leave blank. Coach will insert.</p>'),
+      rawText:
+        'Metadata keywords: Leave blank. Coach will insert.\n' +
+        'Subagency: Division of Nutrition',
+    };
+    const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    expect(prefill).toContain('Division of Nutrition');
+  });
+
+  it('shortens agency values longer than 3 words to 3 content words', () => {
+    const doc = {
+      ...makeDoc('<p>Metadata keywords: Leave blank. Coach will insert.</p>'),
+      rawText:
+        'Metadata keywords: Leave blank. Coach will insert.\n' +
+        'Subagency: Office of Population Affairs Administration',
+    };
+    const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    // Value is > 3 words so it gets shortened; exact result depends on stop-word filtering
+    // but the prefill should be non-empty and not contain all 4 words
+    expect(prefill.length).toBeGreaterThan(0);
+    expect(prefill).not.toContain('Office of Population Affairs Administration');
+  });
+});
+
+// ─── Program section n-gram extraction ───────────────────────────────────────
+
+describe('META-003: extracts repeated subject-matter terms from program description sections', () => {
+  it('includes a phrase that appears at least twice in a Program description section', () => {
+    const doc: ParsedDocument = {
+      html: '<p>Metadata keywords: Leave blank. Coach will insert.</p>',
+      sections: [
+        {
+          id: 'section-program',
+          heading: 'Program description',
+          headingLevel: 2,
+          html: '',
+          rawText:
+            'Opioid use disorder affects many communities. ' +
+            'Treatment for opioid use disorder includes medication-assisted approaches. ' +
+            'Opioid use disorder is a chronic condition requiring long-term care.',
+          startPage: 2,
+        },
+      ],
+      rawText: 'Metadata keywords: Leave blank. Coach will insert.',
+      zipArchive: new JSZip(),
+      documentXml: '',
+      footnotesXml: '',
+      endnotesXml: '',
+      activeContentGuide: null,
+    };
+
+    const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    // "opioid use disorder" appears 3 times and should be title-cased in the suggestion
+    expect(prefill.toLowerCase()).toContain('opioid use disorder');
+  });
+
+  it('does not include a phrase that appears only once', () => {
+    const doc: ParsedDocument = {
+      html: '<p>Metadata keywords: Leave blank. Coach will insert.</p>',
+      sections: [
+        {
+          id: 'section-program',
+          heading: 'Program description',
+          headingLevel: 2,
+          html: '',
+          rawText: 'This program supports rural communities. The focus is on preventive care.',
+          startPage: 2,
+        },
+      ],
+      rawText: 'Metadata keywords: Leave blank. Coach will insert.',
+      zipArchive: new JSZip(),
+      documentXml: '',
+      footnotesXml: '',
+      endnotesXml: '',
+      activeContentGuide: null,
+    };
+
+    const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    // "rural communities" appears only once — should not be in prefill
+    expect(prefill.toLowerCase()).not.toContain('rural communities');
+  });
+
+  it('does not extract terms from sections that are not program description/summary', () => {
+    const doc: ParsedDocument = {
+      html: '<p>Metadata keywords: Leave blank. Coach will insert.</p>',
+      sections: [
+        {
+          id: 'section-eligibility',
+          heading: 'Eligibility',
+          headingLevel: 2,
+          html: '',
+          rawText:
+            'Eligible applicants must be eligible applicants meeting eligible applicants criteria.',
+          startPage: 2,
+        },
+      ],
+      rawText: 'Metadata keywords: Leave blank. Coach will insert.',
+      zipArchive: new JSZip(),
+      documentXml: '',
+      footnotesXml: '',
+      endnotesXml: '',
+      activeContentGuide: null,
+    };
+
+    const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    // "eligible applicants" is a repeated phrase but the section is not a program description
+    expect(prefill.toLowerCase()).not.toContain('eligible applicants');
+  });
+});
+
+// ─── Structural heading exclusion ────────────────────────────────────────────
+
+describe('META-003: never suggests structural NOFO headings as keywords', () => {
+  it('does not suggest "Funding strategy" even when present in program section text', () => {
+    const doc: ParsedDocument = {
+      html: '<p>Metadata keywords: Leave blank. Coach will insert.</p>',
+      sections: [
+        {
+          id: 'section-program',
+          heading: 'Program description',
+          headingLevel: 2,
+          html: '',
+          rawText:
+            'The funding strategy supports key goals. Our funding strategy is evidence-based.',
+          startPage: 2,
+        },
+      ],
+      rawText: 'Metadata keywords: Leave blank. Coach will insert.',
+      zipArchive: new JSZip(),
+      documentXml: '',
+      footnotesXml: '',
+      endnotesXml: '',
+      activeContentGuide: null,
+    };
+
+    const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    expect(prefill.toLowerCase()).not.toContain('funding strategy');
+  });
+});
+
+// ─── Updated UI strings ───────────────────────────────────────────────────────
+
+describe('META-003: issue shape reflects updated 6-keyword guidance', () => {
+  it('termCountRange starts with 6', () => {
+    const doc = makeDoc('<p>Metadata keywords: Leave blank. Coach will insert.</p>');
+    const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
+    const issue = issues[0] as Issue;
+    expect(issue.inputRequired?.termCountRange).toMatch(/^6/);
+  });
+
+  it('minTermCount is 6', () => {
+    const doc = makeDoc('<p>Metadata keywords: Leave blank. Coach will insert.</p>');
+    const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
+    const issue = issues[0] as Issue;
+    expect(issue.inputRequired?.minTermCount).toBe(6);
+  });
+});
