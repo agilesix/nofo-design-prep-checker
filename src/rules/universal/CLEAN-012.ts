@@ -24,15 +24,59 @@ const PHRASE_LC = PHRASE.toLowerCase();
 const SCOPE_PATTERN = /^(approach|program logic model)$/i;
 
 /**
- * Returns true if the phrase is fully wrapped in a <strong> or <b> element
- * within the given element.
+ * Returns true only if every occurrence of the phrase within the given element
+ * is fully contained within a <strong> or <b> ancestor.
  */
 function isPhraseFullyBold(el: Element, phraseLC: string): boolean {
-  const bolds = Array.from(el.querySelectorAll('strong, b'));
-  for (const bold of bolds) {
-    if ((bold.textContent ?? '').toLowerCase().includes(phraseLC)) return true;
+  const doc = el.ownerDocument;
+  const walker = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const parts: string[] = [];
+  const boldMask: boolean[] = [];
+
+  let node = walker.nextNode();
+  while (node) {
+    const text = node.textContent ?? '';
+    if (text) {
+      parts.push(text.toLowerCase());
+
+      let parent: Node | null = node.parentNode;
+      let isBold = false;
+      while (parent && parent !== el) {
+        if (
+          parent.nodeType === Node.ELEMENT_NODE &&
+          ['strong', 'b'].includes((parent as Element).tagName.toLowerCase())
+        ) {
+          isBold = true;
+          break;
+        }
+        parent = parent.parentNode;
+      }
+
+      for (let i = 0; i < text.length; i++) {
+        boldMask.push(isBold);
+      }
+    }
+
+    node = walker.nextNode();
   }
-  return false;
+
+  const fullText = parts.join('');
+  let found = false;
+  let fromIndex = 0;
+
+  while (true) {
+    const idx = fullText.indexOf(phraseLC, fromIndex);
+    if (idx === -1) break;
+    found = true;
+
+    for (let i = idx; i < idx + phraseLC.length; i++) {
+      if (!boldMask[i]) return false;
+    }
+
+    fromIndex = idx + phraseLC.length;
+  }
+
+  return found;
 }
 
 const CLEAN_012: Rule = {
