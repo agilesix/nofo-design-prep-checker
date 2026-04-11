@@ -189,13 +189,19 @@ function sanitizeKeywordCandidate(raw: string): string | null {
 }
 
 /**
- * Extract up to `maxWords` non-stop-word tokens from `text` and join them.
+ * Extract up to `maxWords` tokens from `text`, skipping stop words.
+ * When `excludeGeneric` is true, tokens in GENERIC_TERMS are also skipped,
+ * producing a phrase made entirely of content words.
  */
-function shortFormOf(text: string, maxWords: number): string | null {
+function shortFormOf(text: string, maxWords: number, excludeGeneric = false): string | null {
   const result: string[] = [];
   for (const word of text.split(/\s+/)) {
     const lower = word.toLowerCase().replace(/[^a-z]/g, '');
-    if (lower.length > 1 && !PHRASE_STOP_WORDS.has(lower)) {
+    if (
+      lower.length > 1 &&
+      !PHRASE_STOP_WORDS.has(lower) &&
+      (!excludeGeneric || !GENERIC_TERMS.has(lower))
+    ) {
       result.push(word);
       if (result.length >= maxWords) break;
     }
@@ -206,6 +212,10 @@ function shortFormOf(text: string, maxWords: number): string | null {
 function isDuplicate(term: string, existing: string[]): boolean {
   const lower = term.toLowerCase();
   return existing.some(k => k.toLowerCase() === lower);
+}
+
+function isExcluded(term: string): boolean {
+  return EXCLUDED_HEADINGS.has(term.toLowerCase());
 }
 
 /**
@@ -219,7 +229,9 @@ function isContentWord(word: string): boolean {
 /**
  * Extract agency/subagency/bureau/division names from metadata field lines in rawText.
  * Looks for lines formatted as "Agency: Name" or "Subagency: Name".
- * Values longer than 3 words are shortened to the first 3 content words.
+ * Values of 3 words or fewer are used as-is (after artifact stripping). Longer values
+ * are shortened to the first 3 content words — skipping both stop words and generic
+ * terms (e.g. "office", "bureau", "division") so the result is substantive.
  */
 function extractAgencyTerms(rawText: string): string[] {
   const AGENCY_FIELD_RE = /^(?:agency|subagency|sub-agency|bureau|division)\s*:\s*(.+)/gim;
@@ -231,7 +243,7 @@ function extractAgencyTerms(rawText: string): string[] {
     const raw = (m[1] ?? '').trim().replace(/\s+/g, ' ');
     if (!raw) continue;
     const sanitized = sanitizeKeywordCandidate(raw);
-    const candidate = sanitized ?? shortFormOf(stripArtifacts(raw), 3);
+    const candidate = sanitized ?? shortFormOf(stripArtifacts(raw), 3, true);
     if (!candidate) continue;
     const key = candidate.toLowerCase();
     if (seen.has(key)) continue;
@@ -348,7 +360,7 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
   // 2. Agency/subagency/bureau/division names from metadata field lines
   for (const term of extractAgencyTerms(doc.rawText)) {
     if (keywords.length >= 10) break;
-    if (!isDuplicate(term, keywords)) keywords.push(term);
+    if (!isExcluded(term) && !isDuplicate(term, keywords)) keywords.push(term);
   }
 
   // 3. Opportunity name
@@ -357,7 +369,7 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
     const oppNameRaw = oppNameMatch[1].trim().replace(/\s+/g, ' ');
     const sanitized = sanitizeKeywordCandidate(oppNameRaw);
     const candidate = sanitized ?? shortFormOf(stripArtifacts(oppNameRaw), 3);
-    if (candidate && candidate.length <= MAX_KEYWORD_CHARS && !isDuplicate(candidate, keywords)) {
+    if (candidate && candidate.length <= MAX_KEYWORD_CHARS && !isExcluded(candidate) && !isDuplicate(candidate, keywords)) {
       keywords.push(candidate);
     }
   }
@@ -368,15 +380,17 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
     const taglineRaw = taglineMatch[1].trim().replace(/\s+/g, ' ');
     const sanitized = sanitizeKeywordCandidate(taglineRaw);
     const candidate = sanitized ?? shortFormOf(stripArtifacts(taglineRaw), 3);
-    if (candidate && candidate.length <= MAX_KEYWORD_CHARS && !isDuplicate(candidate, keywords)) {
+    if (candidate && candidate.length <= MAX_KEYWORD_CHARS && !isExcluded(candidate) && !isDuplicate(candidate, keywords)) {
       keywords.push(candidate);
     }
   }
 
   // 5. Subject-matter terms from program description / summary sections
+  // (extractProgramSectionTerms applies EXCLUDED_HEADINGS internally; the
+  // isExcluded guard here ensures consistency if the function ever changes)
   for (const term of extractProgramSectionTerms(doc.sections)) {
     if (keywords.length >= 10) break;
-    if (!isDuplicate(term, keywords)) keywords.push(term);
+    if (!isExcluded(term) && !isDuplicate(term, keywords)) keywords.push(term);
   }
 
   if (keywords.length === 0) return null;
