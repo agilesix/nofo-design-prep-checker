@@ -49,6 +49,15 @@ export async function buildDocx(
   const hasChecklistFix = autoAppliedChanges.some(
     c => c.targetField === 'checklist.checkbox'
   );
+  const hasPdfLabelFix = autoAppliedChanges.some(
+    c => c.targetField === 'link.pdf.label'
+  );
+  const hasAsteriskedBoldFix = autoAppliedChanges.some(
+    c => c.targetField === 'text.asterisked.bold'
+  );
+  const hasTimeCorrection = autoAppliedChanges.some(
+    c => c.targetField === 'format.time.correct'
+  );
 
   // Apply metadata patches
   if (metaFixes.length > 0) {
@@ -110,6 +119,21 @@ export async function buildDocx(
   // Normalize application checklist checkboxes
   if (hasChecklistFix) {
     await applyChecklistCheckboxFix(zip);
+  }
+
+  // Add [PDF] labels to external PDF links
+  if (hasPdfLabelFix) {
+    await applyPdfLabelFix(zip);
+  }
+
+  // Bold "asterisked ( * )" in Approach / Program logic model sections
+  if (hasAsteriskedBoldFix) {
+    await applyAsteriskedBoldFix(zip);
+  }
+
+  // Apply time format corrections
+  if (hasTimeCorrection) {
+    await applyTimeFormatCorrections(zip);
   }
 
   return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
@@ -1081,6 +1105,10 @@ async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<v
  * concatenated <w:t> text is '.'. The period is appended to the trimmed end of
  * the last <w:t> element that contains non-whitespace text.
  *
+ * Items that already end with ':' or ';' are also skipped — only a missing
+ * period triggers the fix (other terminal punctuation such as '?' or '!'
+ * is treated the same as no period).
+ *
  * Empty list items (no text content) are skipped.
  */
 async function applyListPeriodFix(zip: JSZip): Promise<void> {
@@ -1104,7 +1132,7 @@ async function applyListPeriodFix(zip: JSZip): Promise<void> {
 
     for (let i = 0; i < group.length; i++) {
       const text = texts[i]!;
-      if (text.length === 0 || text.endsWith('.')) continue;
+      if (text.length === 0 || text.endsWith('.') || text.endsWith(':') || text.endsWith(';')) continue;
 
       // Find the last <w:t> with non-whitespace content and append '.'
       const wTs = Array.from(group[i]!.getElementsByTagName('w:t'));
@@ -1121,6 +1149,412 @@ async function applyListPeriodFix(zip: JSZip): Promise<void> {
         changed = true;
         break;
       }
+    }
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+// ─── FORMAT-003: Time format corrections ─────────────────────────────────────
+
+const TIME_TZ_MAP: Record<string, string> = {
+  est: 'ET', edt: 'ET', cst: 'CT', cdt: 'CT',
+  mst: 'MT', mdt: 'MT', pst: 'PT', pdt: 'PT',
+};
+
+/**
+ * Reformat non-standard time expressions within a single text string.
+ * Returns the corrected string (unchanged if no non-standard times found).
+ *
+ * Steps applied in order:
+ *  1. Normalize AM/PM variants → a.m. / p.m.
+ *     Handles: AM, PM, A.M., P.M., A.M, P.M, am, pm (with or without space)
+ *  2. Remove :00 from exact hours (e.g., 11:00 a.m. → 11 a.m.)
+ *     Only fires when minutes are exactly 00; 3:30 p.m. is left unchanged.
+ *  3. Normalize timezone abbreviations after time expressions:
+ *     EST/EDT → ET, CST/CDT → CT, MST/MDT → MT, PST/PDT → PT
+ *
+ * Uses (?!\w) instead of trailing \b so that forms ending in "." (e.g., "A.M.")
+ * are correctly bounded without requiring a word character at the boundary.
+ */
+function applyTimeFormatsToText(text: string): string {
+  let result = text;
+
+  // Step 1: Normalize non-standard AM/PM forms → a.m. / p.m.
+  // Deliberately excludes already-correct a.m./p.m. to avoid re-processing.
+  result = result.replace(
+    /\b(\d{1,2}(?::\d{2})?)\s*(A\.M\.|P\.M\.|A\.M|P\.M|AM|PM|am|pm)(?!\w)/g,
+    (_match, time, ampm) => {
+      const normalized = /^[Aa]/.test(ampm) ? 'a.m.' : 'p.m.';
+      return `${time} ${normalized}`;
+    }
+  );
+
+  // Step 2: Remove :00 from exact hours, applied after Step 1 ensures
+  // a.m./p.m. are in the correct lowercase form.
+  result = result.replace(
+    /\b(\d{1,2}):00\s+(a\.m\.|p\.m\.)(?!\w)/g,
+    (_match, hour, ampm) => `${hour} ${ampm}`
+  );
+
+  // Step 3: Normalize timezone abbreviations that immediately follow a time
+  // expression. Only fires after Step 1 normalizes the preceding AM/PM form.
+  result = result.replace(
+    /\b(a\.m\.|p\.m\.)\s+(EST|EDT|CST|CDT|MST|MDT|PST|PDT)\b/gi,
+    (_match, ampm, tz) => `${ampm} ${TIME_TZ_MAP[tz.toLowerCase()]!}`
+  );
+
+  return result;
+}
+
+/**
+ * Scan all <w:t> elements and reformat any non-standard time expressions.
+ * Applies to all paragraph types — no exclusions for headings or code blocks.
+ */
+async function applyTimeFormatCorrections(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const wTElements = Array.from(xmlDoc.getElementsByTagName('w:t'));
+  let changed = false;
+
+  for (const wT of wTElements) {
+    const text = wT.textContent ?? '';
+    if (!text) continue;
+
+    const corrected = applyTimeFormatsToText(text);
+    if (corrected !== text) {
+      wT.textContent = corrected;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+// ─── LINK-007: Add [PDF] label to external PDF links ─────────────────────────
+
+/**
+ * Append " [PDF]" to the link text of every external hyperlink whose
+ * relationship target URL contains ".pdf" (case-insensitive) and whose current
+ * link text does not already end with "[PDF]" (case-insensitive).
+ *
+ * Three cases are handled:
+ *  1. Link text does not already end with "[PDF]" (case-insensitive)
+ *     → " [PDF]" is appended to the link text.
+ *  2. Link text already ends with "[PDF]" (case-insensitive) → no change.
+ *  3. "[PDF]" appears as plain text in the run immediately following the
+ *     hyperlink element → " [PDF]" is appended to the link text AND the
+ *     adjacent plain-text run is removed.
+ */
+async function applyPdfLabelFix(zip: JSZip): Promise<void> {
+  const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+
+  // Build set of relationship IDs whose target URL contains .pdf
+  const relsPath = 'word/_rels/document.xml.rels';
+  const relsFile = zip.file(relsPath);
+  if (!relsFile) return;
+
+  const relsStr = await relsFile.async('string');
+  const parser = new DOMParser();
+  const relsDoc = parser.parseFromString(relsStr, 'application/xml');
+
+  const HYPERLINK_TYPE_URI = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
+
+  const pdfRelIds = new Set<string>();
+  for (const rel of Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'))) {
+    const type = rel.getAttribute('Type') ?? '';
+    const targetMode = rel.getAttribute('TargetMode') ?? '';
+    const target = rel.getAttribute('Target') ?? '';
+
+    // Only process external hyperlinks to http(s) URLs containing ".pdf".
+    // This guards against non-hyperlink relationships and non-HTTP(S) targets
+    // (e.g. mailto:, relative paths, or other relationship types) that happen
+    // to contain ".pdf" in their Target string.
+    if (type !== HYPERLINK_TYPE_URI) continue;
+    if (targetMode !== 'External') continue;
+    if (!/^https?:\/\//i.test(target)) continue;
+    if (!target.toLowerCase().includes('.pdf')) continue;
+
+    const id = rel.getAttribute('Id') ?? '';
+    if (id) pdfRelIds.add(id);
+  }
+
+  if (pdfRelIds.size === 0) return;
+
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  let changed = false;
+
+  for (const hyperlink of Array.from(xmlDoc.getElementsByTagName('w:hyperlink'))) {
+    const rId = hyperlink.getAttributeNS(R, 'id');
+    if (!rId || !pdfRelIds.has(rId)) continue;
+
+    // Collect text from direct-child <w:r> runs only
+    const runs = Array.from(hyperlink.childNodes).filter(
+      (n): n is Element => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'r'
+    );
+    const allWTs = runs.flatMap(r => Array.from(r.getElementsByTagName('w:t')));
+    const linkText = allWTs.map(t => t.textContent ?? '').join('');
+
+    // Case 2: already ends with [PDF] → skip
+    if (/\[pdf\]$/i.test(linkText.trim())) continue;
+
+    // Case 3: check if the run immediately after the hyperlink is plain "[PDF]"
+    let adjacentPdfRun: Element | null = null;
+    const nextSib = hyperlink.nextSibling;
+    if (nextSib?.nodeType === Node.ELEMENT_NODE) {
+      const nextEl = nextSib as Element;
+      if (nextEl.localName === 'r') {
+        const nextText = Array.from(nextEl.getElementsByTagName('w:t'))
+          .map(t => t.textContent ?? '').join('').trim();
+        if (/^\[pdf\]$/i.test(nextText)) {
+          adjacentPdfRun = nextEl;
+        }
+      }
+    }
+
+    // Find the last <w:t> with non-empty content and append " [PDF]"
+    let lastWT: Element | null = null;
+    for (let i = allWTs.length - 1; i >= 0; i--) {
+      if ((allWTs[i]!.textContent ?? '').length > 0) {
+        lastWT = allWTs[i]!;
+        break;
+      }
+    }
+    if (!lastWT && allWTs.length > 0) lastWT = allWTs[allWTs.length - 1]!;
+    if (!lastWT) continue;
+
+    lastWT.textContent = (lastWT.textContent ?? '') + ' [PDF]';
+    lastWT.setAttribute('xml:space', 'preserve');
+    changed = true;
+
+    // Remove the adjacent plain-text "[PDF]" run (case 3)
+    if (adjacentPdfRun) {
+      adjacentPdfRun.parentNode?.removeChild(adjacentPdfRun);
+    }
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+// ─── CLEAN-012: Bold "asterisked ( * )" in scoped sections ───────────────────
+
+const ASTERISKED_PHRASE_LC = 'asterisked ( * )';
+const ASTERISKED_SCOPE_RE = /^(approach|program logic model)$/i;
+
+function asteriskedGetHeadingLevel(para: Element): number {
+  const pPr = Array.from(para.children).find(c => c.localName === 'pPr');
+  if (!pPr) return 0;
+  const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+  const val = pStyle?.getAttribute('w:val') ?? '';
+  const m = val.match(/^Heading(\d)/i);
+  return m ? parseInt(m[1]!, 10) : 0;
+}
+
+function asteriskedRunIsBold(run: Element): boolean {
+  const rPr = Array.from(run.children).find(c => c.localName === 'rPr');
+  if (!rPr) return false;
+  return Array.from(rPr.children).some(c => c.localName === 'b');
+}
+
+function asteriskedEnsureBold(xmlDoc: Document, W: string, run: Element): void {
+  let rPr = Array.from(run.children).find(c => c.localName === 'rPr') ?? null;
+  if (!rPr) {
+    rPr = xmlDoc.createElementNS(W, 'w:rPr');
+    run.insertBefore(rPr, run.firstChild);
+  }
+  if (!Array.from(rPr.children).some(c => c.localName === 'b')) {
+    rPr.appendChild(xmlDoc.createElementNS(W, 'w:b'));
+  }
+  if (!Array.from(rPr.children).some(c => c.localName === 'bCs')) {
+    rPr.appendChild(xmlDoc.createElementNS(W, 'w:bCs'));
+  }
+}
+
+/**
+ * Split a <w:r> run at character position `pos` within its concatenated <w:t> text.
+ * Inserts a clone (text[0..pos)) before `run` in `para`.
+ * Modifies `run` in place to contain text[pos..].
+ * Returns [beforeRun, afterRun].
+ */
+function asteriskedSplitRun(para: Element, run: Element, pos: number): [Element, Element] {
+  const wTs = Array.from(run.getElementsByTagName('w:t'));
+  const fullText = wTs.map(t => t.textContent ?? '').join('');
+  const before = fullText.slice(0, pos);
+  const after = fullText.slice(pos);
+
+  const beforeRun = run.cloneNode(true) as Element;
+  const beforeWTs = Array.from(beforeRun.getElementsByTagName('w:t'));
+  if (beforeWTs[0]) {
+    beforeWTs[0].textContent = before;
+    if (before !== before.trim()) beforeWTs[0].setAttribute('xml:space', 'preserve');
+    else beforeWTs[0].removeAttribute('xml:space');
+  }
+  for (let i = 1; i < beforeWTs.length; i++) beforeWTs[i]!.parentNode?.removeChild(beforeWTs[i]!);
+
+  if (wTs[0]) {
+    wTs[0].textContent = after;
+    if (after !== after.trim()) wTs[0].setAttribute('xml:space', 'preserve');
+    else wTs[0].removeAttribute('xml:space');
+  }
+  for (let i = 1; i < wTs.length; i++) wTs[i]!.parentNode?.removeChild(wTs[i]!);
+
+  para.insertBefore(beforeRun, run);
+  return [beforeRun, run];
+}
+
+/**
+ * Find all case-insensitive occurrences of ASTERISKED_PHRASE_LC in a paragraph
+ * and ensure each is bold. Splits runs at phrase boundaries when needed to avoid
+ * bolding surrounding text. Returns true if any change was made.
+ *
+ * Iterative: each pass may split one boundary run; the loop re-reads the DOM
+ * after each split, converging when all phrase occurrences are exactly run-aligned
+ * and bold.
+ */
+function asteriskedBoldPhraseInParagraph(xmlDoc: Document, W: string, para: Element): boolean {
+  let changed = false;
+
+  for (let pass = 0; pass < 10; pass++) {
+    const runs: Element[] = Array.from(para.childNodes).filter(
+      (n): n is Element => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'r'
+    );
+    if (runs.length === 0) break;
+
+    const offsets: number[] = [];
+    const texts: string[] = [];
+    let off = 0;
+    for (const r of runs) {
+      offsets.push(off);
+      const t = Array.from(r.getElementsByTagName('w:t')).map(wt => wt.textContent ?? '').join('');
+      texts.push(t);
+      off += t.length;
+    }
+    offsets.push(off);
+    const fullLC = texts.join('').toLowerCase();
+
+    let splitDone = false;
+    let search = 0;
+
+    let mi = fullLC.indexOf(ASTERISKED_PHRASE_LC, search);
+    while (mi !== -1) {
+      const me = mi + ASTERISKED_PHRASE_LC.length;
+
+      // Find runs that overlap [mi, me)
+      const span: number[] = [];
+      for (let i = 0; i < runs.length; i++) {
+        if (offsets[i]! < me && offsets[i + 1]! > mi) span.push(i);
+      }
+
+      if (span.length > 0 && !span.every(i => asteriskedRunIsBold(runs[i]!))) {
+        if (span.length === 1) {
+          const ri = span[0]!;
+          const rs = offsets[ri]!;
+          const re = offsets[ri + 1]!;
+          let phraseRun = runs[ri]!;
+
+          // Split off the after part first (so re aligns with phrase end)
+          if (me < re) {
+            const [bp] = asteriskedSplitRun(para, phraseRun, me - rs);
+            phraseRun = bp; // bp covers [rs..me); afterRun covers [me..re)
+            splitDone = true;
+            changed = true;
+            break; // Re-read DOM next pass
+          }
+
+          // Split off the before part (so rs aligns with phrase start)
+          if (mi > rs) {
+            const [, ap] = asteriskedSplitRun(para, phraseRun, mi - rs);
+            phraseRun = ap; // ap covers [mi..re==me)
+            splitDone = true;
+            changed = true;
+            break; // Re-read DOM next pass
+          }
+
+          // Phrase exactly fills the run — bold it
+          asteriskedEnsureBold(xmlDoc, W, phraseRun);
+          changed = true;
+        } else {
+          // Multi-run span: bold all overlapping runs without splitting
+          for (const i of span) {
+            if (!asteriskedRunIsBold(runs[i]!)) {
+              asteriskedEnsureBold(xmlDoc, W, runs[i]!);
+              changed = true;
+            }
+          }
+        }
+      }
+
+      search = me;
+      mi = fullLC.indexOf(ASTERISKED_PHRASE_LC, search);
+    }
+
+    if (!splitDone) break;
+  }
+
+  return changed;
+}
+
+/**
+ * Bold "asterisked ( * )" in all paragraphs found under headings whose text
+ * matches "Approach" or "Program logic model" (case-insensitive). Scope ends
+ * when a heading at the same or higher level is encountered.
+ */
+async function applyAsteriskedBoldFix(zip: JSZip): Promise<void> {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  let inScope = false;
+  let scopeLevel = 0;
+  let changed = false;
+
+  for (const child of Array.from(body.children)) {
+    if (child.localName !== 'p') continue;
+
+    const level = asteriskedGetHeadingLevel(child);
+    if (level > 0) {
+      const text = getParaText(child).trim();
+      if (ASTERISKED_SCOPE_RE.test(text)) {
+        inScope = true;
+        scopeLevel = level;
+      } else if (inScope && level <= scopeLevel) {
+        inScope = false;
+      }
+      continue;
+    }
+
+    if (!inScope) continue;
+
+    if (asteriskedBoldPhraseInParagraph(xmlDoc, W, child)) {
+      changed = true;
     }
   }
 

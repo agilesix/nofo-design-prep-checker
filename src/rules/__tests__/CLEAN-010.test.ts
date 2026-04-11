@@ -160,3 +160,29 @@ describe('CLEAN-010: only a period triggers the rule', () => {
     expect(CLEAN_010.check(doc, OPTIONS)).toHaveLength(0);
   });
 });
+
+// ─── Colon/semicolon items are not given a period ─────────────────────────────
+
+describe('CLEAN-010: items ending with colon or semicolon are skipped', () => {
+  it('does not add a period to an item ending with a colon', () => {
+    // List qualifies (3+ items, 1 has period). "Item 2:" ends with colon → not
+    // modified; only "Item 3" (missing period) counts toward totalToFix.
+    const doc = makeDoc(makeListXml(['Item 1.', 'Item 2:', 'Item 3']));
+    const results = CLEAN_010.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as AutoAppliedChange).value).toBe('1'); // only Item 3
+  });
+
+  it('does not add a period to an item ending with a semicolon', () => {
+    const doc = makeDoc(makeListXml(['Item 1.', 'Item 2;', 'Item 3']));
+    const results = CLEAN_010.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as AutoAppliedChange).value).toBe('1'); // only Item 3
+  });
+
+  it('does not add periods when all non-period items end with colons or semicolons', () => {
+    // All items without periods end in : or ; → nothing to fix
+    const doc = makeDoc(makeListXml(['Item 1.', 'Item 2:', 'Item 3;']));
+    expect(CLEAN_010.check(doc, OPTIONS)).toHaveLength(0);
+  });
+});
