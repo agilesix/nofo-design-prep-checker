@@ -759,3 +759,32 @@ describe('LINK-006 link text suggestion — "see" suppression', () => {
     expect(suggestion!.inputRequired?.prefill).toContain('(see Appendix A)');
   });
 });
+
+// ─── Tier 1c: clean heading slug match (leading-space heading fix) ────────────
+
+describe('LINK-006 Tier 1c — leading-space heading normalisation', () => {
+  it('does not flag a link whose anchor matches the trimmed-text slug of a heading with a leading space', () => {
+    // Heading has a leading space → mammoth assigns id "_Contacts_and_Support".
+    // The link points to "#Contacts_and_Support" (the clean slug without underscore
+    // prefix).  Tier 1c recognises it as a valid link and raises no anchor issue.
+    const doc = makeDoc(
+      '<h2 id="_Contacts_and_Support"> Contacts and Support</h2>' +
+      '<p><a href="#Contacts_and_Support">See Contacts and Support</a></p>'
+    );
+    expect(LINK_006.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('Source 2 returns the clean slug suggestion when heading id has a leading underscore', () => {
+    // Heading id "_Contacts_and_Support" (leading underscore from leading space in
+    // heading text).  A link whose normalised anchor matches the stripped id should
+    // receive "Contacts_and_Support" — not "_Contacts_and_Support" — as its
+    // pre-filled suggestion.
+    const doc = makeDoc(
+      '<h2 id="_Contacts_and_Support"> Contacts and Support</h2>' +
+      '<p><a href="#contacts_and_support">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.inputRequired?.prefill).toBe('Contacts_and_Support');
+  });
+});

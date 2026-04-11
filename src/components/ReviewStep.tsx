@@ -196,11 +196,9 @@ export default function ReviewStep({
       )}
 
       {issues.length === 0 ? (
-        <div className="usa-alert usa-alert--success margin-bottom-4">
-          <div className="usa-alert__body">
-            <h2 className="usa-alert__heading">{content.review.noIssues.heading}</h2>
-            <p className="usa-alert__text">{content.review.noIssues.body}</p>
-          </div>
+        <div className="margin-bottom-4">
+          <p className="margin-0">{content.review.noIssues.body}</p>
+          <p className="margin-top-1 margin-bottom-0">{content.review.noIssues.nextStep}</p>
         </div>
       ) : (
         <>

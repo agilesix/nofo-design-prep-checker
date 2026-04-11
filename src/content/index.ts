@@ -111,8 +111,8 @@ export const content = {
     heading: 'Review issues',
     intro: 'Review each issue and decide how to handle it. Changes will be applied when you download the updated document.',
     noIssues: {
-      heading: 'No issues found',
-      body: 'Your document passed all checks. Proceed to download your document.',
+      body: 'No issues found. Your document passed all checks.',
+      nextStep: 'Review the auto-applied changes above, then download your updated document.',
     },
     issueCount: (count: number): string => `${count} issue${count === 1 ? '' : 's'} found`,
     autoApplied: {

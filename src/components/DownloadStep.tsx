@@ -152,7 +152,7 @@ export default function DownloadStep({
         onClick={onStartOver}
         className="usa-button usa-button--unstyled padding-0 margin-0 text-decoration-underline"
       >
-        ← Check another document
+        Check another document
       </button>
     </div>
   );

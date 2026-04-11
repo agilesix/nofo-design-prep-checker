@@ -12,8 +12,9 @@ import { groupListParagraphs } from '../../utils/listHelpers';
  * text is '.'. No other punctuation (?, !, :, ;) is treated as equivalent.
  *
  * Empty list items (no text content) are skipped. Items that already end with
- * a period are left unchanged. All other items receive a period regardless of
- * what they end with (numbers, URLs, abbreviations, etc.).
+ * a period are left unchanged. Items ending with a colon (:) or semicolon (;)
+ * are also left unchanged — they introduce sub-lists or clauses and a trailing
+ * period would be grammatically incorrect. All other items receive a period.
  *
  * Detection uses doc.documentXml (raw OOXML) because list structure is not
  * preserved in the mammoth-generated HTML.
@@ -43,7 +44,7 @@ const CLEAN_010: Rule = {
       const texts = group.map(p => getItemText(p).trimEnd());
       const withPeriod = texts.filter(t => t.endsWith('.')).length;
       if (withPeriod === 0) continue;
-      totalToFix += texts.filter(t => t.length > 0 && !t.endsWith('.')).length;
+      totalToFix += texts.filter(t => t.length > 0 && !t.endsWith('.') && !t.endsWith(':') && !t.endsWith(';')).length;
     }
 
     if (totalToFix === 0) return [];

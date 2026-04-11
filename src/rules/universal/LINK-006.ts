@@ -74,6 +74,16 @@ const LINK_006: Rule = {
     const fuzzyCache = new Map<string, FuzzyMatchResult>();
     const getContext = buildLocationLookup(htmlDoc);
 
+    // Precompute clean heading slug → element map so Tier 1c can (a) validate
+    // anchors that target headings with leading/trailing spaces (which CLEAN-008
+    // strips in the output) and (b) still surface link-text suggestions when the
+    // link text doesn't reference the heading name.
+    const cleanHeadingSlugMap = new Map<string, Element>(
+      Array.from(htmlDoc.querySelectorAll('h1,h2,h3,h4,h5,h6'))
+        .map(h => [slugifyHeading((h.textContent ?? '').trim()), h] as const)
+        .filter(([slug]) => Boolean(slug))
+    );
+
     bookmarkLinks.forEach((link, index) => {
       const href = link.getAttribute('href') ?? '';
       const anchor = href.slice(1); // strip leading #
@@ -101,6 +111,23 @@ const LINK_006: Rule = {
 
       // Tier 1b: exact match against OOXML bookmark names
       if (ooxmlBookmarkNames && ooxmlBookmarkNames.has(anchor)) return;
+
+      // Tier 1c: match via slug of trimmed heading text.
+      // Handles headings with leading/trailing spaces (which CLEAN-008 strips in
+      // the output): a link pointing to the clean slug (e.g. #Contacts_and_Support)
+      // is valid even when the heading element's id is still #_Contacts_and_Support.
+      // Also surfaces a link-text suggestion when the link text doesn't name the
+      // heading destination (consistent with the Tier 1a behaviour).
+      const tier1cHeading = cleanHeadingSlugMap.get(anchor);
+      if (tier1cHeading !== undefined) {
+        const headingText = (tier1cHeading.textContent ?? '').trim();
+        if (headingText && !linkTextContainsHeading(linkText, headingText)) {
+          const sectionId = findSectionForElement(link as Element, doc);
+          const suppressSee = hasSeeBeforeLink(link as Element);
+          results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
+        }
+        return;
+      }
 
       // Tier 2: fuzzy match (result cached per anchor)
       if (!fuzzyCache.has(anchor)) {
@@ -382,8 +409,19 @@ function matchByNormalizedValue(
   }
 
   // ── Source 2: HTML element IDs (mammoth-mapped bookmarks) ──────────────────
+  // For heading elements, strip leading/trailing underscores from the id before
+  // using it as a candidate anchor.  Heading ids with a leading underscore (e.g.
+  // _Contacts_and_Support) come from headings whose text has a leading space —
+  // CLEAN-008 removes those spaces, so the correct anchor lacks the underscore.
   const allIds = Array.from(htmlDoc.querySelectorAll('[id]'))
-    .map(el => el.getAttribute('id') ?? '')
+    .map(el => {
+      const rawId = el.getAttribute('id') ?? '';
+      if (!rawId) return '';
+      if (/^h[1-6]$/i.test(el.tagName)) {
+        return rawId.replace(/^_+|_+$/g, '') || rawId;
+      }
+      return rawId;
+    })
     .filter(Boolean);
 
   const idMatches = allIds.filter(id => normalizeAnchor(id) === normalizedAnchor);
