@@ -77,6 +77,7 @@ const LINK_006: Rule = {
     // Cache fuzzy results — the same broken anchor may appear in many links
     const fuzzyCache = new Map<string, FuzzyMatchResult>();
     const getContext = buildLocationLookup(htmlDoc);
+    const capFixes: { old: string; new: string }[] = [];
 
     // Precompute clean heading slug → element map so Tier 1c can (a) validate
     // anchors that target headings with leading/trailing spaces (which CLEAN-008
@@ -143,6 +144,20 @@ const LINK_006: Rule = {
         const fuzzy = fuzzyResult.anchor;
         const headingText = fuzzyResult.headingText;
         const sectionId = findSectionForElement(link, doc);
+
+        // Capitalization-only mismatch: auto-fix silently, no Issue surfaced.
+        // The anchor and the matched target are identical when lowercased, meaning
+        // the only difference is capitalization (e.g. #eligibility → #Eligibility).
+        if (anchor.toLowerCase() === fuzzy.toLowerCase()) {
+          capFixes.push({ old: anchor, new: fuzzy });
+          // Still surface a link-text suggestion if the heading name isn't in the link text.
+          if (headingText && !linkTextContainsHeading(linkText, headingText)) {
+            const suppressSee = hasSeeBeforeLink(link as Element);
+            results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
+          }
+          return;
+        }
+
         // Lower-confidence numeric-extraction matches get "possible" rather than "likely"
         const confidence = fuzzyResult.matchedByNumericExtraction ? 'possible' : 'likely';
         const description = headingText
@@ -227,6 +242,16 @@ const LINK_006: Rule = {
         instructionOnly: true,
       } as Issue);
     });
+
+    if (capFixes.length > 0) {
+      const count = capFixes.length;
+      results.push({
+        ruleId: 'LINK-006',
+        description: `${count} internal link anchor${count === 1 ? '' : 's'} corrected for capitalization`,
+        targetField: 'link.anchor.cap',
+        value: JSON.stringify(capFixes),
+      } as AutoAppliedChange);
+    }
 
     return results;
   },

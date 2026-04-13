@@ -52,6 +52,9 @@ export async function buildDocx(
   const hasPdfLabelFix = autoAppliedChanges.some(
     c => c.targetField === 'link.pdf.label'
   );
+  const capAnchorChanges = autoAppliedChanges.filter(
+    c => c.targetField === 'link.anchor.cap' && c.value
+  );
   const hasAsteriskedBoldFix = autoAppliedChanges.some(
     c => c.targetField === 'text.asterisked.bold'
   );
@@ -72,6 +75,11 @@ export async function buildDocx(
   // Apply auto-applied email mailto patches
   if (emailChanges.length > 0) {
     await applyEmailMailtoFixes(zip, emailChanges.map(c => c.value as string));
+  }
+
+  // Retarget internal bookmark anchors corrected for capitalization only
+  if (capAnchorChanges.length > 0) {
+    await applyCapAnchorFixes(zip, capAnchorChanges);
   }
 
   // Apply double-space collapse
@@ -351,6 +359,48 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
     }
   }
 
+  const serializer = new XMLSerializer();
+  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+}
+
+/**
+ * LINK-006: Retarget internal bookmark anchors that differ from the correct
+ * target only by capitalization (e.g. #eligibility → #Eligibility).
+ * Each AutoAppliedChange carries a JSON-encoded array of {old, new} pairs in
+ * its `value` field. All w:hyperlink elements whose w:anchor matches an old
+ * anchor are rewritten to the correctly-cased new anchor.
+ */
+async function applyCapAnchorFixes(zip: JSZip, changes: AutoAppliedChange[]): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+
+  const anchorMap = new Map<string, string>();
+  for (const change of changes) {
+    const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
+    for (const pair of pairs) {
+      anchorMap.set(pair.old, pair.new);
+    }
+  }
+
+  let changed = false;
+  for (const el of hyperlinks) {
+    const anchor = el.getAttributeNS(W, 'anchor');
+    if (!anchor) continue;
+
+    const newAnchor = anchorMap.get(anchor);
+    if (!newAnchor || newAnchor === anchor) continue;
+
+    el.setAttributeNS(W, 'w:anchor', newAnchor);
+    changed = true;
+  }
+
+  if (!changed) return;
   const serializer = new XMLSerializer();
   zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
 }
