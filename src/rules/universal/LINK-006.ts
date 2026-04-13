@@ -77,6 +77,12 @@ const LINK_006: Rule = {
     // Cache fuzzy results — the same broken anchor may appear in many links
     const fuzzyCache = new Map<string, FuzzyMatchResult>();
     const getContext = buildLocationLookup(htmlDoc);
+    // De-duplicated old→new anchor map for cap-only fixes (keyed by old anchor).
+    // A separate occurrence counter drives the description; the map avoids writing
+    // duplicate {old,new} pairs into the JSON stored in value when the same broken
+    // anchor appears in multiple links.
+    const capFixMap = new Map<string, string>();
+    let capFixOccurrences = 0;
 
     // Precompute clean heading slug → element map so Tier 1c can (a) validate
     // anchors that target headings with leading/trailing spaces (which CLEAN-008
@@ -143,6 +149,24 @@ const LINK_006: Rule = {
         const fuzzy = fuzzyResult.anchor;
         const headingText = fuzzyResult.headingText;
         const sectionId = findSectionForElement(link, doc);
+
+        // Capitalization-only mismatch: auto-fix silently, no Issue surfaced.
+        // The anchor and the matched target are identical when lowercased, meaning
+        // the only difference is capitalization (e.g. #eligibility → #Eligibility).
+        // Each new unique broken anchor is recorded in capFixMap (old → new) to
+        // de-duplicate the JSON patch payload; occurrences are counted separately
+        // so repeated broken anchors are reflected in the description count.
+        if (anchor.toLowerCase() === fuzzy.toLowerCase()) {
+          capFixMap.set(anchor, fuzzy);
+          capFixOccurrences++;
+          // Still surface a link-text suggestion if the heading name isn't in the link text.
+          if (headingText && !linkTextContainsHeading(linkText, headingText)) {
+            const suppressSee = hasSeeBeforeLink(link as Element);
+            results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
+          }
+          return;
+        }
+
         // Lower-confidence numeric-extraction matches get "possible" rather than "likely"
         const confidence = fuzzyResult.matchedByNumericExtraction ? 'possible' : 'likely';
         const description = headingText
@@ -227,6 +251,19 @@ const LINK_006: Rule = {
         instructionOnly: true,
       } as Issue);
     });
+
+    if (capFixMap.size > 0) {
+      const count = capFixOccurrences;
+      results.push({
+        ruleId: 'LINK-006',
+        description: `${count} internal link anchor${count === 1 ? '' : 's'} corrected for capitalization`,
+        targetField: 'link.anchor.cap',
+        // De-duplicated map serialized as an array of {old,new} pairs. Each entry
+        // represents a distinct broken anchor → correct anchor mapping; one entry
+        // may cover many link elements that shared the same broken anchor.
+        value: JSON.stringify(Array.from(capFixMap, ([old, newAnchor]) => ({ old, new: newAnchor }))),
+      } as AutoAppliedChange);
+    }
 
     return results;
   },

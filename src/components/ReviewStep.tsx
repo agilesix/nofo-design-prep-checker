@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useFocusHeading } from '../hooks/useFocusHeading';
 import type { ParsedDocument, ReviewState, AcceptedFix, IssueResolution, Issue, ContentGuideId } from '../types';
 import { content } from '../content';
@@ -30,7 +30,6 @@ export default function ReviewStep({
   isPreNofo,
 }: ReviewStepProps): React.ReactElement {
   const headingRef = useFocusHeading();
-  const issueListRef = useRef<HTMLDivElement>(null);
   const [resolutions, setResolutions] = useState<Record<string, IssueResolution>>(
     reviewState.resolutions
   );
@@ -47,24 +46,6 @@ export default function ReviewStep({
     setAcceptedFixes([]);
     setDismissedCategories(new Set());
   }, [reviewState.issues, reviewState.resolutions]);
-
-  // Apply/remove the `inert` attribute on the issues subtree when isPreNofo changes.
-  // `inert` prevents keyboard focus and pointer events for all descendants and hides
-  // the subtree from assistive technologies — the correct semantic replacement for
-  // the aria-hidden + pointerEvents:none pattern, which does not block keyboard nav.
-  // Set imperatively because `inert` is not in @types/react's stable type definitions.
-  // useLayoutEffect (not useEffect) runs synchronously before the browser paints, so
-  // the attribute is in place on the first render — no interactive window where the
-  // issue list is focusable before the effect fires.
-  useLayoutEffect(() => {
-    const el = issueListRef.current;
-    if (!el) return;
-    if (isPreNofo) {
-      el.setAttribute('inert', '');
-    } else {
-      el.removeAttribute('inert');
-    }
-  }, [isPreNofo]);
 
   const { issues, autoAppliedChanges, activeContentGuide } = reviewState;
 
@@ -176,13 +157,11 @@ export default function ReviewStep({
     onComplete(acceptedFixes, resolutions);
   }, [onComplete, acceptedFixes, resolutions]);
 
-  return (
-    <div className="margin-top-4">
-      <h1 className="usa-h1 margin-bottom-2" tabIndex={-1} ref={headingRef}>{content.steps.review.heading}</h1>
-
-      <p className="usa-intro">{content.review.intro}</p>
-
-      {isPreNofo && (
+  // Pre-NOFO documents cannot be processed — show only the error and a way out.
+  if (isPreNofo) {
+    return (
+      <div className="margin-top-4">
+        <h1 className="usa-h1 margin-bottom-2" tabIndex={-1} ref={headingRef}>{content.steps.review.heading}</h1>
         <div className="usa-alert usa-alert--error margin-bottom-4" role="alert">
           <div className="usa-alert__body">
             <h2 className="usa-alert__heading">This appears to be a pre-NOFO document</h2>
@@ -199,7 +178,22 @@ export default function ReviewStep({
             </ol>
           </div>
         </div>
-      )}
+        <button
+          type="button"
+          className="usa-button usa-button--unstyled"
+          onClick={onStartOver}
+        >
+          {content.review.startOverButton}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="margin-top-4">
+      <h1 className="usa-h1 margin-bottom-2" tabIndex={-1} ref={headingRef}>{content.steps.review.heading}</h1>
+
+      <p className="usa-intro">{content.review.intro}</p>
 
       {!bannerDismissed && (
         <div className="usa-alert usa-alert--info margin-bottom-4 review-banner" role="alert">
@@ -235,10 +229,7 @@ export default function ReviewStep({
         </div>
       )}
 
-      <div
-        ref={issueListRef}
-        style={isPreNofo ? { opacity: 0.45, pointerEvents: 'none' } : undefined}
-      >
+      <div>
         {issues.length === 0 ? (
           <div className="margin-bottom-4">
             <p className="margin-0">{content.review.noIssues.body}</p>
@@ -360,22 +351,20 @@ export default function ReviewStep({
       </div>
 
       <div className="margin-top-4 padding-top-3" style={{ borderTop: '1px solid #c9c7c3' }}>
-        {!isPreNofo && unreviewedCount > 0 && (
+        {unreviewedCount > 0 && (
           <p className="font-body-sm margin-bottom-2" style={{ color: '#4a4944' }}>
             {content.review.continueWarning(unreviewedCount)}
           </p>
         )}
 
         <div className="display-flex flex-gap-2 flex-align-center flex-wrap">
-          {!isPreNofo && (
-            <button
-              type="button"
-              className="usa-button"
-              onClick={handleContinue}
-            >
-              {content.review.continueButton}
-            </button>
-          )}
+          <button
+            type="button"
+            className="usa-button"
+            onClick={handleContinue}
+          >
+            {content.review.continueButton}
+          </button>
           <button
             type="button"
             className="usa-button usa-button--unstyled"

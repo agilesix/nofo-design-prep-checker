@@ -58,6 +58,9 @@ export async function buildDocx(
   const hasTimeCorrection = autoAppliedChanges.some(
     c => c.targetField === 'format.time.correct'
   );
+  const capAnchorChanges = autoAppliedChanges.filter(
+    c => c.targetField === 'link.anchor.cap' && c.value
+  );
 
   // Apply metadata patches
   if (metaFixes.length > 0) {
@@ -72,6 +75,11 @@ export async function buildDocx(
   // Apply auto-applied email mailto patches
   if (emailChanges.length > 0) {
     await applyEmailMailtoFixes(zip, emailChanges.map(c => c.value as string));
+  }
+
+  // Retarget internal bookmark anchors corrected for capitalization only
+  if (capAnchorChanges.length > 0) {
+    await applyCapAnchorFixes(zip, capAnchorChanges);
   }
 
   // Apply double-space collapse
@@ -348,6 +356,53 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
     // LINK-003: update link text
     if (fix.ruleId === 'LINK-003' && fix.targetField?.startsWith('link.')) {
       // Production implementation: match by relationship ID stored in the issue
+    }
+  }
+
+  const serializer = new XMLSerializer();
+  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+}
+
+/**
+ * LINK-006: Retarget internal bookmark anchors that differ from the correct
+ * target only by capitalization (e.g. #eligibility → #Eligibility).
+ * Each AutoAppliedChange carries a JSON-encoded array of {old, new} pairs in
+ * its `value` field — one entry per distinct broken anchor, de-duplicated at
+ * emit time. All w:hyperlink elements whose w:anchor matches an old anchor are
+ * rewritten to the correctly-cased new anchor.
+ */
+async function applyCapAnchorFixes(zip: JSZip, changes: AutoAppliedChange[]): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+
+  for (const change of changes) {
+    let pairs: { old: string; new: string }[];
+    try {
+      const parsed = JSON.parse(change.value!);
+      if (!Array.isArray(parsed)) continue;
+      pairs = parsed.filter(
+        (p): p is { old: string; new: string } =>
+          p !== null &&
+          typeof p === 'object' &&
+          typeof p.old === 'string' &&
+          typeof p.new === 'string'
+      );
+    } catch {
+      // Malformed JSON — skip this entry so the rest of the download still succeeds
+      continue;
+    }
+    for (const pair of pairs) {
+      for (const el of hyperlinks) {
+        if (el.getAttributeNS(W, 'anchor') === pair.old) {
+          el.setAttributeNS(W, 'w:anchor', pair.new);
+        }
+      }
     }
   }
 
