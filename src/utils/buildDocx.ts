@@ -52,14 +52,14 @@ export async function buildDocx(
   const hasPdfLabelFix = autoAppliedChanges.some(
     c => c.targetField === 'link.pdf.label'
   );
+  const capAnchorChanges = autoAppliedChanges.filter(
+    c => c.targetField === 'link.anchor.cap' && c.value
+  );
   const hasAsteriskedBoldFix = autoAppliedChanges.some(
     c => c.targetField === 'text.asterisked.bold'
   );
   const hasTimeCorrection = autoAppliedChanges.some(
     c => c.targetField === 'format.time.correct'
-  );
-  const capAnchorChanges = autoAppliedChanges.filter(
-    c => c.targetField === 'link.anchor.cap' && c.value
   );
 
   // Apply metadata patches
@@ -367,9 +367,8 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
  * LINK-006: Retarget internal bookmark anchors that differ from the correct
  * target only by capitalization (e.g. #eligibility → #Eligibility).
  * Each AutoAppliedChange carries a JSON-encoded array of {old, new} pairs in
- * its `value` field — one entry per distinct broken anchor, de-duplicated at
- * emit time. All w:hyperlink elements whose w:anchor matches an old anchor are
- * rewritten to the correctly-cased new anchor.
+ * its `value` field. All w:hyperlink elements whose w:anchor matches an old
+ * anchor are rewritten to the correctly-cased new anchor.
  */
 async function applyCapAnchorFixes(zip: JSZip, changes: AutoAppliedChange[]): Promise<void> {
   const docFile = zip.file('word/document.xml');

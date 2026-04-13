@@ -781,10 +781,10 @@ describe('LINK-006 Tier 1c — leading-space heading normalisation', () => {
     expect(LINK_006.check(doc, OPTIONS)).toHaveLength(0);
   });
 
-  it('Source 2 auto-fixes the anchor when the stripped heading id differs only in capitalization', () => {
-    // Heading id "_Contacts_and_Support" → stripped to "Contacts_and_Support" by Source 2.
-    // Anchor "contacts_and_support" lowercases to the same string → capitalization-only
-    // mismatch → auto-fixed silently, no Issue surfaced.
+  it('Source 2 auto-fixes the anchor when the heading id (with leading underscore stripped) differs only in capitalization', () => {
+    // Heading id "_Contacts_and_Support" → stripped to "Contacts_and_Support" (Source 2).
+    // Anchor "contacts_and_support" lowercases to the same string as "Contacts_and_Support" →
+    // capitalization-only mismatch → auto-fixed silently, no Issue surfaced.
     const doc = makeDoc(
       '<h2 id="_Contacts_and_Support"> Contacts and Support</h2>' +
       '<p><a href="#contacts_and_support">link</a></p>'
@@ -880,12 +880,12 @@ describe('LINK-006 capitalization-only auto-fix', () => {
     const results = LINK_006.check(doc, OPTIONS);
     expect(results).toHaveLength(1);
     const change = results[0] as AutoAppliedChange;
-    expect('title' in change).toBe(false); // not an Issue
+    expect('title' in change).toBe(false);   // not an Issue
     expect(change.ruleId).toBe('LINK-006');
     expect(change.targetField).toBe('link.anchor.cap');
   });
 
-  it('description uses singular form for one occurrence', () => {
+  it('description counts the number of links corrected', () => {
     const doc = makeDoc(
       '<p><a href="#eligibility">link</a></p>',
       xmlWithBookmarks('Eligibility')
@@ -939,7 +939,8 @@ describe('LINK-006 capitalization-only auto-fix', () => {
     expect(issue.inputRequired?.prefill).toBe('Eligibility');
   });
 
-  it('no AutoAppliedChange when all fuzzy matches differ by more than capitalization', () => {
+  it('no AutoAppliedChange is emitted when all fuzzy matches differ by more than capitalization', () => {
+    // #_Eligibility → #Eligibility: NOT cap-only (underscore prefix differs)
     const doc = makeDoc(
       '<p><a href="#_Eligibility">link</a></p>',
       xmlWithBookmarks('Eligibility')
