@@ -163,6 +163,24 @@ const EXCLUDED_HEADINGS = new Set([
   'table of contents',
   'appendix',
   'attachments',
+  // Table-sourced fragments and administrative form language
+  'page limit',
+  'page limit name',
+  'project narrative page',
+  'project narrative file',
+  'narrative page limit',
+  'limit name project',
+  'included in page limit',
+  'file one',
+  'file two',
+  'standard forms',
+  'grants.gov form',
+  'component',
+  'yes',
+  'no',
+  'insert each',
+  'upload using',
+  'use the',
 ]);
 
 /**
@@ -229,6 +247,28 @@ function isExcluded(term: string): boolean {
 }
 
 /**
+ * Single common words that carry no program-specific content and must never
+ * appear as standalone keyword suggestions. Applied as a final filter to catch
+ * single-word candidates that pass the GENERIC_TERMS and EXCLUDED_HEADINGS
+ * checks (e.g. because they are legitimate multi-word components elsewhere
+ * but degenerate to a single uninformative word after sanitization).
+ */
+const SINGLE_WORD_REJECTS = new Set([
+  'yes', 'no', 'none', 'each', 'using', 'the',
+  'insert', 'upload', 'component', 'required', 'optional',
+  'included', 'excluded', 'applicable',
+]);
+
+/**
+ * Returns true when `term` is a single word that belongs to the common-word
+ * reject list — regardless of whether it passed other filters.
+ */
+function isSingleWordReject(term: string): boolean {
+  const words = term.split(/\s+/).filter(Boolean);
+  return words.length === 1 && SINGLE_WORD_REJECTS.has(words[0]!.toLowerCase());
+}
+
+/**
  * Returns true when `word` (already lowercased) is a content word:
  * at least 3 characters, not a stop word, and not in the generic-terms list.
  */
@@ -264,6 +304,23 @@ function extractAgencyTerms(rawText: string): string[] {
 }
 
 /**
+ * Parse `html` and return the visible text content with all <table> elements
+ * removed. Prevents checklist/attachment table cell text from being treated as
+ * keyword candidates during n-gram extraction.
+ * Falls back to an empty string when html is blank (callers fall back to
+ * rawText in that case).
+ */
+function extractNonTableText(html: string): string {
+  if (!html.trim()) return '';
+  const parser = new DOMParser();
+  const htmlDoc = parser.parseFromString(html, 'text/html');
+  for (const table of Array.from(htmlDoc.querySelectorAll('table'))) {
+    table.remove();
+  }
+  return (htmlDoc.body.textContent ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/**
  * Extract subject-matter keyword candidates from program description and summary
  * sections by counting repeated 2- and 3-word phrases (n-grams).
  *
@@ -278,7 +335,13 @@ function extractProgramSectionTerms(sections: Section[]): string[] {
 
   const relevantText = sections
     .filter(s => PROGRAM_SECTION_RE.test(s.heading.trim()))
-    .map(s => s.rawText)
+    .map(s => {
+      // When html is populated, strip table cells so checklist/attachment rows
+      // do not pollute the n-gram analysis. Fall back to rawText only when the
+      // html field is empty (preserves backward-compat for tests that set html:'').
+      if (!s.html?.trim()) return s.rawText;
+      return extractNonTableText(s.html);
+    })
     .join('\n');
 
   if (!relevantText) return [];
@@ -371,7 +434,7 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
   for (const raw of extractAgencyTerms(doc.rawText)) {
     if (keywords.length >= 10) break;
     const term = normalizeCandidate(raw);
-    if (term && !isExcluded(term) && !isDuplicate(term, keywords)) keywords.push(term);
+    if (term && !isExcluded(term) && !isSingleWordReject(term) && !isDuplicate(term, keywords)) keywords.push(term);
   }
 
   // 3. Opportunity name
@@ -381,7 +444,7 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
     const raw = sanitizeKeywordCandidate(oppNameRaw) ?? shortFormOf(stripArtifacts(oppNameRaw), 3);
     if (raw) {
       const candidate = normalizeCandidate(raw);
-      if (candidate && candidate.length <= MAX_KEYWORD_CHARS && !isExcluded(candidate) && !isDuplicate(candidate, keywords)) {
+      if (candidate && candidate.length <= MAX_KEYWORD_CHARS && !isExcluded(candidate) && !isSingleWordReject(candidate) && !isDuplicate(candidate, keywords)) {
         keywords.push(candidate);
       }
     }
@@ -394,7 +457,7 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
     const raw = sanitizeKeywordCandidate(taglineRaw) ?? shortFormOf(stripArtifacts(taglineRaw), 3);
     if (raw) {
       const candidate = normalizeCandidate(raw);
-      if (candidate && candidate.length <= MAX_KEYWORD_CHARS && !isExcluded(candidate) && !isDuplicate(candidate, keywords)) {
+      if (candidate && candidate.length <= MAX_KEYWORD_CHARS && !isExcluded(candidate) && !isSingleWordReject(candidate) && !isDuplicate(candidate, keywords)) {
         keywords.push(candidate);
       }
     }
@@ -406,7 +469,7 @@ function generateKeywordPrefill(doc: ParsedDocument, contentGuideId: string | nu
   for (const raw of extractProgramSectionTerms(doc.sections)) {
     if (keywords.length >= 10) break;
     const term = normalizeCandidate(raw);
-    if (term && !isExcluded(term) && !isDuplicate(term, keywords)) keywords.push(term);
+    if (term && !isExcluded(term) && !isSingleWordReject(term) && !isDuplicate(term, keywords)) keywords.push(term);
   }
 
   if (keywords.length === 0) return null;
