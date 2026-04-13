@@ -4,8 +4,13 @@
 # Only the first line of the message is checked — body lines are unrestricted.
 
 commit_msg_file="$1"
-first_line=$(head -1 "$commit_msg_file")
 
+if [ -z "$commit_msg_file" ] || [ ! -r "$commit_msg_file" ]; then
+  echo "❌ Commit rejected: commit message file is missing or unreadable."
+  exit 1
+fi
+
+first_line=$(head -n 1 "$commit_msg_file")
 # Case-insensitive prefix check
 case "$(echo "$first_line" | tr '[:upper:]' '[:lower:]')" in
   feat:*|fix:*|docs:*|chore:*|refactor:*|test:*)
