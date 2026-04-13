@@ -171,6 +171,11 @@ function isFederalLawException(text: string): boolean {
   ];
   if (namedLaws.some(law => lower.includes(law))) return true;
 
+  const lawAcronyms = [
+    'ADA',
+    'FOIA',
+  ];
+  if (lawAcronyms.some(acronym => new RegExp(`\\b${acronym}\\b`, 'i').test(text))) return true;
   if (/executive\s+order/i.test(text)) return true;
   if (/\bact\s+of\b/i.test(text) || /\bact,/i.test(text)) return true;
   if (/\bsection\s+\d+/i.test(text)) return true;
