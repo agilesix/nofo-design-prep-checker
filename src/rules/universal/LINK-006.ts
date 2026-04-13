@@ -46,6 +46,10 @@ type FuzzyMatchResult =
   | { kind: 'ambiguous' }
   | { kind: 'none' };
 
+function cleanHeadingId(rawId: string): string {
+  return rawId.replace(/^_+|_+$/g, '') || rawId;
+}
+
 const LINK_006: Rule = {
   id: 'LINK-006',
   autoApply: false,
@@ -444,6 +448,10 @@ function matchByNormalizedValue(
   //
   // The suggested anchor prefers the heading's own id if mammoth assigned one;
   // otherwise derives from the matched heading text via slugifyHeading().
+  // Leading/trailing underscores are stripped from heading ids — they are Word
+  // artifacts of headings whose text begins/ends with a space (CLEAN-008 removes
+  // those spaces in the output, so the correct anchor lacks the underscore).
+  // This mirrors the stripping already applied to heading ids in Source 2 above.
   // headingText is carried through so the Review card can display it.
   const cleanAnchor = removeStopWords(normalizedAnchor);
   const headings = Array.from(htmlDoc.querySelectorAll('h1,h2,h3,h4,h5,h6'));
@@ -459,7 +467,10 @@ function matchByNormalizedValue(
       removeStopWords(normHeading).includes(cleanAnchor);
     if (!directMatch && !stopWordMatch) continue;
 
-    const suggestion = h.getAttribute('id') ?? slugifyHeading(text);
+    const rawId = h.getAttribute('id');
+    const suggestion = rawId !== null
+      ? cleanHeadingId(rawId)
+      : slugifyHeading(text);
     if (!headingMatches.some(m => m.anchor === suggestion)) {
       headingMatches.push({ anchor: suggestion, headingText: text });
     }
@@ -508,7 +519,9 @@ function matchByNumericExtraction(
     for (const h of headings) {
       const text = (h.textContent ?? '').trim();
       if (!text || !pattern.test(text)) continue;
-      const suggestion = h.getAttribute('id') ?? slugifyHeading(text);
+      const rawId = h.getAttribute('id');
+      const normalizedId = rawId?.trim().replace(/^_+|_+$/g, '');
+      const suggestion = normalizedId ? normalizedId : slugifyHeading(text);
       if (!headingMatches.some(m => m.anchor === suggestion)) {
         headingMatches.push({ anchor: suggestion, headingText: text });
       }
