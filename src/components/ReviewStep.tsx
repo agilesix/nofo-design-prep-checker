@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import { useFocusHeading } from '../hooks/useFocusHeading';
 import type { ParsedDocument, ReviewState, AcceptedFix, IssueResolution, Issue, ContentGuideId } from '../types';
 import { content } from '../content';
@@ -53,7 +53,10 @@ export default function ReviewStep({
   // the subtree from assistive technologies — the correct semantic replacement for
   // the aria-hidden + pointerEvents:none pattern, which does not block keyboard nav.
   // Set imperatively because `inert` is not in @types/react's stable type definitions.
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) runs synchronously before the browser paints, so
+  // the attribute is in place on the first render — no interactive window where the
+  // issue list is focusable before the effect fires.
+  useLayoutEffect(() => {
     const el = issueListRef.current;
     if (!el) return;
     if (isPreNofo) {
