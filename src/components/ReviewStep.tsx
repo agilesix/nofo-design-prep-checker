@@ -232,7 +232,10 @@ export default function ReviewStep({
         </div>
       )}
 
-      <div ref={issueListRef} style={isPreNofo ? { opacity: 0.45 } : undefined}>
+      <div
+        ref={issueListRef}
+        style={isPreNofo ? { opacity: 0.45, pointerEvents: 'none' } : undefined}
+      >
         {issues.length === 0 ? (
           <div className="margin-bottom-4">
             <p className="margin-0">{content.review.noIssues.body}</p>
