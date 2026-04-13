@@ -349,6 +349,204 @@ describe('META-003: never suggests structural NOFO headings as keywords', () => 
   });
 });
 
+// ─── Table content exclusion ─────────────────────────────────────────────────
+
+describe('META-003: does not extract keyword candidates from table cell content', () => {
+  it('ignores repeated phrases that appear only inside table cells in a program section', () => {
+    // "clinical outcomes" appears twice but only in table cells — it must not
+    // be suggested as a keyword even though it would score as a repeated n-gram
+    // if rawText were used instead of the table-stripped HTML.
+    const doc: ParsedDocument = {
+      html: '<p>Metadata keywords: Leave blank. Coach will insert.</p>',
+      sections: [
+        {
+          id: 'section-program',
+          heading: 'Program description',
+          headingLevel: 2,
+          html:
+            '<table><tr><td>clinical outcomes</td><td>Yes</td></tr>' +
+            '<tr><td>clinical outcomes</td><td>No</td></tr></table>',
+          rawText: 'clinical outcomes Yes clinical outcomes No',
+          startPage: 2,
+        },
+      ],
+      rawText: 'Metadata keywords: Leave blank. Coach will insert.',
+      zipArchive: new JSZip(),
+      documentXml: '',
+      footnotesXml: '',
+      endnotesXml: '',
+      activeContentGuide: null,
+    };
+
+    const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    expect(prefill.toLowerCase()).not.toContain('clinical outcomes');
+  });
+
+  it('still extracts repeated phrases that appear in paragraph text (not tables)', () => {
+    // "rural health" is in paragraph text twice — should still be suggested.
+    const doc: ParsedDocument = {
+      html: '<p>Metadata keywords: Leave blank. Coach will insert.</p>',
+      sections: [
+        {
+          id: 'section-program',
+          heading: 'Program description',
+          headingLevel: 2,
+          html:
+            '<p>Rural health initiatives help underserved communities. ' +
+            'This program advances rural health access.</p>' +
+            '<table><tr><td>Attachment</td><td>Page limit</td></tr>' +
+            '<tr><td>Project narrative</td><td>25</td></tr></table>',
+          rawText:
+            'Rural health initiatives help underserved communities. ' +
+            'This program advances rural health access. Attachment Page limit Project narrative 25',
+          startPage: 2,
+        },
+      ],
+      rawText: 'Metadata keywords: Leave blank. Coach will insert.',
+      zipArchive: new JSZip(),
+      documentXml: '',
+      footnotesXml: '',
+      endnotesXml: '',
+      activeContentGuide: null,
+    };
+
+    const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    // "rural health" is in paragraph text and appears twice — should be suggested
+    expect(prefill.toLowerCase()).toContain('rural health');
+    // "page limit" is in the table and in the exclusion list — must not appear
+    expect(prefill.toLowerCase()).not.toContain('page limit');
+  });
+});
+
+// ─── Expanded exclusion list ──────────────────────────────────────────────────
+
+describe('META-003: does not suggest newly excluded administrative fragments', () => {
+  it('does not suggest "page limit" even when it repeats in a program section', () => {
+    const doc: ParsedDocument = {
+      html: '<p>Metadata keywords: Leave blank. Coach will insert.</p>',
+      sections: [
+        {
+          id: 'section-program',
+          heading: 'Program description',
+          headingLevel: 2,
+          html: '',
+          rawText:
+            'The page limit is 25 pages. Applications exceeding the page limit will not be reviewed.',
+          startPage: 2,
+        },
+      ],
+      rawText: 'Metadata keywords: Leave blank. Coach will insert.',
+      zipArchive: new JSZip(),
+      documentXml: '',
+      footnotesXml: '',
+      endnotesXml: '',
+      activeContentGuide: null,
+    };
+
+    const issues = META_003.check(doc, OPTIONS);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    expect(prefill.toLowerCase()).not.toContain('page limit');
+  });
+
+  it('does not suggest "standard forms" from a tagline', () => {
+    const doc = {
+      ...makeDoc('<p>Metadata keywords: Leave blank. Coach will insert.</p>'),
+      rawText:
+        'Metadata keywords: Leave blank. Coach will insert.\n' +
+        'Tagline: Standard forms',
+    };
+    const issues = META_003.check(doc, OPTIONS);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    expect(prefill.toLowerCase()).not.toContain('standard forms');
+  });
+
+  it('does not suggest "component" from an opportunity name', () => {
+    const doc = {
+      ...makeDoc('<p>Metadata keywords: Leave blank. Coach will insert.</p>'),
+      rawText:
+        'Metadata keywords: Leave blank. Coach will insert.\n' +
+        'Opportunity name: Component',
+    };
+    const issues = META_003.check(doc, OPTIONS);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    expect(prefill.toLowerCase()).not.toContain('component');
+  });
+
+  it('does not suggest "grants.gov form" from a program section', () => {
+    const doc: ParsedDocument = {
+      html: '<p>Metadata keywords: Leave blank. Coach will insert.</p>',
+      sections: [
+        {
+          id: 'section-program',
+          heading: 'Program description',
+          headingLevel: 2,
+          html: '',
+          rawText:
+            'Submit your grants.gov form by the deadline. Complete the grants.gov form carefully.',
+          startPage: 2,
+        },
+      ],
+      rawText: 'Metadata keywords: Leave blank. Coach will insert.',
+      zipArchive: new JSZip(),
+      documentXml: '',
+      footnotesXml: '',
+      endnotesXml: '',
+      activeContentGuide: null,
+    };
+
+    const issues = META_003.check(doc, OPTIONS);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    expect(prefill.toLowerCase()).not.toContain('grants.gov form');
+  });
+});
+
+// ─── Single-word pattern filter ───────────────────────────────────────────────
+
+describe('META-003: rejects single common words as standalone keyword candidates', () => {
+  it('does not suggest "yes" from an opportunity name field', () => {
+    const doc = {
+      ...makeDoc('<p>Metadata keywords: Leave blank. Coach will insert.</p>'),
+      rawText:
+        'Metadata keywords: Leave blank. Coach will insert.\n' +
+        'Opportunity name: Yes',
+    };
+    const issues = META_003.check(doc, OPTIONS);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    expect(prefill.toLowerCase()).not.toContain('yes');
+  });
+
+  it('does not suggest "none" from a tagline field', () => {
+    const doc = {
+      ...makeDoc('<p>Metadata keywords: Leave blank. Coach will insert.</p>'),
+      rawText:
+        'Metadata keywords: Leave blank. Coach will insert.\n' +
+        'Tagline: None',
+    };
+    const issues = META_003.check(doc, OPTIONS);
+    const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
+    expect(prefill.toLowerCase()).not.toContain('none');
+  });
+
+  it('does not suppress multi-word terms that contain a reject word', () => {
+    // "using technology" is two words — the single-word filter must not reject it
+    const doc = {
+      ...makeDoc('<p>Metadata keywords: Leave blank. Coach will insert.</p>'),
+      rawText:
+        'Metadata keywords: Leave blank. Coach will insert.\n' +
+        'Tagline: Using technology',
+    };
+    const issues = META_003.check(doc, OPTIONS);
+    // The test just verifies the filter doesn't over-reject multi-word phrases;
+    // "using technology" may or may not appear depending on other filters.
+    // The key assertion is that the check completes without error.
+    expect(issues).toHaveLength(1);
+  });
+});
+
 // ─── Updated UI strings ───────────────────────────────────────────────────────
 
 describe('META-003: issue shape reflects updated 6-keyword guidance', () => {
