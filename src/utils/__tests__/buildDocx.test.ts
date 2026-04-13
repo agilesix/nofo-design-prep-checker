@@ -1630,3 +1630,120 @@ describe('buildDocx — CLEAN-012: asterisked bold OOXML patch', () => {
     expect(getBoldRunTexts(outXml)).toContain('asterisked ( * )');
   });
 });
+
+// ─── LINK-006 cap-anchor auto-fix: hyperlink retargeting ─────────────────────
+
+describe('buildDocx — LINK-006 cap-anchor auto-fix', () => {
+  // NOTE: these tests check the RAW SERIALIZED XML string so they catch
+  // XMLSerializer stripping the w: namespace prefix — the same rationale as
+  // the link-text hyperlink-preservation tests above.
+
+  function makeCapAnchorChange(pairs: { old: string; new: string }[]): AutoAppliedChange {
+    return {
+      ruleId: 'LINK-006',
+      description: `${pairs.length} internal link anchor${pairs.length === 1 ? '' : 's'} corrected for capitalization`,
+      targetField: 'link.anchor.cap',
+      value: JSON.stringify(pairs),
+    };
+  }
+
+  it('rewrites w:anchor from the old (lowercase) value to the correctly-cased new value', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeHyperlinkDocXml({ anchor: 'eligibility', linkText: 'link' }));
+
+    const outXml = await getOutputDocXml(zip, [], [makeCapAnchorChange([{ old: 'eligibility', new: 'Eligibility' }])]);
+
+    // The serialized XML must contain the namespace-prefixed attribute with the new value.
+    expect(outXml).toMatch(/w:anchor="Eligibility"/);
+    // The old value must no longer appear as a w:anchor value.
+    expect(outXml).not.toMatch(/w:anchor="eligibility"/);
+  });
+
+  it('serialized XML retains the w: prefix on the rewritten anchor (namespace preservation)', async () => {
+    // Regression: XMLSerializer may emit `anchor="…"` without the w: prefix when an
+    // attribute is only read and never written through the DOM. setAttributeNS ensures
+    // the prefix is preserved so Word can resolve the link target.
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeHyperlinkDocXml({ anchor: 'overview', linkText: 'link' }));
+
+    const outXml = await getOutputDocXml(zip, [], [makeCapAnchorChange([{ old: 'overview', new: 'Overview' }])]);
+
+    expect(outXml).toMatch(/w:anchor="Overview"/);
+  });
+
+  it('rewrites all hyperlinks that share the same old anchor', async () => {
+    // Two hyperlinks with the same broken anchor in one document
+    const twoLinkXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}">` +
+      `<w:body>` +
+      `<w:p><w:hyperlink w:anchor="eligibility" w:history="1"><w:r><w:t>first</w:t></w:r></w:hyperlink></w:p>` +
+      `<w:p><w:hyperlink w:anchor="eligibility" w:history="1"><w:r><w:t>second</w:t></w:r></w:hyperlink></w:p>` +
+      `<w:sectPr/></w:body></w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', twoLinkXml);
+
+    const outXml = await getOutputDocXml(zip, [], [makeCapAnchorChange([{ old: 'eligibility', new: 'Eligibility' }])]);
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(outXml, 'application/xml');
+    const hyperlinks = Array.from(doc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(2);
+    for (const hl of hyperlinks) {
+      expect(hl.getAttributeNS(W_NS, 'anchor')).toBe('Eligibility');
+    }
+  });
+
+  it('does not touch hyperlinks whose anchor does not match the old value', async () => {
+    // Document has two internal hyperlinks; only one matches the cap-fix pair
+    const mixedXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}">` +
+      `<w:body>` +
+      `<w:p><w:hyperlink w:anchor="eligibility" w:history="1"><w:r><w:t>link 1</w:t></w:r></w:hyperlink></w:p>` +
+      `<w:p><w:hyperlink w:anchor="Overview" w:history="1"><w:r><w:t>link 2</w:t></w:r></w:hyperlink></w:p>` +
+      `<w:sectPr/></w:body></w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', mixedXml);
+
+    const outXml = await getOutputDocXml(zip, [], [makeCapAnchorChange([{ old: 'eligibility', new: 'Eligibility' }])]);
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(outXml, 'application/xml');
+    const hyperlinks = Array.from(doc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks[0]!.getAttributeNS(W_NS, 'anchor')).toBe('Eligibility'); // rewritten
+    expect(hyperlinks[1]!.getAttributeNS(W_NS, 'anchor')).toBe('Overview');    // untouched
+  });
+
+  it('skips gracefully when value is malformed JSON — download still succeeds', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeHyperlinkDocXml({ anchor: 'eligibility', linkText: 'link' }));
+
+    const badChange: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'cap fix',
+      targetField: 'link.anchor.cap',
+      value: 'NOT_VALID_JSON',
+    };
+
+    // Should not throw — download must complete even with a corrupt entry
+    const outXml = await getOutputDocXml(zip, [], [badChange]);
+    // Anchor unchanged because the bad entry was skipped
+    expect(outXml).toMatch(/w:anchor="eligibility"/);
+  });
+
+  it('skips gracefully when value is a JSON non-array — download still succeeds', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeHyperlinkDocXml({ anchor: 'eligibility', linkText: 'link' }));
+
+    const badChange: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'cap fix',
+      targetField: 'link.anchor.cap',
+      value: JSON.stringify({ old: 'eligibility', new: 'Eligibility' }), // object, not array
+    };
+
+    const outXml = await getOutputDocXml(zip, [], [badChange]);
+    expect(outXml).toMatch(/w:anchor="eligibility"/); // unchanged, entry was skipped
+  });
+});

@@ -380,27 +380,31 @@ async function applyCapAnchorFixes(zip: JSZip, changes: AutoAppliedChange[]): Pr
   const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
   const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
 
-  const anchorMap = new Map<string, string>();
   for (const change of changes) {
-    const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
+    let pairs: { old: string; new: string }[];
+    try {
+      const parsed = JSON.parse(change.value!);
+      if (!Array.isArray(parsed)) continue;
+      pairs = parsed.filter(
+        (p): p is { old: string; new: string } =>
+          p !== null &&
+          typeof p === 'object' &&
+          typeof p.old === 'string' &&
+          typeof p.new === 'string'
+      );
+    } catch {
+      // Malformed JSON — skip this entry so the rest of the download still succeeds
+      continue;
+    }
     for (const pair of pairs) {
-      anchorMap.set(pair.old, pair.new);
+      for (const el of hyperlinks) {
+        if (el.getAttributeNS(W, 'anchor') === pair.old) {
+          el.setAttributeNS(W, 'w:anchor', pair.new);
+        }
+      }
     }
   }
 
-  let changed = false;
-  for (const el of hyperlinks) {
-    const anchor = el.getAttributeNS(W, 'anchor');
-    if (!anchor) continue;
-
-    const newAnchor = anchorMap.get(anchor);
-    if (!newAnchor || newAnchor === anchor) continue;
-
-    el.setAttributeNS(W, 'w:anchor', newAnchor);
-    changed = true;
-  }
-
-  if (!changed) return;
   const serializer = new XMLSerializer();
   zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
 }

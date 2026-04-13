@@ -894,30 +894,36 @@ describe('LINK-006 capitalization-only auto-fix', () => {
     expect(change.description).toBe('1 internal link anchor corrected for capitalization');
   });
 
-  it('description uses plural form when multiple links are corrected', () => {
+  it('description uses plural form and counts each link occurrence, not unique anchors', () => {
+    // Same broken anchor in two separate links — occurrences = 2, unique pairs = 1
+    const doc = makeDoc(
+      '<p><a href="#eligibility">first</a></p>' +
+      '<p><a href="#eligibility">second</a></p>',
+      xmlWithBookmarks('Eligibility')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const change = results[0] as AutoAppliedChange;
+    expect(change.description).toBe('2 internal link anchors corrected for capitalization');
+    // value is de-duplicated: only one pair even though two links share the anchor
+    const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0]).toEqual({ old: 'eligibility', new: 'Eligibility' });
+  });
+
+  it('value contains de-duplicated {old,new} pairs for each distinct broken anchor', () => {
     // Two distinct anchors each differing only in capitalization
     const doc = makeDoc(
       '<p><a href="#eligibility">link 1</a></p>' +
       '<p><a href="#overview">link 2</a></p>',
       xmlWithBookmarks('Eligibility', 'Overview')
     );
-    const results = LINK_006.check(doc, OPTIONS);
-    expect(results).toHaveLength(1);
-    const change = results[0] as AutoAppliedChange;
+    const change = LINK_006.check(doc, OPTIONS)[0] as AutoAppliedChange;
     expect(change.description).toBe('2 internal link anchors corrected for capitalization');
     const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
+    expect(pairs).toHaveLength(2);
     expect(pairs).toContainEqual({ old: 'eligibility', new: 'Eligibility' });
     expect(pairs).toContainEqual({ old: 'overview', new: 'Overview' });
-  });
-
-  it('value JSON encodes the old → new anchor mapping', () => {
-    const doc = makeDoc(
-      '<p><a href="#eligibility">link</a></p>',
-      xmlWithBookmarks('Eligibility')
-    );
-    const change = LINK_006.check(doc, OPTIONS)[0] as AutoAppliedChange;
-    const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
-    expect(pairs).toEqual([{ old: 'eligibility', new: 'Eligibility' }]);
   });
 
   it('non-capitalization mismatch (underscore prefix) still surfaces as a warning Issue', () => {
@@ -933,39 +939,6 @@ describe('LINK-006 capitalization-only auto-fix', () => {
     expect(issue.inputRequired?.prefill).toBe('Eligibility');
   });
 
-  it('emits a single AutoAppliedChange even when multiple links share the same cap-only anchor', () => {
-    // Same broken anchor used in two links — both get fixed, one AutoAppliedChange emitted
-    const doc = makeDoc(
-      '<p><a href="#eligibility">first</a></p>' +
-      '<p><a href="#eligibility">second</a></p>',
-      xmlWithBookmarks('Eligibility')
-    );
-    const results = LINK_006.check(doc, OPTIONS);
-    // Two occurrences → count is 2 in the description, but still one AutoAppliedChange entry
-    expect(results).toHaveLength(1);
-    const change = results[0] as AutoAppliedChange;
-    expect(change.targetField).toBe('link.anchor.cap');
-    expect(change.description).toContain('2 internal link anchors');
-  });
-
-  it('still emits a link-text suggestion when a cap-only fix targets a heading with no matching link text', () => {
-    // Heading "Eligibility Criteria" matched via Source 3 (heading text containment);
-    // anchor "eligibility_criteria" lowercases to match the heading slug → auto-fix.
-    // Link text "click here" does not mention the heading → link-text suggestion emitted.
-    const doc = makeDoc(
-      '<h2>Eligibility Criteria</h2>' +
-      '<p><a href="#eligibility_criteria">click here</a></p>'
-    );
-    const results = LINK_006.check(doc, OPTIONS);
-    // One link-text suggestion + one AutoAppliedChange
-    expect(results).toHaveLength(2);
-    const suggestion = results.find(r => (r as Issue).severity === 'suggestion') as Issue | undefined;
-    expect(suggestion).toBeDefined();
-    expect(suggestion!.title).toBe('Consider adding destination heading name to link text');
-    const change = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.cap') as AutoAppliedChange | undefined;
-    expect(change).toBeDefined();
-  });
-
   it('no AutoAppliedChange is emitted when all fuzzy matches differ by more than capitalization', () => {
     // #_Eligibility → #Eligibility: NOT cap-only (underscore prefix differs)
     const doc = makeDoc(
@@ -975,5 +948,22 @@ describe('LINK-006 capitalization-only auto-fix', () => {
     const results = LINK_006.check(doc, OPTIONS);
     const capChange = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.cap');
     expect(capChange).toBeUndefined();
+  });
+
+  it('still emits a link-text suggestion when a cap-only fix targets a heading with unrelated link text', () => {
+    // Heading matched via Source 3 (heading text containment); the anchor lowercases
+    // to match the slug → auto-fix. Link text "click here" doesn't reference the
+    // heading → link-text suggestion still emitted alongside the AutoAppliedChange.
+    const doc = makeDoc(
+      '<h2>Eligibility Criteria</h2>' +
+      '<p><a href="#eligibility_criteria">click here</a></p>'
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    expect(results).toHaveLength(2);
+    const suggestion = results.find(r => (r as Issue).severity === 'suggestion') as Issue | undefined;
+    expect(suggestion).toBeDefined();
+    expect(suggestion!.title).toBe('Consider adding destination heading name to link text');
+    const capChange = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.cap') as AutoAppliedChange | undefined;
+    expect(capChange).toBeDefined();
   });
 });
