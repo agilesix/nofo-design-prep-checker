@@ -837,6 +837,7 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
     // the original paraText. We walk each run and patch diverging positions.
     let pos = 0;
     for (const wT of wTElements) {
+      if (!wT) continue;
       const text = wT.textContent ?? '';
       const chars = text.split('');
       let runModified = false;

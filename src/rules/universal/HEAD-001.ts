@@ -43,9 +43,13 @@ const MINOR_WORDS = new Set([
  * Returns true when the word should be skipped during capitalization checks:
  *   • Minor/function word (always lowercase regardless of style)
  *   • No lowercase letters (ALL CAPS acronym, number, or special character only)
+ *
+ * Trailing punctuation (e.g. "and,", "of.") is stripped before the MINOR_WORDS
+ * lookup so that punctuation attached to a word does not prevent recognition.
  */
 function isSkippable(word: string): boolean {
-  if (MINOR_WORDS.has(word.toLowerCase())) return true;
+  const stripped = word.replace(/[^a-zA-Z0-9]+$/, '');
+  if (MINOR_WORDS.has(stripped.toLowerCase())) return true;
   if (!/[a-z]/.test(word)) return true; // ALL CAPS / numeric / punctuation-only
   return false;
 }
@@ -114,34 +118,46 @@ function capitalizeFirst(word: string): string {
  *  • ALL-CAPS words (acronyms) are left unchanged.
  *  • Already-capitalized words (likely proper nouns) are left unchanged.
  *  • All other words starting with lowercase are capitalized.
+ *
+ * Whitespace is preserved exactly (no normalization) so that the returned string
+ * has the same length and character positions as the input. This is required for
+ * the character-by-character OOXML patch in applyH2TitleCaseFix to stay aligned.
  */
 function toTitleCase(text: string): string {
-  const words = text.trim().split(/\s+/);
-  const starts = sentenceStartIndices(words);
+  // Split into alternating [word, separator, word, ...] tokens.
+  // Even-index tokens are words; odd-index tokens are whitespace separators.
+  const tokens = text.split(/(\s+)/);
+  const wordTokens = tokens.filter((_, i) => i % 2 === 0);
+  const starts = sentenceStartIndices(wordTokens);
 
-  return words.map((word, i) => {
-    const clean = word.replace(/^[^a-zA-Z0-9]+/, '');
+  return tokens.map((token, i) => {
+    // Whitespace separator — preserve as-is
+    if (i % 2 !== 0) return token;
+
+    const wordIdx = Math.floor(i / 2);
+    // Strip both leading and trailing non-alphanumeric chars to get the bare word
+    const clean = token
+      .replace(/^[^a-zA-Z0-9]+/, '')
+      .replace(/[^a-zA-Z0-9]+$/, '');
 
     // Sentence starts (first word, word after colon): always capitalize
-    if (starts.has(i)) {
-      return capitalizeFirst(word);
-    }
+    if (starts.has(wordIdx)) return capitalizeFirst(token);
 
     // No alphabetic content → leave unchanged
-    if (!clean) return word;
+    if (!clean) return token;
 
     // Minor word → leave lowercase
-    if (MINOR_WORDS.has(clean.toLowerCase())) return word;
+    if (MINOR_WORDS.has(clean.toLowerCase())) return token;
 
     // ALL-CAPS word (acronym like HRSA, CDC) → leave unchanged
-    if (!/[a-z]/.test(clean)) return word;
+    if (!/[a-z]/.test(clean)) return token;
 
     // Already capitalized (proper noun or mid-sentence cap) → leave unchanged
-    if (/^[A-Z]/.test(clean)) return word;
+    if (/^[A-Z]/.test(clean)) return token;
 
     // Lowercase content word → capitalize
-    return capitalizeFirst(word);
-  }).join(' ');
+    return capitalizeFirst(token);
+  }).join('');
 }
 
 /**
