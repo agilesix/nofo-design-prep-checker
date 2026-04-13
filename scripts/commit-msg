@@ -1,0 +1,29 @@
+#!/bin/sh
+# Validates that the commit message starts with a conventional commit prefix.
+# Git passes the path to the commit message file as the first argument ($1).
+# Only the first line of the message is checked — body lines are unrestricted.
+
+commit_msg_file="$1"
+first_line=$(head -1 "$commit_msg_file")
+
+# Case-insensitive prefix check
+case "$(echo "$first_line" | tr '[:upper:]' '[:lower:]')" in
+  feat:*|fix:*|docs:*|chore:*|refactor:*|test:*)
+    exit 0
+    ;;
+esac
+
+echo ""
+echo "❌ Commit rejected: message must start with a conventional commit prefix."
+echo ""
+echo "Allowed prefixes:"
+echo "  feat:     A new rule, feature, or user-facing capability"
+echo "  fix:      A bug fix"
+echo "  docs:     Documentation only changes"
+echo "  chore:    Maintenance, config, or dependency updates"
+echo "  refactor: Code restructuring with no behavior change"
+echo "  test:     Adding or updating tests only"
+echo ""
+echo "Example: feat: add pre-NOFO document detection"
+echo ""
+exit 1
