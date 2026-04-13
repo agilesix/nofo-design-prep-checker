@@ -8,6 +8,7 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]' || !startsWith(github.head_ref, 'release-please--')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
