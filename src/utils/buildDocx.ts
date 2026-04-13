@@ -61,6 +61,9 @@ export async function buildDocx(
   const hasTimeCorrection = autoAppliedChanges.some(
     c => c.targetField === 'format.time.correct'
   );
+  const h2TitleCaseChanges = autoAppliedChanges.filter(
+    c => c.targetField === 'heading.h2.titlecase' && c.value
+  );
 
   // Apply metadata patches
   if (metaFixes.length > 0) {
@@ -112,6 +115,12 @@ export async function buildDocx(
   // Apply heading leading-space removal
   if (hasHeadingLeadingSpaceFix) {
     await applyHeadingLeadingSpaceFix(zip);
+  }
+
+  // Apply H2 title-case corrections (runs after leading-space fix so OOXML
+  // text matches the HTML-derived keys stored in the change value)
+  if (h2TitleCaseChanges.length > 0) {
+    await applyH2TitleCaseFix(zip, h2TitleCaseChanges);
   }
 
   // Accept tracked changes and remove comments
@@ -723,6 +732,129 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
         stillTrimming = false;
       }
     }
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+// ─── HEAD-001: H2 title-case auto-fix ────────────────────────────────────────
+
+/**
+ * Return the numeric heading level of a <w:p> element (1–6), or 0 if the
+ * paragraph is not a heading. Matches both "Heading2" and "Heading 2" styles.
+ */
+function getHeadingLevel(wP: Element): number {
+  const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
+  if (!pPr) return 0;
+  const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+  if (!pStyle) return 0;
+  const val = pStyle.getAttribute('w:val') ?? '';
+  const m = val.match(/^Heading\s*(\d+)$/i);
+  return m ? parseInt(m[1]!, 10) : 0;
+}
+
+/**
+ * HEAD-001: Retarget H2 heading paragraphs that were detected as sentence case
+ * to the corrected title-case text.
+ *
+ * Each AutoAppliedChange carries a JSON-encoded array of {old, new} pairs.
+ * For each Heading 2 paragraph whose concatenated text matches an "old" value,
+ * the correction is applied character-by-character across the paragraph's
+ * <w:t> runs. Because title case only uppercases some letters (never inserts,
+ * removes, or reorders characters), the character positions are preserved
+ * exactly — a simple positional diff is sufficient.
+ */
+async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  // Build old → new lookup from all change entries
+  const fixMap = new Map<string, string>();
+  for (const change of changes) {
+    try {
+      const parsed = JSON.parse(change.value!);
+      if (!Array.isArray(parsed)) continue;
+      for (const pair of parsed) {
+        if (
+          pair !== null &&
+          typeof pair === 'object' &&
+          typeof pair.old === 'string' &&
+          typeof pair.new === 'string'
+        ) {
+          fixMap.set(pair.old, pair.new);
+        }
+      }
+    } catch {
+      // Malformed JSON — skip entry so the rest of the download still succeeds
+      continue;
+    }
+  }
+  if (fixMap.size === 0) return;
+
+  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  let changed = false;
+
+  for (const wP of paragraphs) {
+    if (getHeadingLevel(wP) !== 2) continue;
+
+    const paraText = getParaText(wP);
+    const corrected = fixMap.get(paraText);
+    if (!corrected || corrected === paraText) continue;
+
+    const wTElements = Array.from(wP.getElementsByTagName('w:t'));
+    if (wTElements.length === 0) continue;
+
+    if (corrected.length !== paraText.length) {
+      // Fall back to a full-run replacement when the corrected text no longer
+      // aligns positionally with the original paragraph text. Preserve the
+      // existing run structure by filling each run with a sequential slice of
+      // the corrected text and placing any remainder in the last run.
+      let remaining = corrected;
+      for (let i = 0; i < wTElements.length; i++) {
+        const wT = wTElements[i];
+        if (!wT) continue;
+        const originalText = wT.textContent ?? '';
+        const isLastRun = i === wTElements.length - 1;
+        const nextText = isLastRun
+          ? remaining
+          : remaining.slice(0, originalText.length);
+        wT.textContent = nextText;
+        remaining = isLastRun ? '' : remaining.slice(originalText.length);
+      }
+      changed = true;
+      continue;
+    }
+
+    // Apply character-by-character case changes across <w:t> elements.
+    // Title case only changes some lowercase letters to uppercase, so every
+    // character position in corrected[] aligns with the same position in
+    // the original paraText. We walk each run and patch diverging positions.
+    let pos = 0;
+    for (const wT of wTElements) {
+      if (!wT) continue;
+      const text = wT.textContent ?? '';
+      const chars = text.split('');
+      let runModified = false;
+      for (let i = 0; i < chars.length; i++) {
+        const globalPos = pos + i;
+        if (globalPos < corrected.length && chars[i] !== corrected[globalPos]) {
+          chars[i] = corrected[globalPos]!;
+          runModified = true;
+        }
+      }
+      if (runModified) {
+        wT.textContent = chars.join('');
+      }
+      pos += text.length;
+    }
+    changed = true;
   }
 
   if (changed) {

@@ -1747,3 +1747,101 @@ describe('buildDocx — LINK-006 cap-anchor auto-fix', () => {
     expect(outXml).toMatch(/w:anchor="eligibility"/); // unchanged, entry was skipped
   });
 });
+
+// ─── applyH2TitleCaseFix ─────────────────────────────────────────────────────
+
+/**
+ * Build a document.xml that may contain Heading 2 paragraphs alongside
+ * plain body paragraphs. Each item specifies its text and whether it should
+ * carry a Heading 2 paragraph style.
+ */
+function makeH2DocumentXml(paragraphs: { text: string; isH2?: boolean }[]): string {
+  const wParagraphs = paragraphs
+    .map(({ text, isH2 }) => {
+      const pPr = isH2
+        ? '<w:pPr><w:pStyle w:val="Heading2"/></w:pPr>'
+        : '';
+      return `<w:p>${pPr}<w:r><w:t>${text}</w:t></w:r></w:p>`;
+    })
+    .join('');
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>${wParagraphs}<w:sectPr/></w:body>
+</w:document>`;
+}
+
+describe('buildDocx — applyH2TitleCaseFix', () => {
+  it('corrects a single H2 heading from sentence case to title case', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeH2DocumentXml([
+      { text: 'Program description information', isH2: true },
+    ]));
+
+    const change: AutoAppliedChange = {
+      ruleId: 'HEAD-001',
+      description: '1 H2 heading corrected to title case',
+      targetField: 'heading.h2.titlecase',
+      value: JSON.stringify([
+        { old: 'Program description information', new: 'Program Description Information' },
+      ]),
+    };
+
+    const outXml = await getOutputDocXml(zip, [], [change]);
+    expect(outXml).toContain('Program Description Information');
+    expect(outXml).not.toContain('Program description information');
+  });
+
+  it('corrects multiple H2 headings in a single pass', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeH2DocumentXml([
+      { text: 'Program description information', isH2: true },
+      { text: 'Types of awards and review criteria', isH2: true },
+    ]));
+
+    const change: AutoAppliedChange = {
+      ruleId: 'HEAD-001',
+      description: '2 H2 headings corrected to title case',
+      targetField: 'heading.h2.titlecase',
+      value: JSON.stringify([
+        { old: 'Program description information', new: 'Program Description Information' },
+        { old: 'Types of awards and review criteria', new: 'Types of Awards and Review Criteria' },
+      ]),
+    };
+
+    const outXml = await getOutputDocXml(zip, [], [change]);
+    expect(outXml).toContain('Program Description Information');
+    expect(outXml).toContain('Types of Awards and Review Criteria');
+  });
+
+  it('leaves an H2 heading unchanged when it is already in title case', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeH2DocumentXml([
+      { text: 'Program Description Information', isH2: true },
+    ]));
+
+    // No AutoAppliedChange passed — the download must not modify the heading
+    const outXml = await getOutputDocXml(zip, [], []);
+    expect(outXml).toContain('Program Description Information');
+  });
+
+  it('does not modify a non-H2 paragraph whose text matches the correction key', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeH2DocumentXml([
+      { text: 'Program description information', isH2: false }, // plain body paragraph
+    ]));
+
+    const change: AutoAppliedChange = {
+      ruleId: 'HEAD-001',
+      description: '1 H2 heading corrected to title case',
+      targetField: 'heading.h2.titlecase',
+      value: JSON.stringify([
+        { old: 'Program description information', new: 'Program Description Information' },
+      ]),
+    };
+
+    const outXml = await getOutputDocXml(zip, [], [change]);
+    // Body paragraph must not be patched — only Heading 2 paragraphs qualify
+    expect(outXml).toContain('Program description information');
+    expect(outXml).not.toContain('Program Description Information');
+  });
+});

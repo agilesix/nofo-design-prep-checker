@@ -1,12 +1,12 @@
-import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
+import type { Rule, Issue, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from '../../types';
 
 /**
  * HEAD-001: Heading capitalization
  *
  * Per the SimplerNOFOs style guide:
  *   H1  — title case; not checked (rule is silent on H1).
- *   H2  — must use title case; flagged if sentence case is detected.
- *   H3–H6 — must use sentence case; flagged if title case is detected.
+ *   H2  — must use title case; auto-fixed silently when sentence case is detected.
+ *   H3–H6 — must use sentence case; flagged as a suggestion if title case is detected.
  *
  * Detection:
  *   Title case  — one or more non-first, non-minor, non-acronym words start with
@@ -14,17 +14,21 @@ import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types
  *   Sentence case — one or more non-first, non-minor, non-acronym words start
  *                   with a lowercase letter.
  *
- * Exceptions (not flagged):
+ * Exceptions (not flagged and not auto-fixed):
+ *   • Headings that reference federal laws, acts, or directives (see isFederalLawException).
  *   • First word of the heading (always capitalised in both styles).
  *   • First word after a colon within the heading (sentence restart).
  *   • Minor words: articles (a/an/the), short prepositions, conjunctions.
  *   • ALL-CAPS words and words without lowercase letters: acronyms (CDC, HRSA),
  *     form names (SF-424), and other all-cap tokens are skipped entirely.
  *
- * Because proper nouns and formal names cannot be detected reliably, the rule
- * emits suggestion-severity issues only — the user must confirm whether the
- * capitalization is correct before acting.  No auto-fix is provided; corrections
- * must be made in the Word document.
+ * H2 auto-fix title case rules (applied when sentence case is detected):
+ *   • Capitalize the first word always.
+ *   • Capitalize the first word after a colon.
+ *   • Capitalize all other words EXCEPT minor words (MINOR_WORDS set).
+ *   • Leave ALL-CAPS words unchanged (acronyms like HRSA, CDC).
+ *   • Leave already-capitalized words unchanged (likely proper nouns).
+ *   • Only one AutoAppliedChange is emitted per run, covering all corrected H2s.
  */
 
 /** Articles, short conjunctions, and prepositions that stay lowercase in title case. */
@@ -39,9 +43,13 @@ const MINOR_WORDS = new Set([
  * Returns true when the word should be skipped during capitalization checks:
  *   • Minor/function word (always lowercase regardless of style)
  *   • No lowercase letters (ALL CAPS acronym, number, or special character only)
+ *
+ * Trailing punctuation (e.g. "and,", "of.") is stripped before the MINOR_WORDS
+ * lookup so that punctuation attached to a word does not prevent recognition.
  */
 function isSkippable(word: string): boolean {
-  if (MINOR_WORDS.has(word.toLowerCase())) return true;
+  const stripped = word.replace(/[^a-zA-Z0-9]+$/, '');
+  if (MINOR_WORDS.has(stripped.toLowerCase())) return true;
   if (!/[a-z]/.test(word)) return true; // ALL CAPS / numeric / punctuation-only
   return false;
 }
@@ -95,6 +103,102 @@ function looksLikeSentenceCase(text: string): boolean {
   return false;
 }
 
+/**
+ * Capitalize the first alphabetic character of a word, leaving any leading
+ * punctuation (e.g. opening quotes) in place.
+ */
+function capitalizeFirst(word: string): string {
+  return word.replace(/^([^a-zA-Z]*)([a-zA-Z])/, (_, pre, letter) => pre + letter.toUpperCase());
+}
+
+/**
+ * Convert a heading to title case using the SimplerNOFOs rules:
+ *  • First word and first word after a colon are always capitalized.
+ *  • Minor words (articles, short prepositions, conjunctions) stay lowercase.
+ *  • ALL-CAPS words (acronyms) are left unchanged.
+ *  • Already-capitalized words (likely proper nouns) are left unchanged.
+ *  • All other words starting with lowercase are capitalized.
+ *
+ * Whitespace is preserved exactly (no normalization) so that the returned string
+ * has the same length and character positions as the input. This is required for
+ * the character-by-character OOXML patch in applyH2TitleCaseFix to stay aligned.
+ */
+function toTitleCase(text: string): string {
+  // Split into alternating [word, separator, word, ...] tokens.
+  // Even-index tokens are words; odd-index tokens are whitespace separators.
+  const tokens = text.split(/(\s+)/);
+  const wordTokens = tokens.filter((_, i) => i % 2 === 0);
+  const starts = sentenceStartIndices(wordTokens);
+
+  return tokens.map((token, i) => {
+    // Whitespace separator — preserve as-is
+    if (i % 2 !== 0) return token;
+
+    const wordIdx = Math.floor(i / 2);
+    // Strip both leading and trailing non-alphanumeric chars to get the bare word
+    const clean = token
+      .replace(/^[^a-zA-Z0-9]+/, '')
+      .replace(/[^a-zA-Z0-9]+$/, '');
+
+    // Sentence starts (first word, word after colon): always capitalize
+    if (starts.has(wordIdx)) return capitalizeFirst(token);
+
+    // No alphabetic content → leave unchanged
+    if (!clean) return token;
+
+    // Minor word → leave lowercase
+    if (MINOR_WORDS.has(clean.toLowerCase())) return token;
+
+    // ALL-CAPS word (acronym like HRSA, CDC) → leave unchanged
+    if (!/[a-z]/.test(clean)) return token;
+
+    // Already capitalized (proper noun or mid-sentence cap) → leave unchanged
+    if (/^[A-Z]/.test(clean)) return token;
+
+    // Lowercase content word → capitalize
+    return capitalizeFirst(token);
+  }).join('');
+}
+
+/**
+ * Returns true when the heading references a known federal law, act, or
+ * directive. Such headings may have unconventional capitalization (e.g. mixed
+ * caps from a proper-noun name) and should never be flagged or auto-fixed.
+ *
+ * Recognized patterns:
+ *  • Named federal laws (Paperwork Reduction Act, ADA, FOIA, etc.)
+ *  • "Executive Order" anywhere in the heading
+ *  • "Act of" or "Act," — common law-name patterns
+ *  • "Section N" — statutory section references (Section 508, Section 1557, etc.)
+ */
+function isFederalLawException(text: string): boolean {
+  const lower = text.toLowerCase();
+
+  const namedLaws = [
+    'paperwork reduction act',
+    'plain writing act',
+    'rehabilitation act',
+    'americans with disabilities act',
+    'freedom of information act',
+    'privacy act',
+    'administrative procedure act',
+    'federal grant and cooperative agreement act',
+    'uniform guidance',
+  ];
+  if (namedLaws.some(law => lower.includes(law))) return true;
+
+  const lawAcronyms = [
+    'ADA',
+    'FOIA',
+  ];
+  if (lawAcronyms.some(acronym => new RegExp(`\\b${acronym}\\b`, 'i').test(text))) return true;
+  if (/executive\s+order/i.test(text)) return true;
+  if (/\bact\s+of\b/i.test(text) || /\bact,/i.test(text)) return true;
+  if (/\bsection\s+\d+/i.test(text)) return true;
+
+  return false;
+}
+
 function findSectionForElement(el: Element, doc: ParsedDocument): string {
   const text = el.textContent ?? '';
   for (const section of doc.sections) {
@@ -105,41 +209,39 @@ function findSectionForElement(el: Element, doc: ParsedDocument): string {
 
 const HEAD_001: Rule = {
   id: 'HEAD-001',
-  autoApply: false,
-  check(doc: ParsedDocument, _options: RuleRunnerOptions): Issue[] {
-    const issues: Issue[] = [];
+  autoApply: true,
+  check(doc: ParsedDocument, _options: RuleRunnerOptions): (Issue | AutoAppliedChange)[] {
+    const results: (Issue | AutoAppliedChange)[] = [];
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
     const headings = Array.from(htmlDoc.querySelectorAll('h2, h3, h4, h5, h6'));
+
+    // Collect H2 sentence-case corrections; a single AutoAppliedChange is
+    // emitted after the loop so the count in the description is accurate.
+    const h2Corrections: { old: string; new: string }[] = [];
+
+    const exceptionNote =
+      'Exceptions include proper nouns, names of organizations, programs, laws, forms (e.g. SF-424), ' +
+      'and acronyms. If this heading is intentionally capitalised this way, you can dismiss this suggestion. ' +
+      'Correct the capitalization in your Word document if needed — this rule does not auto-fix H3–H6 headings.';
 
     headings.forEach((heading, idx) => {
       const level = parseInt(heading.tagName[1] ?? '0', 10);
       const text = (heading.textContent ?? '').trim();
       if (!text) return;
 
+      // Federal laws and directives are excluded from all checks and auto-fixes.
+      if (isFederalLawException(text)) return;
+
       const sectionId = findSectionForElement(heading, doc);
-      const exceptionNote =
-        'Exceptions include proper nouns, names of organizations, programs, laws, forms (e.g. SF-424), ' +
-        'and acronyms. If this heading is intentionally capitalised this way, you can dismiss this suggestion. ' +
-        'Correct the capitalization in your Word document if needed — this rule does not auto-fix.';
 
       if (level === 2 && looksLikeSentenceCase(text)) {
-        issues.push({
-          id: `HEAD-001-${idx}`,
-          ruleId: 'HEAD-001',
-          title: 'H2 heading may need title case',
-          severity: 'suggestion',
-          sectionId,
-          nearestHeading: text,
-          description:
-            `The H2 heading "${text}" appears to use sentence case. ` +
-            `Per the SimplerNOFOs style guide, H2 headings use title case (capitalize all major words). ` +
-            `H3–H6 headings use sentence case (capitalize only the first word and proper nouns). ` +
-            exceptionNote,
-          instructionOnly: true,
-        });
+        const corrected = toTitleCase(text);
+        if (corrected !== text) {
+          h2Corrections.push({ old: text, new: corrected });
+        }
       } else if (level >= 3 && looksLikeTitleCase(text)) {
-        issues.push({
+        results.push({
           id: `HEAD-001-${idx}`,
           ruleId: 'HEAD-001',
           title: `H${level} heading may need sentence case`,
@@ -152,11 +254,21 @@ const HEAD_001: Rule = {
             `H2 headings use title case. ` +
             exceptionNote,
           instructionOnly: true,
-        });
+        } as Issue);
       }
     });
 
-    return issues;
+    if (h2Corrections.length > 0) {
+      const count = h2Corrections.length;
+      results.push({
+        ruleId: 'HEAD-001',
+        description: `${count} H2 heading${count === 1 ? '' : 's'} corrected to title case`,
+        targetField: 'heading.h2.titlecase',
+        value: JSON.stringify(h2Corrections),
+      } as AutoAppliedChange);
+    }
+
+    return results;
   },
 };
 
