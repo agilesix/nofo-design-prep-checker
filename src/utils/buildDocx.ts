@@ -819,6 +819,7 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
       let remaining = corrected;
       for (let i = 0; i < wTElements.length; i++) {
         const wT = wTElements[i];
+        if (!wT) continue;
         const originalText = wT.textContent ?? '';
         const isLastRun = i === wTElements.length - 1;
         const nextText = isLastRun
