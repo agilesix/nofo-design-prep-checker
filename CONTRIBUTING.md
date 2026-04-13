@@ -67,7 +67,9 @@ chore: update release-please config
 
 **Why this matters:** release-please reads commit messages to auto-generate `CHANGELOG.md` and determine version bumps. Commit messages that don't follow this format will not be grouped correctly in the changelog.
 
-**When using Claude Code:** always instruct it to use conventional commit format. Claude Code commit messages that don't follow this format will not be grouped correctly in the auto-generated changelog.
+**Enforcement:** The `commit-msg` git hook (installed by `sh scripts/install-hooks.sh`) validates the first line of every commit message against the allowed prefixes. Commits with a non-conforming message are rejected immediately with an error explaining the required format. The check is case-insensitive — `Feat:` and `feat:` are both accepted.
+
+**When using Claude Code:** Claude Code commits bypass local git hooks when the tool pushes directly. Always review Claude Code commit messages before pushing — if a message does not follow the conventional commit format, amend it with `git commit --amend` before opening a pull request.
 
 ## Code conventions
 

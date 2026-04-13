@@ -1,0 +1,42 @@
+#!/bin/sh
+# Validates that the commit message starts with a conventional commit prefix.
+# Git passes the path to the commit message file as the first argument ($1).
+# Only the first line of the message is checked — body lines are unrestricted.
+
+commit_msg_file="$1"
+
+if [ -z "$commit_msg_file" ] || [ ! -r "$commit_msg_file" ]; then
+  echo "❌ Commit rejected: commit message file is missing or unreadable."
+  exit 1
+fi
+
+first_line=$(head -n 1 "$commit_msg_file")
+# Case-insensitive prefix check
+case "$(echo "$first_line" | tr '[:upper:]' '[:lower:]')" in
+  feat:*|feat!:*|feat\(*\):*|feat\(*\)!:*|\
+  fix:*|fix!:*|fix\(*\):*|fix\(*\)!:*|\
+  docs:*|docs!:*|docs\(*\):*|docs\(*\)!:*|\
+  chore:*|chore!:*|chore\(*\):*|chore\(*\)!:*|\
+  refactor:*|refactor!:*|refactor\(*\):*|refactor\(*\)!:*|\
+  test:*|test!:*|test\(*\):*|test\(*\)!:*)
+    exit 0
+    ;;
+esac
+
+echo ""
+echo "❌ Commit rejected: message must start with a conventional commit type."
+echo ""
+echo "Allowed types (optionally with '(scope)' and/or '!'):"
+echo "  feat      A new rule, feature, or user-facing capability"
+echo "  fix       A bug fix"
+echo "  docs      Documentation only changes"
+echo "  chore     Maintenance, config, or dependency updates"
+echo "  refactor  Code restructuring with no behavior change"
+echo "  test      Adding or updating tests only"
+echo ""
+echo "Examples:"
+echo "  feat: add pre-NOFO document detection"
+echo "  feat(parser): add pre-NOFO document detection"
+echo "  feat!: remove legacy pre-NOFO detection flow"
+echo ""
+exit 1
