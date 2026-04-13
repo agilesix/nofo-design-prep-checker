@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useFocusHeading } from '../hooks/useFocusHeading';
 import type { ParsedDocument, ReviewState, AcceptedFix, IssueResolution, Issue, ContentGuideId } from '../types';
 import { content } from '../content';
@@ -30,6 +30,7 @@ export default function ReviewStep({
   isPreNofo,
 }: ReviewStepProps): React.ReactElement {
   const headingRef = useFocusHeading();
+  const issueListRef = useRef<HTMLDivElement>(null);
   const [resolutions, setResolutions] = useState<Record<string, IssueResolution>>(
     reviewState.resolutions
   );
@@ -46,6 +47,21 @@ export default function ReviewStep({
     setAcceptedFixes([]);
     setDismissedCategories(new Set());
   }, [reviewState.issues, reviewState.resolutions]);
+
+  // Apply/remove the `inert` attribute on the issues subtree when isPreNofo changes.
+  // `inert` prevents keyboard focus and pointer events for all descendants and hides
+  // the subtree from assistive technologies — the correct semantic replacement for
+  // the aria-hidden + pointerEvents:none pattern, which does not block keyboard nav.
+  // Set imperatively because `inert` is not in @types/react's stable type definitions.
+  useEffect(() => {
+    const el = issueListRef.current;
+    if (!el) return;
+    if (isPreNofo) {
+      el.setAttribute('inert', '');
+    } else {
+      el.removeAttribute('inert');
+    }
+  }, [isPreNofo]);
 
   const { issues, autoAppliedChanges, activeContentGuide } = reviewState;
 
@@ -216,10 +232,7 @@ export default function ReviewStep({
         </div>
       )}
 
-      <div
-        style={isPreNofo ? { opacity: 0.45, pointerEvents: 'none' } : undefined}
-        aria-hidden={isPreNofo ? true : undefined}
-      >
+      <div ref={issueListRef} style={isPreNofo ? { opacity: 0.45 } : undefined}>
         {issues.length === 0 ? (
           <div className="margin-bottom-4">
             <p className="margin-0">{content.review.noIssues.body}</p>
