@@ -287,3 +287,38 @@ describe('HEAD-001: federal law and directive exceptions', () => {
     expect(issue.title).toBe('H3 heading may need sentence case');
   });
 });
+
+// ─── Only Word-styled headings are checked ────────────────────────────────────
+
+describe('HEAD-001: only Word paragraph styles Heading 1–6 are checked', () => {
+  // mammoth.js maps Word paragraphs to h1–h6 only when the paragraph carries
+  // a "Heading N" paragraph style in the docx XML (w:pStyle w:val="Heading2"
+  // etc.). Bold text, large fonts, or other visual formatting on a Normal-style
+  // paragraph produce a <p> (or <p><strong>…</strong>) element, not an <hN>.
+  // HEAD-001 queries only h2–h6, so none of those paragraphs are ever inspected.
+
+  it('does not flag a bold body paragraph whose text is in title case', () => {
+    // <strong> inside <p> = bold Normal paragraph in Word — not a heading.
+    const doc = makeDoc('<p><strong>Program Description Information</strong></p>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a plain body paragraph whose text is in title case', () => {
+    const doc = makeDoc('<p>Contact and Support Information</p>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag an H1 paragraph regardless of capitalization style', () => {
+    // H1 is deliberately excluded — the rule only checks H2 (auto-fix) and
+    // H3–H6 (suggestion). H1 capitalization is not enforced.
+    const doc = makeDoc('<h1>program description information</h1>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a bold body paragraph whose text is in sentence case', () => {
+    // Even sentence-case text in a <p><strong> block must not trigger the H2
+    // auto-fix path — only true h2 elements are corrected.
+    const doc = makeDoc('<p><strong>Program description information</strong></p>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+});
