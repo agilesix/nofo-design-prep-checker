@@ -46,6 +46,10 @@ type FuzzyMatchResult =
   | { kind: 'ambiguous' }
   | { kind: 'none' };
 
+function cleanHeadingId(rawId: string): string {
+  return rawId.replace(/^_+|_+$/g, '') || rawId;
+}
+
 const LINK_006: Rule = {
   id: 'LINK-006',
   autoApply: false,
@@ -465,7 +469,7 @@ function matchByNormalizedValue(
 
     const rawId = h.getAttribute('id');
     const suggestion = rawId !== null
-      ? (rawId.replace(/^_+|_+$/g, '') || rawId)
+      ? cleanHeadingId(rawId)
       : slugifyHeading(text);
     if (!headingMatches.some(m => m.anchor === suggestion)) {
       headingMatches.push({ anchor: suggestion, headingText: text });
