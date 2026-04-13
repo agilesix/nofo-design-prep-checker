@@ -520,9 +520,8 @@ function matchByNumericExtraction(
       const text = (h.textContent ?? '').trim();
       if (!text || !pattern.test(text)) continue;
       const rawId = h.getAttribute('id');
-      const suggestion = rawId !== null
-        ? (rawId.replace(/^_+|_+$/g, '') || rawId)
-        : slugifyHeading(text);
+      const normalizedId = rawId?.trim().replace(/^_+|_+$/g, '');
+      const suggestion = normalizedId ? normalizedId : slugifyHeading(text);
       if (!headingMatches.some(m => m.anchor === suggestion)) {
         headingMatches.push({ anchor: suggestion, headingText: text });
       }
