@@ -448,6 +448,7 @@ describe('META-003: does not suggest newly excluded administrative fragments', (
     };
 
     const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
     const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
     expect(prefill.toLowerCase()).not.toContain('page limit');
   });
@@ -460,6 +461,7 @@ describe('META-003: does not suggest newly excluded administrative fragments', (
         'Tagline: Standard forms',
     };
     const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
     const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
     expect(prefill.toLowerCase()).not.toContain('standard forms');
   });
@@ -472,6 +474,7 @@ describe('META-003: does not suggest newly excluded administrative fragments', (
         'Opportunity name: Component',
     };
     const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
     const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
     expect(prefill.toLowerCase()).not.toContain('component');
   });
@@ -499,6 +502,7 @@ describe('META-003: does not suggest newly excluded administrative fragments', (
     };
 
     const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
     const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
     expect(prefill.toLowerCase()).not.toContain('grants.gov form');
   });
@@ -515,6 +519,7 @@ describe('META-003: rejects single common words as standalone keyword candidates
         'Opportunity name: Yes',
     };
     const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
     const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
     expect(prefill.toLowerCase()).not.toContain('yes');
   });
@@ -527,6 +532,7 @@ describe('META-003: rejects single common words as standalone keyword candidates
         'Tagline: None',
     };
     const issues = META_003.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
     const prefill = (issues[0] as Issue).inputRequired?.prefill ?? '';
     expect(prefill.toLowerCase()).not.toContain('none');
   });

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
 import HEAD_001 from '../universal/HEAD-001';
-import type { ParsedDocument, Issue } from '../../types';
+import type { ParsedDocument, Issue, AutoAppliedChange } from '../../types';
 
 function makeDoc(html: string): ParsedDocument {
   return {
@@ -18,55 +18,120 @@ function makeDoc(html: string): ParsedDocument {
 
 const OPTIONS = { contentGuideId: null } as const;
 
-// ─── H2: must use title case ─────────────────────────────────────────────────
+// ─── H2: auto-fix to title case ──────────────────────────────────────────────
 
-describe('HEAD-001: H2 sentence case detection', () => {
-  it('flags an H2 in sentence case', () => {
+describe('HEAD-001: H2 sentence case → auto-fix (AutoAppliedChange)', () => {
+  it('emits an AutoAppliedChange (not an Issue) for an H2 in sentence case', () => {
     const doc = makeDoc('<h2>Program description information</h2>');
     const results = HEAD_001.check(doc, OPTIONS);
     expect(results).toHaveLength(1);
-    const issue = results[0] as Issue;
-    expect(issue.ruleId).toBe('HEAD-001');
-    expect(issue.title).toBe('H2 heading may need title case');
-    expect(issue.severity).toBe('suggestion');
-    expect(issue.instructionOnly).toBe(true);
-    expect(issue.description).toContain('sentence case');
-    expect(issue.description).toContain('title case');
+    const change = results[0] as AutoAppliedChange;
+    // AutoAppliedChange has no severity
+    expect('severity' in change).toBe(false);
+    expect(change.ruleId).toBe('HEAD-001');
+    expect(change.targetField).toBe('heading.h2.titlecase');
+    expect(change.description).toContain('H2 heading');
+    expect(change.description).toContain('title case');
+  });
+
+  it('encodes the corrected text in the change value', () => {
+    const doc = makeDoc('<h2>Program description information</h2>');
+    const results = HEAD_001.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const change = results[0] as AutoAppliedChange;
+    const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0]!.old).toBe('Program description information');
+    expect(pairs[0]!.new).toBe('Program Description Information');
   });
 
   it('flags an H2 where a major word is lowercase', () => {
-    // "review" is a non-minor word starting lowercase → sentence case
     const doc = makeDoc('<h2>Types of awards and review criteria</h2>');
-    const issue = (HEAD_001.check(doc, OPTIONS)[0] as Issue);
-    expect(issue.title).toBe('H2 heading may need title case');
+    const results = HEAD_001.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const change = results[0] as AutoAppliedChange;
+    expect(change.targetField).toBe('heading.h2.titlecase');
   });
 
-  it('does not flag a correctly cased H2 in title case', () => {
+  it('does not emit any result for a correctly cased H2 in title case', () => {
     const doc = makeDoc('<h2>Program Description Information</h2>');
     expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
   });
 
-  it('does not flag an H2 where all non-minor words are capitalised', () => {
+  it('does not emit any result for an H2 where all non-minor words are capitalised', () => {
     const doc = makeDoc('<h2>Award and Submission Requirements</h2>');
     expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
   });
 
-  it('does not flag an H2 with a single word', () => {
-    // Single-word headings have no second word to detect case from
+  it('does not emit any result for a single-word H2', () => {
     const doc = makeDoc('<h2>Eligibility</h2>');
     expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
   });
 
-  it('does not flag an H2 where all non-first words are minor words', () => {
-    // Only minor words follow the first — no evidence of sentence case
+  it('does not emit any result for an H2 where all non-first words are minor words', () => {
     const doc = makeDoc('<h2>Award in the</h2>');
     expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('emits a single AutoAppliedChange covering multiple H2 headings', () => {
+    const doc = makeDoc(
+      '<h2>Program description information</h2>' +
+      '<h2>Types of awards and review criteria</h2>'
+    );
+    const results = HEAD_001.check(doc, OPTIONS);
+    // One AutoAppliedChange for both H2s (H3-H6 suggestions are separate)
+    const autoChanges = results.filter(r => (r as AutoAppliedChange).targetField === 'heading.h2.titlecase');
+    expect(autoChanges).toHaveLength(1);
+    const change = autoChanges[0] as AutoAppliedChange;
+    expect(change.description).toContain('2 H2 headings');
+    const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
+    expect(pairs).toHaveLength(2);
+  });
+});
+
+// ─── H2: title case conversion rules ─────────────────────────────────────────
+
+describe('HEAD-001: toTitleCase conversion rules', () => {
+  function getNew(html: string): string {
+    const results = HEAD_001.check(makeDoc(html), OPTIONS);
+    const change = results[0] as AutoAppliedChange;
+    const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
+    return pairs[0]!.new;
+  }
+
+  it('capitalizes non-minor content words', () => {
+    expect(getNew('<h2>Program description information</h2>')).toBe('Program Description Information');
+  });
+
+  it('leaves minor words lowercase', () => {
+    expect(getNew('<h2>Types of awards and review criteria</h2>')).toBe('Types of Awards and Review Criteria');
+  });
+
+  it('capitalizes the first word after a colon', () => {
+    expect(getNew('<h2>Step 2: get ready to apply</h2>')).toBe('Step 2: Get Ready to Apply');
+  });
+
+  it('preserves ALL-CAPS acronyms unchanged', () => {
+    expect(getNew('<h2>HRSA funding overview</h2>')).toBe('HRSA Funding Overview');
+  });
+
+  it('leaves already-capitalized words unchanged (proper nouns)', () => {
+    // "National Cancer Institute" is already capitalized mid-sentence — stays as-is.
+    // "programs" starts lowercase → triggers sentence case, gets capitalized.
+    // "from" is a minor word → stays lowercase.
+    expect(getNew('<h2>funding from National Cancer Institute programs</h2>')).toBe(
+      'Funding from National Cancer Institute Programs'
+    );
+  });
+
+  it('handles a CDC acronym mixed with lowercase content words', () => {
+    expect(getNew('<h2>CDC funding overview</h2>')).toBe('CDC Funding Overview');
   });
 });
 
 // ─── H3–H6: must use sentence case ───────────────────────────────────────────
 
-describe('HEAD-001: H3–H6 title case detection', () => {
+describe('HEAD-001: H3–H6 title case detection (suggestion Issues)', () => {
   it('flags an H3 in title case', () => {
     const doc = makeDoc('<h3>Contact and Support Information</h3>');
     const results = HEAD_001.check(doc, OPTIONS);
@@ -82,7 +147,9 @@ describe('HEAD-001: H3–H6 title case detection', () => {
 
   it('flags an H4 in title case', () => {
     const doc = makeDoc('<h4>Award Review Criteria</h4>');
-    const issue = HEAD_001.check(doc, OPTIONS)[0] as Issue;
+    const results = HEAD_001.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const issue = results[0] as Issue;
     expect(issue.title).toBe('H4 heading may need sentence case');
   });
 
@@ -120,17 +187,21 @@ describe('HEAD-001: H1 is not checked', () => {
 
 describe('HEAD-001: ALL-CAPS words are skipped', () => {
   it('does not flag an H3 whose only non-first capitalised word is an acronym', () => {
-    // "CDC" is ALL CAPS → skipped; "contact" is lowercase → not a title-case indicator
     const doc = makeDoc('<h3>Contact CDC for more information</h3>');
     expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
   });
 
-  it('still flags an H2 when an ALL-CAPS acronym is mixed with lowercase major words', () => {
+  it('still auto-fixes an H2 when an ALL-CAPS acronym is mixed with lowercase major words', () => {
     // "HRSA" is ALL CAPS → skipped; "funding" and "overview" are lowercase
-    // non-minor words → sentence case is still detected and the heading is flagged
+    // non-minor words → sentence case is still detected and auto-fixed
     const doc = makeDoc('<h2>HRSA funding overview</h2>');
-    const issue = HEAD_001.check(doc, OPTIONS)[0] as Issue;
-    expect(issue.title).toBe('H2 heading may need title case');
+    const results = HEAD_001.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const change = results[0] as AutoAppliedChange;
+    expect(change.targetField).toBe('heading.h2.titlecase');
+    const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
+    // HRSA preserved; "funding" and "overview" capitalized
+    expect(pairs[0]!.new).toBe('HRSA Funding Overview');
   });
 });
 
@@ -138,15 +209,81 @@ describe('HEAD-001: ALL-CAPS words are skipped', () => {
 
 describe('HEAD-001: word after colon treated as sentence start', () => {
   it('does not flag an H3 where the only capitalised word follows a colon', () => {
-    // "Background:" ends with colon → "Why" is a sentence restart → skipped
     const doc = makeDoc('<h3>Background: Why this matters</h3>');
     expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
   });
 
   it('flags an H3 with a capitalised word that does NOT follow a colon', () => {
     const doc = makeDoc('<h3>Contact and Support: details and background</h3>');
-    // "Support" is capitalised and is not a sentence start → title case detected
-    const issue = HEAD_001.check(doc, OPTIONS)[0] as Issue;
+    const results = HEAD_001.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const issue = results[0] as Issue;
+    expect(issue.title).toBe('H3 heading may need sentence case');
+  });
+
+  it('capitalizes the first word after a colon when auto-fixing an H2', () => {
+    const doc = makeDoc('<h2>Step 2: get ready to apply</h2>');
+    const results = HEAD_001.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const change = results[0] as AutoAppliedChange;
+    const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
+    expect(pairs[0]!.new).toBe('Step 2: Get Ready to Apply');
+  });
+});
+
+// ─── Federal law exceptions ───────────────────────────────────────────────────
+
+describe('HEAD-001: federal law and directive exceptions', () => {
+  it('does not flag an H2 containing "Paperwork Reduction Act"', () => {
+    const doc = makeDoc('<h2>Paperwork Reduction Act</h2>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "Americans with Disabilities Act"', () => {
+    // Would normally look like title case — but it's a federal law exception
+    const doc = makeDoc('<h3>Americans with Disabilities Act</h3>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag an H2 containing "Privacy Act"', () => {
+    const doc = makeDoc('<h2>Privacy Act requirements</h2>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a heading containing "Executive Order"', () => {
+    const doc = makeDoc('<h3>Executive Order 13166 compliance</h3>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a heading matching the "Act of" pattern', () => {
+    const doc = makeDoc('<h3>Civil Rights Act of 1964</h3>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a heading matching the "Section N" pattern', () => {
+    const doc = makeDoc('<h2>Section 508 accessibility requirements</h2>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a heading containing "Section 1557"', () => {
+    const doc = makeDoc('<h3>Section 1557 compliance</h3>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a heading containing "Uniform Guidance"', () => {
+    const doc = makeDoc('<h3>Uniform Guidance requirements</h3>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('still flags a non-exempt H3 when other headings on the page are exempt', () => {
+    // The exempt heading should not suppress other headings
+    const doc = makeDoc(
+      '<h3>Section 508 compliance</h3>' +
+      '<h3>Contact and Support Information</h3>'
+    );
+    const results = HEAD_001.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const issue = results[0] as Issue;
     expect(issue.title).toBe('H3 heading may need sentence case');
   });
 });
