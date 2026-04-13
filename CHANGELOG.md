@@ -6,8 +6,8 @@
 ### Bug Fixes
 
 * add null check for wT in buildDocx ([cd98eb0](https://github.com/agilesix/nofo-design-prep-checker/commit/cd98eb04942944397d9edf0c527c4d0f4ee42a97))
-* dont show issues on results page if pre nofo ([48dc76d](https://github.com/agilesix/nofo-design-prep-checker/commit/48dc76de475b8871653619c7e1d40d7731c9bea4))
-* dont show issues on results page if pre nofo ([20e4d1d](https://github.com/agilesix/nofo-design-prep-checker/commit/20e4d1d9c5603e4b815d5ec2db3bec308a452dc5))
+* don't show issues on results page if pre nofo ([48dc76d](https://github.com/agilesix/nofo-design-prep-checker/commit/48dc76de475b8871653619c7e1d40d7731c9bea4))
+* don't show issues on results page if pre nofo ([20e4d1d](https://github.com/agilesix/nofo-design-prep-checker/commit/20e4d1d9c5603e4b815d5ec2db3bec308a452dc5))
 * fix for headings cap rule ([8303dc7](https://github.com/agilesix/nofo-design-prep-checker/commit/8303dc786f3fdd472fe9cfa9bb374d4edb30da62))
 * fix for headings cap rule ([7c6dd47](https://github.com/agilesix/nofo-design-prep-checker/commit/7c6dd470f5753f09be423e97a93c4598037e0e2e))
 * fix internal link rule to auto apply capitlization ([b0946c8](https://github.com/agilesix/nofo-design-prep-checker/commit/b0946c8f0007a10d10050061ccca182b844d2df4))
