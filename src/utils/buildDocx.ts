@@ -808,11 +808,33 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
     const corrected = fixMap.get(paraText);
     if (!corrected || corrected === paraText) continue;
 
+    const wTElements = Array.from(wP.getElementsByTagName('w:t'));
+    if (wTElements.length === 0) continue;
+
+    if (corrected.length !== paraText.length) {
+      // Fall back to a full-run replacement when the corrected text no longer
+      // aligns positionally with the original paragraph text. Preserve the
+      // existing run structure by filling each run with a sequential slice of
+      // the corrected text and placing any remainder in the last run.
+      let remaining = corrected;
+      for (let i = 0; i < wTElements.length; i++) {
+        const wT = wTElements[i];
+        const originalText = wT.textContent ?? '';
+        const isLastRun = i === wTElements.length - 1;
+        const nextText = isLastRun
+          ? remaining
+          : remaining.slice(0, originalText.length);
+        wT.textContent = nextText;
+        remaining = isLastRun ? '' : remaining.slice(originalText.length);
+      }
+      changed = true;
+      continue;
+    }
+
     // Apply character-by-character case changes across <w:t> elements.
     // Title case only changes some lowercase letters to uppercase, so every
     // character position in corrected[] aligns with the same position in
     // the original paraText. We walk each run and patch diverging positions.
-    const wTElements = Array.from(wP.getElementsByTagName('w:t'));
     let pos = 0;
     for (const wT of wTElements) {
       const text = wT.textContent ?? '';
