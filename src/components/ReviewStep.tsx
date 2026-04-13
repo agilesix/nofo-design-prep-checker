@@ -14,6 +14,7 @@ interface ReviewStepProps {
   onStartOver: () => void;
   bannerDismissed: boolean;
   onDismissBanner: (val: boolean) => void;
+  isPreNofo: boolean;
 }
 
 type SeverityFilter = 'all' | 'error' | 'warning' | 'suggestion';
@@ -26,6 +27,7 @@ export default function ReviewStep({
   onStartOver,
   bannerDismissed,
   onDismissBanner,
+  isPreNofo,
 }: ReviewStepProps): React.ReactElement {
   const headingRef = useFocusHeading();
   const [resolutions, setResolutions] = useState<Record<string, IssueResolution>>(
@@ -161,6 +163,25 @@ export default function ReviewStep({
 
       <p className="usa-intro">{content.review.intro}</p>
 
+      {isPreNofo && (
+        <div className="usa-alert usa-alert--error margin-bottom-4" role="alert">
+          <div className="usa-alert__body">
+            <h2 className="usa-alert__heading">This appears to be a pre-NOFO document</h2>
+            <p className="usa-alert__text">
+              This document appears to use a pre-NOFO template, which is used earlier in the
+              authoring process. NOFO Design Prep Checker and NOFO Builder require your NOFO to
+              be in a content guide template, not a pre-NOFO template. To proceed, move your
+              content into the appropriate content guide and upload that document instead.
+            </p>
+            <ol className="usa-list margin-top-2">
+              <li>Download the current version of your content guide from SharePoint.</li>
+              <li>Copy and paste each section of your pre-NOFO content into the downloaded guide.</li>
+              <li>Upload the new version of your NOFO draft and re-run this checker.</li>
+            </ol>
+          </div>
+        </div>
+      )}
+
       {!bannerDismissed && (
         <div className="usa-alert usa-alert--info margin-bottom-4 review-banner" role="alert">
           <div className="usa-alert__body">
@@ -195,140 +216,147 @@ export default function ReviewStep({
         </div>
       )}
 
-      {issues.length === 0 ? (
-        <div className="margin-bottom-4">
-          <p className="margin-0">{content.review.noIssues.body}</p>
-          <p className="margin-top-1 margin-bottom-0">{content.review.noIssues.nextStep}</p>
-        </div>
-      ) : (
-        <>
-          <div className="display-flex flex-align-center flex-gap-3 margin-bottom-3 flex-wrap">
-            <p className="margin-0 font-body-sm">
-              <strong>{content.review.issueCount(issues.length)}</strong>
-            </p>
-            <p className="margin-0 font-body-sm text-base">
-              {content.review.progress.label(reviewedCount, issues.length)}
-            </p>
+      <div
+        style={isPreNofo ? { opacity: 0.45, pointerEvents: 'none' } : undefined}
+        aria-hidden={isPreNofo ? true : undefined}
+      >
+        {issues.length === 0 ? (
+          <div className="margin-bottom-4">
+            <p className="margin-0">{content.review.noIssues.body}</p>
+            <p className="margin-top-1 margin-bottom-0">{content.review.noIssues.nextStep}</p>
           </div>
+        ) : (
+          <>
+            <div className="display-flex flex-align-center flex-gap-3 margin-bottom-3 flex-wrap">
+              <p className="margin-0 font-body-sm">
+                <strong>{content.review.issueCount(issues.length)}</strong>
+              </p>
+              <p className="margin-0 font-body-sm text-base">
+                {content.review.progress.label(reviewedCount, issues.length)}
+              </p>
+            </div>
 
-          <div className="usa-form-group margin-bottom-4">
-            <fieldset className="usa-fieldset">
-              <legend className="usa-legend usa-legend--large font-body-sm">
-                {content.review.filters.label}
-              </legend>
-              <div className="display-flex flex-gap-2 flex-wrap">
-                {(['all', 'error', 'warning', 'suggestion'] as SeverityFilter[]).map(filter => {
-                  if (filter !== 'all' && severityCounts[filter] === 0) return null;
-                  const label =
-                    filter === 'all'
-                      ? content.review.filters.all
-                      : content.review.filters[filter];
-                  return (
-                    <div key={filter} className="usa-radio display-inline-block">
-                      <input
-                        className="usa-radio__input usa-radio__input--tile"
-                        type="radio"
-                        id={`filter-${filter}`}
-                        name="severity-filter"
-                        value={filter}
-                        checked={effectiveSeverityFilter === filter}
-                        onChange={() => setSeverityFilter(filter)}
-                      />
-                      <label className="usa-radio__label" htmlFor={`filter-${filter}`}>
-                        {label} ({severityCounts[filter]})
-                      </label>
-                    </div>
-                  );
-                })}
-              </div>
-            </fieldset>
-          </div>
+            <div className="usa-form-group margin-bottom-4">
+              <fieldset className="usa-fieldset">
+                <legend className="usa-legend usa-legend--large font-body-sm">
+                  {content.review.filters.label}
+                </legend>
+                <div className="display-flex flex-gap-2 flex-wrap">
+                  {(['all', 'error', 'warning', 'suggestion'] as SeverityFilter[]).map(filter => {
+                    if (filter !== 'all' && severityCounts[filter] === 0) return null;
+                    const label =
+                      filter === 'all'
+                        ? content.review.filters.all
+                        : content.review.filters[filter];
+                    return (
+                      <div key={filter} className="usa-radio display-inline-block">
+                        <input
+                          className="usa-radio__input usa-radio__input--tile"
+                          type="radio"
+                          id={`filter-${filter}`}
+                          name="severity-filter"
+                          value={filter}
+                          checked={effectiveSeverityFilter === filter}
+                          onChange={() => setSeverityFilter(filter)}
+                        />
+                        <label className="usa-radio__label" htmlFor={`filter-${filter}`}>
+                          {label} ({severityCounts[filter]})
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            </div>
 
-          {activeContentGuide && (
-            <ContentGuideBadge
-              key={activeContentGuide.id}
-              guide={activeContentGuide}
-              onGuideChange={onGuideChange}
-            />
-          )}
+            {activeContentGuide && (
+              <ContentGuideBadge
+                key={activeContentGuide.id}
+                guide={activeContentGuide}
+                onGuideChange={onGuideChange}
+              />
+            )}
 
-          {Object.entries(groupedIssues).map(([category, categoryIssues]) => {
-            const hasUnreviewed = categoryIssues.some(i => resolutions[i.id] === 'unreviewed');
-            // isDismissed is intentionally gated on !hasUnreviewed: if any issue in the
-            // category is individually undone back to unreviewed, the stored dismissed
-            // category remains in `dismissedCategories`, but the UI hides the "Dismissed"
-            // state and shows "Dismiss all" again without any extra handler work.
-            const isDismissed = dismissedCategories.has(category) && !hasUnreviewed;
-            return (
-              <div key={category} className="margin-bottom-5">
-                <h2 className="usa-h3 border-bottom-1px border-base-light padding-bottom-1 issue-category-heading">
-                  <span>
-                    {category}
-                    <span className="font-body-xs text-base margin-left-1">
-                      ({categoryIssues.length})
+            {Object.entries(groupedIssues).map(([category, categoryIssues]) => {
+              const hasUnreviewed = categoryIssues.some(i => resolutions[i.id] === 'unreviewed');
+              // isDismissed is intentionally gated on !hasUnreviewed: if any issue in the
+              // category is individually undone back to unreviewed, the stored dismissed
+              // category remains in `dismissedCategories`, but the UI hides the "Dismissed"
+              // state and shows "Dismiss all" again without any extra handler work.
+              const isDismissed = dismissedCategories.has(category) && !hasUnreviewed;
+              return (
+                <div key={category} className="margin-bottom-5">
+                  <h2 className="usa-h3 border-bottom-1px border-base-light padding-bottom-1 issue-category-heading">
+                    <span>
+                      {category}
+                      <span className="font-body-xs text-base margin-left-1">
+                        ({categoryIssues.length})
+                      </span>
                     </span>
-                  </span>
 
-                  {isDismissed ? (
-                    <span className="font-body-xs text-base display-flex flex-align-center" style={{ gap: '0.375rem' }}>
-                      <span>&#10003; Dismissed</span>
-                      <span aria-hidden="true">&middot;</span>
+                    {isDismissed ? (
+                      <span className="font-body-xs text-base display-flex flex-align-center" style={{ gap: '0.375rem' }}>
+                        <span>&#10003; Dismissed</span>
+                        <span aria-hidden="true">&middot;</span>
+                        <button
+                          type="button"
+                          className="usa-button usa-button--unstyled font-body-xs"
+                          onClick={() => handleUndoAll(category, categoryIssues)}
+                        >
+                          Undo all
+                        </button>
+                      </span>
+                    ) : hasUnreviewed ? (
                       <button
                         type="button"
                         className="usa-button usa-button--unstyled font-body-xs"
-                        onClick={() => handleUndoAll(category, categoryIssues)}
+                        style={{ whiteSpace: 'nowrap' }}
+                        onClick={() => handleDismissAll(category, categoryIssues)}
                       >
-                        Undo all
+                        Dismiss all<span className="dismiss-all-count"> ({categoryIssues.length})</span>
                       </button>
-                    </span>
-                  ) : hasUnreviewed ? (
-                    <button
-                      type="button"
-                      className="usa-button usa-button--unstyled font-body-xs"
-                      style={{ whiteSpace: 'nowrap' }}
-                      onClick={() => handleDismissAll(category, categoryIssues)}
-                    >
-                      Dismiss all<span className="dismiss-all-count"> ({categoryIssues.length})</span>
-                    </button>
-                  ) : null}
-                </h2>
+                    ) : null}
+                  </h2>
 
-                {categoryIssues.map(issue => (
-                  <IssueCard
-                    key={issue.id}
-                    issue={issue}
-                    resolution={resolutions[issue.id] ?? 'unreviewed'}
-                    onAccept={handleAccept}
-                    onSkip={() => handleSkip(issue.id)}
-                    onKeepAsBold={
-                      issue.ruleId.startsWith('FORMAT-')
-                        ? () => handleKeepAsBold(issue.id)
-                        : undefined
-                    }
-                    onUndo={() => handleUndo(issue.id)}
-                  />
-                ))}
-              </div>
-            );
-          })}
-        </>
-      )}
+                  {categoryIssues.map(issue => (
+                    <IssueCard
+                      key={issue.id}
+                      issue={issue}
+                      resolution={resolutions[issue.id] ?? 'unreviewed'}
+                      onAccept={handleAccept}
+                      onSkip={() => handleSkip(issue.id)}
+                      onKeepAsBold={
+                        issue.ruleId.startsWith('FORMAT-')
+                          ? () => handleKeepAsBold(issue.id)
+                          : undefined
+                      }
+                      onUndo={() => handleUndo(issue.id)}
+                    />
+                  ))}
+                </div>
+              );
+            })}
+          </>
+        )}
+      </div>
 
       <div className="margin-top-4 padding-top-3" style={{ borderTop: '1px solid #c9c7c3' }}>
-        {unreviewedCount > 0 && (
+        {!isPreNofo && unreviewedCount > 0 && (
           <p className="font-body-sm margin-bottom-2" style={{ color: '#4a4944' }}>
             {content.review.continueWarning(unreviewedCount)}
           </p>
         )}
 
         <div className="display-flex flex-gap-2 flex-align-center flex-wrap">
-          <button
-            type="button"
-            className="usa-button"
-            onClick={handleContinue}
-          >
-            {content.review.continueButton}
-          </button>
+          {!isPreNofo && (
+            <button
+              type="button"
+              className="usa-button"
+              onClick={handleContinue}
+            >
+              {content.review.continueButton}
+            </button>
+          )}
           <button
             type="button"
             className="usa-button usa-button--unstyled"

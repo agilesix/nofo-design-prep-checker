@@ -39,3 +39,22 @@ The keyword count guidance has been updated from "8–10" to "at least 6" to avo
 **Alternative considered:** Keeping the heading approach but expanding the exclusion list. Rejected because the heading pool for most NOFOs is dominated by structural headings; even with a large exclusion list, few program-specific headings remain. Content-based extraction targets the actual program description text where specific terminology lives.
 
 **Outcome:** Suggestions now reflect program-specific terminology. The n-gram approach requires a phrase to appear at least twice in program description text, which filters out one-off sentence starters and generic structural language while surfacing terms the author intentionally repeats. Implemented in `META-003.ts` via `extractAgencyTerms` and `extractProgramSectionTerms`; the old `extractHeadingTerms` and `isNavigationalHeading` functions are removed.
+
+---
+
+## 2026-04-13 — Pre-NOFO document detection added
+
+**Decision:** Added a document-level validity check (`src/utils/detectPreNofo.ts`) that runs immediately after parsing — before any content rules execute — to detect whether the uploaded document is a pre-NOFO template rather than a content guide. If two or more signals are present, a blocking error alert is displayed at the top of the Review page, the issue list is visually muted and non-interactive, and the "Continue to summary" button is hidden.
+
+Five signals are checked; any two trigger detection:
+1. A heading (any level) containing "Pre-NOFO approval" (case-insensitive)
+2. A heading (any level) containing "Pre-NOFO checklist" (case-insensitive)
+3. A heading containing "Writing instructions" within the first 5 headings
+4. A heading containing "Relevant deadlines" within the first 3 headings
+5. Filename contains "pre-nofo" or "prenofo" (case-insensitive)
+
+**Reason:** Users occasionally upload pre-NOFO drafts instead of content guide documents. The tool produces many false issues in this case — the pre-NOFO structure does not match content guide templates, so heading checks, metadata checks, and structure checks all fire. Surfacing the issue before the user reviews any content saves time and prevents confusion.
+
+**Alternative considered:** Blocking at the upload step before parsing. Rejected because the filename signal alone is insufficient (not all pre-NOFO files have "pre-nofo" in the name), and heading detection requires parsing the document first. The review page with a muted list is a better landing point than a blank error on the upload screen: the user can still see what headings were found and confirm the diagnosis.
+
+**Outcome:** When detected, the Review page shows a prominent non-dismissible error alert explaining the problem and listing three steps to resolve it. The issue cards remain visible but are grayed out (`opacity: 0.45`, `pointer-events: none`) so the user can see the analysis without being able to act on it. The "Continue to summary" button is hidden. The detection is intentionally not a standard rule in `src/rules/` — it is a document-level validity check with no associated fix, not a content issue.

@@ -13,6 +13,7 @@ import { content } from './content';
 import { RULES_REFERENCE_URL } from './constants';
 import { parseDocx } from './utils/parseDocx';
 import { detectContentGuide } from './utils/detectContentGuide';
+import { detectPreNofo } from './utils/detectPreNofo';
 import { buildDocx } from './utils/buildDocx';
 import { RuleRunner } from './utils/RuleRunner';
 import { allRules } from './rules';
@@ -34,6 +35,7 @@ export default function App(): React.ReactElement {
   const [parseError, setParseError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [reviewBannerDismissed, setReviewBannerDismissed] = useState(false);
+  const [isPreNofo, setIsPreNofo] = useState(false);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -49,6 +51,10 @@ export default function App(): React.ReactElement {
     try {
       // First pass: parse with no content guide to detect it
       const initialDoc = await parseDocx(file, null);
+
+      // Pre-NOFO detection: runs before rules to catch wrong template uploads
+      const preNofoResult = detectPreNofo(initialDoc.html, file.name);
+      setIsPreNofo(preNofoResult.detected);
 
       // Detect content guide
       const detection = detectContentGuide(initialDoc.rawText);
@@ -205,6 +211,7 @@ export default function App(): React.ReactElement {
     setAcceptedFixes([]);
     setParseError(null);
     setReviewBannerDismissed(false);
+    setIsPreNofo(false);
   }, []);
 
   const mainAppContent = (
@@ -247,6 +254,7 @@ export default function App(): React.ReactElement {
             onStartOver={handleStartOver}
             bannerDismissed={reviewBannerDismissed}
             onDismissBanner={setReviewBannerDismissed}
+            isPreNofo={isPreNofo}
           />
         )}
 
