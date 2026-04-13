@@ -4,25 +4,22 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
-## 2026-04-06 — Duplicate "see" suppressed in internal link text suggestions
+## 2026-04-13 — Pre-NOFO document detection added
 
-**Decision:** When suggesting updated link text for internal anchor links, the tool checks whether the word "see" already appears in the ~10 words preceding the link in the paragraph. If it does, the suggestion uses "(Destination)" instead of "(see Destination)".
+**Decision:** Added a document-level validity check (`src/utils/detectPreNofo.ts`) that runs immediately after parsing — before any content rules execute — to detect whether the uploaded document is a pre-NOFO template rather than a content guide. If two or more signals are present, a blocking error alert is displayed at the top of the Review page, the issue list is visually muted and non-interactive, and the "Continue to summary" button is hidden.
 
-**Reason:** Without this check, the tool produced grammatically redundant suggestions like "…see roles and responsibilities (see Cooperative agreement terms)" which would make the document read worse, not better.
+Five signals are checked; any two trigger detection:
+1. A heading (any level) containing "Pre-NOFO approval" (case-insensitive)
+2. A heading (any level) containing "Pre-NOFO checklist" (case-insensitive)
+3. A heading containing "Writing instructions" within the first 5 headings
+4. A heading containing "Relevant deadlines" within the first 3 headings
+5. Filename contains "pre-nofo" or "prenofo" (case-insensitive)
 
-**Outcome:** Suggestions are context-aware and avoid introducing redundant phrasing. Implemented in `LINK-006.ts` via the `hasSeeBeforeLink` helper and a `suppressSee` flag passed to `makeLinkTextSuggestion`.
+**Reason:** Users occasionally upload pre-NOFO drafts instead of content guide documents. The tool produces many false issues in this case — the pre-NOFO structure does not match content guide templates, so heading checks, metadata checks, and structure checks all fire. Surfacing the issue before the user reviews any content saves time and prevents confusion.
 
----
+**Alternative considered:** Blocking at the upload step before parsing. Rejected because the filename signal alone is insufficient (not all pre-NOFO files have "pre-nofo" in the name), and heading detection requires parsing the document first. The review page with a muted list is a better landing point than a blank error on the upload screen: the user can still see what headings were found and confirm the diagnosis.
 
-## 2026-04-06 — Page number estimation removed
-
-**Decision:** Issue locations no longer show an estimated page number. The nearest heading reference (e.g. "§ Near: Approach") is shown instead.
-
-**Reason:** Word documents do not store page numbers in their XML structure — pagination is calculated by Word's rendering engine at display time based on font metrics, line breaks, image sizes, and other layout properties that are not present in the raw docx XML. Any page number the tool estimated from cumulative character offsets in the XML was unreliable and frequently inaccurate. Showing an estimated page number as though it were authoritative eroded user trust when the number did not match what users saw in Word.
-
-**Alternative considered:** Improving the estimation heuristic (e.g. accounting for table rows, heading sizes, image heights) to reduce the frequency of wrong estimates. Rejected because the estimation is fundamentally limited by the absence of rendering information in the XML; a more sophisticated heuristic would still be wrong in many real documents and would add complexity with no reliability guarantee.
-
-**Outcome:** `Issue.page` has been removed from the type and is no longer computed or stored. `LocationContext.page` and its `CHARS_PER_PAGE` constant have been removed from `locationContext.ts`. Issue locations now show only the nearest heading reference, which is accurate (derived directly from the parsed HTML heading order) and actionable (users can search for the heading in Word).
+**Outcome:** When detected, the Review page shows a prominent non-dismissible error alert explaining the problem and listing three steps to resolve it. The issue cards remain visible but are grayed out (`opacity: 0.45`, `inert` attribute set) so the user can see the analysis without being able to interact with it. The "Continue to summary" button is hidden. The detection is intentionally not a standard rule in `src/rules/` — it is a document-level validity check with no associated fix, not a content issue.
 
 ---
 
@@ -42,19 +39,22 @@ The keyword count guidance has been updated from "8–10" to "at least 6" to avo
 
 ---
 
-## 2026-04-13 — Pre-NOFO document detection added
+## 2026-04-06 — Page number estimation removed
 
-**Decision:** Added a document-level validity check (`src/utils/detectPreNofo.ts`) that runs immediately after parsing — before any content rules execute — to detect whether the uploaded document is a pre-NOFO template rather than a content guide. If two or more signals are present, a blocking error alert is displayed at the top of the Review page, the issue list is visually muted and non-interactive, and the "Continue to summary" button is hidden.
+**Decision:** Issue locations no longer show an estimated page number. The nearest heading reference (e.g. "§ Near: Approach") is shown instead.
 
-Five signals are checked; any two trigger detection:
-1. A heading (any level) containing "Pre-NOFO approval" (case-insensitive)
-2. A heading (any level) containing "Pre-NOFO checklist" (case-insensitive)
-3. A heading containing "Writing instructions" within the first 5 headings
-4. A heading containing "Relevant deadlines" within the first 3 headings
-5. Filename contains "pre-nofo" or "prenofo" (case-insensitive)
+**Reason:** Word documents do not store page numbers in their XML structure — pagination is calculated by Word's rendering engine at display time based on font metrics, line breaks, image sizes, and other layout properties that are not present in the raw docx XML. Any page number the tool estimated from cumulative character offsets in the XML was unreliable and frequently inaccurate. Showing an estimated page number as though it were authoritative eroded user trust when the number did not match what users saw in Word.
 
-**Reason:** Users occasionally upload pre-NOFO drafts instead of content guide documents. The tool produces many false issues in this case — the pre-NOFO structure does not match content guide templates, so heading checks, metadata checks, and structure checks all fire. Surfacing the issue before the user reviews any content saves time and prevents confusion.
+**Alternative considered:** Improving the estimation heuristic (e.g. accounting for table rows, heading sizes, image heights) to reduce the frequency of wrong estimates. Rejected because the estimation is fundamentally limited by the absence of rendering information in the XML; a more sophisticated heuristic would still be wrong in many real documents and would add complexity with no reliability guarantee.
 
-**Alternative considered:** Blocking at the upload step before parsing. Rejected because the filename signal alone is insufficient (not all pre-NOFO files have "pre-nofo" in the name), and heading detection requires parsing the document first. The review page with a muted list is a better landing point than a blank error on the upload screen: the user can still see what headings were found and confirm the diagnosis.
+**Outcome:** `Issue.page` has been removed from the type and is no longer computed or stored. `LocationContext.page` and its `CHARS_PER_PAGE` constant have been removed from `locationContext.ts`. Issue locations now show only the nearest heading reference, which is accurate (derived directly from the parsed HTML heading order) and actionable (users can search for the heading in Word).
 
-**Outcome:** When detected, the Review page shows a prominent non-dismissible error alert explaining the problem and listing three steps to resolve it. The issue cards remain visible but are grayed out (`opacity: 0.45`, `pointer-events: none`) so the user can see the analysis without being able to act on it. The "Continue to summary" button is hidden. The detection is intentionally not a standard rule in `src/rules/` — it is a document-level validity check with no associated fix, not a content issue.
+---
+
+## 2026-04-06 — Duplicate "see" suppressed in internal link text suggestions
+
+**Decision:** When suggesting updated link text for internal anchor links, the tool checks whether the word "see" already appears in the ~10 words preceding the link in the paragraph. If it does, the suggestion uses "(Destination)" instead of "(see Destination)".
+
+**Reason:** Without this check, the tool produced grammatically redundant suggestions like "…see roles and responsibilities (see Cooperative agreement terms)" which would make the document read worse, not better.
+
+**Outcome:** Suggestions are context-aware and avoid introducing redundant phrasing. Implemented in `LINK-006.ts` via the `hasSeeBeforeLink` helper and a `suppressSee` flag passed to `makeLinkTextSuggestion`.
