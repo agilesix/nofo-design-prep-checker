@@ -28,8 +28,6 @@
 * unreviewed label key in SummaryReport stat cards ([a752547](https://github.com/agilesix/nofo-design-prep-checker/commit/a7525477f4af8e1b9893f50ac9df676eaa6c7743))
 * ux issues summary ([36d2bda](https://github.com/agilesix/nofo-design-prep-checker/commit/36d2bdac8ed7497694d4655a498ba1134c1375a2))
 
-## Changelog
-
 All notable changes to this project will be documented in this file.
 
 See [Conventional Commits](https://www.conventionalcommits.org/) for commit message guidelines.
