@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.0.2](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.0.1...v1.0.2) (2026-04-13)
+
+
+### Bug Fixes
+
+* add null check for wT in buildDocx ([cd98eb0](https://github.com/agilesix/nofo-design-prep-checker/commit/cd98eb04942944397d9edf0c527c4d0f4ee42a97))
+* dont show issues on results page if pre nofo ([48dc76d](https://github.com/agilesix/nofo-design-prep-checker/commit/48dc76de475b8871653619c7e1d40d7731c9bea4))
+* dont show issues on results page if pre nofo ([20e4d1d](https://github.com/agilesix/nofo-design-prep-checker/commit/20e4d1d9c5603e4b815d5ec2db3bec308a452dc5))
+* fix for headings cap rule ([8303dc7](https://github.com/agilesix/nofo-design-prep-checker/commit/8303dc786f3fdd472fe9cfa9bb374d4edb30da62))
+* fix for headings cap rule ([7c6dd47](https://github.com/agilesix/nofo-design-prep-checker/commit/7c6dd470f5753f09be423e97a93c4598037e0e2e))
+* fix internal link rule to auto apply capitlization ([b0946c8](https://github.com/agilesix/nofo-design-prep-checker/commit/b0946c8f0007a10d10050061ccca182b844d2df4))
+* fix internal link rule to auto apply capitlization ([dcda6a7](https://github.com/agilesix/nofo-design-prep-checker/commit/dcda6a7634d9a2db829bf45ccb66ac3a4b94f1d4))
+* meta keywords still too broad ([a2252af](https://github.com/agilesix/nofo-design-prep-checker/commit/a2252af5ea0e439aea6524ffd79c685cde78aedb))
+* meta keywords still too broad ([cd6a793](https://github.com/agilesix/nofo-design-prep-checker/commit/cd6a793261a428d4cf9c2ab92d947d4a3a102933))
+* no more false positives for cap suggestions ([c244468](https://github.com/agilesix/nofo-design-prep-checker/commit/c2444686252273558d11c806b66e5dc04534ce34))
+* no more false positives for cap suggestions ([b478849](https://github.com/agilesix/nofo-design-prep-checker/commit/b478849706af31f8d576d9e12563038c28f89da9))
+* null check for wT in buildDocx title case patch ([3f6b0b4](https://github.com/agilesix/nofo-design-prep-checker/commit/3f6b0b448c3726ce6041755718fc1c9ecd93490d))
+* resolve merge conflicts in LINK-006 and buildDocx ([c4dc82b](https://github.com/agilesix/nofo-design-prep-checker/commit/c4dc82b025c826e5feb793d4daf915cd97a0845c))
+
 ## [1.0.1](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.0.0...v1.0.1) (2026-04-13)
 
 
