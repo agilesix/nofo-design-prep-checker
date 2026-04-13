@@ -46,6 +46,10 @@ type FuzzyMatchResult =
   | { kind: 'ambiguous' }
   | { kind: 'none' };
 
+function cleanHeadingId(rawId: string): string {
+  return rawId.replace(/^_+|_+$/g, '') || rawId;
+}
+
 const LINK_006: Rule = {
   id: 'LINK-006',
   autoApply: false,
@@ -464,11 +468,10 @@ function matchByNormalizedValue(
     if (!directMatch && !stopWordMatch) continue;
 
     const rawId = h.getAttribute('id');
-    // Treat a blank id attribute the same as a missing one — getAttribute returns ''
-    // (not null) when the attribute is present but empty, which would otherwise
-    // produce an empty suggestion. The truthy check mirrors Source 2's !rawId guard.
+    // Truthy check: getAttribute returns '' (not null) for blank id=""; treat
+    // blank the same as absent and fall back to slugifyHeading.
     const suggestion = rawId
-      ? (rawId.replace(/^_+|_+$/g, '') || rawId)
+      ? cleanHeadingId(rawId)
       : slugifyHeading(text);
     if (!headingMatches.some(m => m.anchor === suggestion)) {
       headingMatches.push({ anchor: suggestion, headingText: text });
@@ -519,12 +522,8 @@ function matchByNumericExtraction(
       const text = (h.textContent ?? '').trim();
       if (!text || !pattern.test(text)) continue;
       const rawId = h.getAttribute('id');
-      // Treat a blank id attribute the same as a missing one — getAttribute
-      // returns '' (not null) when the attribute is present but empty, which
-      // would otherwise produce an empty suggestion. Mirrors Source 2's guard.
-      const suggestion = rawId
-        ? (rawId.replace(/^_+|_+$/g, '') || rawId)
-        : slugifyHeading(text);
+      const normalizedId = rawId?.trim().replace(/^_+|_+$/g, '');
+      const suggestion = normalizedId ? normalizedId : slugifyHeading(text);
       if (!headingMatches.some(m => m.anchor === suggestion)) {
         headingMatches.push({ anchor: suggestion, headingText: text });
       }
