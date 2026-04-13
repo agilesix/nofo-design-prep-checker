@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.1](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.0.0...v1.0.1) (2026-04-13)
+
+
+### Bug Fixes
+
+* further improvements to LINK-006 anchor handling ([8204fea](https://github.com/agilesix/nofo-design-prep-checker/commit/8204fea2719f75d036ce13ec556e383b29421fde))
+* further improvements to LINK-006 anchor handling ([1acb232](https://github.com/agilesix/nofo-design-prep-checker/commit/1acb232d862fa3b4bdf5e88ec8d6a9d66ff40754))
+* resolve merge conflict in LINK-006 ([0beffb2](https://github.com/agilesix/nofo-design-prep-checker/commit/0beffb22b5e6290d498091c012c4d5a64cebb568))
+* trim leading spaces from heading anchors in LINK-006 ([aa59599](https://github.com/agilesix/nofo-design-prep-checker/commit/aa5959924ff0cd72179ac251b48596ee70cf7297))
+
 ## 1.0.0 (2026-04-11)
 
 
