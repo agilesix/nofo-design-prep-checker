@@ -468,7 +468,9 @@ function matchByNormalizedValue(
     if (!directMatch && !stopWordMatch) continue;
 
     const rawId = h.getAttribute('id');
-    const suggestion = rawId !== null
+    // Truthy check: getAttribute returns '' (not null) for blank id=""; treat
+    // blank the same as absent and fall back to slugifyHeading.
+    const suggestion = rawId
       ? cleanHeadingId(rawId)
       : slugifyHeading(text);
     if (!headingMatches.some(m => m.anchor === suggestion)) {
