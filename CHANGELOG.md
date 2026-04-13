@@ -9,7 +9,6 @@
 * further improvements to LINK-006 anchor handling ([1acb232](https://github.com/agilesix/nofo-design-prep-checker/commit/1acb232d862fa3b4bdf5e88ec8d6a9d66ff40754))
 * resolve merge conflict in LINK-006 ([0beffb2](https://github.com/agilesix/nofo-design-prep-checker/commit/0beffb22b5e6290d498091c012c4d5a64cebb568))
 * trim leading spaces from heading anchors in LINK-006 ([aa59599](https://github.com/agilesix/nofo-design-prep-checker/commit/aa5959924ff0cd72179ac251b48596ee70cf7297))
-* trim leading spaces from heading anchors in LINK-006 ([3b1a175](https://github.com/agilesix/nofo-design-prep-checker/commit/3b1a175d7d8a92a570afb5f756d7465baecb53de))
 
 ## 1.0.0 (2026-04-11)
 
