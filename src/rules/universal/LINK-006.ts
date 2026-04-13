@@ -464,7 +464,10 @@ function matchByNormalizedValue(
     if (!directMatch && !stopWordMatch) continue;
 
     const rawId = h.getAttribute('id');
-    const suggestion = rawId !== null
+    // Treat a blank id attribute the same as a missing one — getAttribute returns ''
+    // (not null) when the attribute is present but empty, which would otherwise
+    // produce an empty suggestion. The truthy check mirrors Source 2's !rawId guard.
+    const suggestion = rawId
       ? (rawId.replace(/^_+|_+$/g, '') || rawId)
       : slugifyHeading(text);
     if (!headingMatches.some(m => m.anchor === suggestion)) {
@@ -516,7 +519,10 @@ function matchByNumericExtraction(
       const text = (h.textContent ?? '').trim();
       if (!text || !pattern.test(text)) continue;
       const rawId = h.getAttribute('id');
-      const suggestion = rawId !== null
+      // Treat a blank id attribute the same as a missing one — getAttribute
+      // returns '' (not null) when the attribute is present but empty, which
+      // would otherwise produce an empty suggestion. Mirrors Source 2's guard.
+      const suggestion = rawId
         ? (rawId.replace(/^_+|_+$/g, '') || rawId)
         : slugifyHeading(text);
       if (!headingMatches.some(m => m.anchor === suggestion)) {

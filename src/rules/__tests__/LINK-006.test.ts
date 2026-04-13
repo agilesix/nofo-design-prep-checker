@@ -788,3 +788,72 @@ describe('LINK-006 Tier 1c — leading-space heading normalisation', () => {
     expect(issue.inputRequired?.prefill).toBe('Contacts_and_Support');
   });
 });
+
+// ─── Source 3 / Pass 3 underscore-stripping and blank-id regression ───────────
+
+describe('LINK-006 Source 3 and Pass 3 — heading id underscore stripping and blank id fallback', () => {
+  it('Source 3: strips leading underscore from heading id when resolving via heading-text match', () => {
+    // Heading id "_Contacts_and_Support" (leading underscore from a leading space in
+    // the heading text). The broken anchor "_ContactsAndSupport" doesn't match any
+    // OOXML bookmark or HTML id exactly, so the rule falls through to Source 3 (heading
+    // text match). The suggestion should be "Contacts_and_Support" — not
+    // "_Contacts_and_Support".
+    const doc = makeDoc(
+      '<h2 id="_Contacts_and_Support"> Contacts and Support</h2>' +
+      '<p><a href="#_ContactsAndSupport">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.inputRequired?.prefill).toBe('Contacts_and_Support');
+  });
+
+  it('Source 3: strips trailing underscore from heading id when resolving via heading-text match', () => {
+    // Same scenario but the heading id has a trailing underscore as well.
+    const doc = makeDoc(
+      '<h2 id="_Contacts_and_Support_"> Contacts and Support </h2>' +
+      '<p><a href="#_ContactsAndSupport_">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.inputRequired?.prefill).toBe('Contacts_and_Support');
+  });
+
+  it('Source 3: falls back to slugifyHeading when heading id attribute is blank', () => {
+    // A heading with id="" (empty attribute) — getAttribute returns '' not null.
+    // The rule should treat the blank id as absent and derive the suggestion from
+    // the heading text instead of returning an empty prefill.
+    const doc = makeDoc(
+      '<h2 id="">Contacts and Support</h2>' +
+      '<p><a href="#_ContactsAndSupport">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.inputRequired?.prefill).toBe('Contacts_and_Support');
+  });
+
+  it('Pass 3 (numeric extraction): strips leading underscore from heading id', () => {
+    // The broken anchor "_Attachment8" doesn't normalize-match any heading, so
+    // numeric extraction (Pass 3) fires. The matched heading has id "_Attachment_8"
+    // (leading underscore from a leading space). The suggestion should be
+    // "Attachment_8" — not "_Attachment_8".
+    const doc = makeDoc(
+      '<h2 id="_Attachment_8"> Attachment 8: Budget Narrative</h2>' +
+      '<p><a href="#_Attachment8">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.inputRequired?.prefill).toBe('Attachment_8');
+  });
+
+  it('Pass 3 (numeric extraction): falls back to slugifyHeading when heading id attribute is blank', () => {
+    // A heading matched by numeric extraction with id="" — should derive
+    // the suggestion from the heading text rather than returning an empty prefill.
+    const doc = makeDoc(
+      '<h2 id="">Attachment 8: Budget Narrative</h2>' +
+      '<p><a href="#_Attachment8">link</a></p>'
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.inputRequired?.prefill).toBe('Attachment_8_Budget_Narrative');
+  });
+});
