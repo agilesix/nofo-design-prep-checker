@@ -978,8 +978,8 @@ describe('LINK-006 capitalization-only auto-fix', () => {
       '<p><a href="#_Step_3">link</a></p>'
     );
     const results = LINK_006.check(doc, OPTIONS);
-    const capChange = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.fmt');
-    expect(capChange).toBeUndefined();
+    const fmtChange = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.fmt');
+    expect(fmtChange).toBeUndefined();
     const issue = results.find(r => 'title' in r) as Issue | undefined;
     expect(issue?.title).toBe('Internal link anchor may need updating');
   });
