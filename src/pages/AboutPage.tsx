@@ -470,10 +470,10 @@ export default function AboutPage(): React.ReactElement {
                     pre-NOFO-to-content-guide transition a known pain point.
                   </li>
                   <li>
-                    <strong>Cross-document consistency checking</strong> — An LLM could
+                    <strong>Cross-section consistency checking</strong> — An LLM could
                     detect when a scoring criterion mentioned in the merit review
                     section was not defined earlier in the document, or when a deadline
-                    appears in one section but not another. These cross-document checks
+                    appears in one section but not another. These cross-section checks
                     currently require a human reader to hold the full document in mind
                     simultaneously.
                   </li>
