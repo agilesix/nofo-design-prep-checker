@@ -82,7 +82,7 @@ describe('LINK-006 fuzzy match — OOXML bookmarks', () => {
     const change = results[0] as AutoAppliedChange;
     expect('title' in change).toBe(false);
     expect(change.ruleId).toBe('LINK-006');
-    expect(change.targetField).toBe('link.anchor.cap');
+    expect(change.targetField).toBe('link.anchor.fmt');
     const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
     expect(pairs).toEqual([{ old: '_Eligibility', new: 'Eligibility' }]);
   });
@@ -95,7 +95,7 @@ describe('LINK-006 fuzzy match — OOXML bookmarks', () => {
       xmlWithBookmarks('Maintenance_of_effort')
     );
     const results = LINK_006.check(doc, OPTIONS);
-    const change = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.cap') as AutoAppliedChange | undefined;
+    const change = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.fmt') as AutoAppliedChange | undefined;
     expect(change).toBeDefined();
     const pairs = JSON.parse(change!.value!) as { old: string; new: string }[];
     expect(pairs).toEqual([{ old: '_Maintenance_of_effort', new: 'Maintenance_of_effort' }]);
@@ -147,7 +147,7 @@ describe('LINK-006 fuzzy match — HTML element IDs', () => {
     expect(results).toHaveLength(1);
     const change = results[0] as AutoAppliedChange;
     expect(change.ruleId).toBe('LINK-006');
-    expect(change.targetField).toBe('link.anchor.cap');
+    expect(change.targetField).toBe('link.anchor.fmt');
     const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
     expect(pairs).toEqual([{ old: '_Eligibility', new: 'Eligibility' }]);
   });
@@ -163,7 +163,7 @@ describe('LINK-006 fuzzy match — HTML element IDs', () => {
     const change = results[0] as AutoAppliedChange;
     expect(change.ruleId).toBe('LINK-006');
     expect(change.description).toContain('capitalization');
-    expect(change.targetField).toBe('link.anchor.cap');
+    expect(change.targetField).toBe('link.anchor.fmt');
     const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
     expect(pairs).toEqual([{ old: 'eligibility', new: 'Eligibility' }]);
   });
@@ -183,7 +183,7 @@ describe('LINK-006 fuzzy match — heading text', () => {
     expect(results).toHaveLength(1);
     const change = results[0] as AutoAppliedChange;
     expect(change.ruleId).toBe('LINK-006');
-    expect(change.targetField).toBe('link.anchor.cap');
+    expect(change.targetField).toBe('link.anchor.fmt');
     const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
     expect(pairs).toEqual([{ old: '_Eligibility', new: 'Eligibility' }]);
   });
@@ -197,7 +197,7 @@ describe('LINK-006 fuzzy match — heading text', () => {
       '<p><a href="#_Maintenance_of_effort">See MOE</a></p>'
     );
     const results = LINK_006.check(doc, OPTIONS);
-    const change = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.cap') as AutoAppliedChange | undefined;
+    const change = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.fmt') as AutoAppliedChange | undefined;
     expect(change).toBeDefined();
     const pairs = JSON.parse(change!.value!) as { old: string; new: string }[];
     expect(pairs).toEqual([{ old: '_Maintenance_of_effort', new: 'Maintenance_of_Effort' }]);
@@ -217,7 +217,7 @@ describe('LINK-006 fuzzy match — heading text', () => {
     const results = LINK_006.check(doc, OPTIONS);
     expect(results).toHaveLength(1);
     const change = results[0] as AutoAppliedChange;
-    expect(change.targetField).toBe('link.anchor.cap');
+    expect(change.targetField).toBe('link.anchor.fmt');
     const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
     expect(pairs).toEqual([{ old: '_Award-Info', new: 'award-info' }]);
   });
@@ -274,7 +274,7 @@ describe('LINK-006 fuzzy match — heading text', () => {
     const results = LINK_006.check(doc, OPTIONS);
     const issue = results.find(r => 'inputRequired' in r && (r as Issue).inputRequired?.targetField?.startsWith('link.bookmark.'));
     expect(issue).toBeUndefined(); // no bookmark-fix Issue — it was auto-fixed
-    const change = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.cap');
+    const change = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.fmt');
     expect(change).toBeDefined();
   });
 
@@ -287,7 +287,7 @@ describe('LINK-006 fuzzy match — heading text', () => {
     const results = LINK_006.check(doc, OPTIONS);
     const issue = results.find(r => 'title' in r);
     expect(issue).toBeUndefined(); // no Issue surfaced
-    const change = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.cap');
+    const change = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.fmt');
     expect(change).toBeDefined();
   });
 
@@ -910,7 +910,7 @@ describe('LINK-006 capitalization-only auto-fix', () => {
     const change = results[0] as AutoAppliedChange;
     expect('title' in change).toBe(false);   // not an Issue
     expect(change.ruleId).toBe('LINK-006');
-    expect(change.targetField).toBe('link.anchor.cap');
+    expect(change.targetField).toBe('link.anchor.fmt');
   });
 
   it('description counts the number of links corrected', () => {
@@ -965,7 +965,7 @@ describe('LINK-006 capitalization-only auto-fix', () => {
     expect(results).toHaveLength(1);
     const change = results[0] as AutoAppliedChange;
     expect('title' in change).toBe(false);
-    expect(change.targetField).toBe('link.anchor.cap');
+    expect(change.targetField).toBe('link.anchor.fmt');
     const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
     expect(pairs).toEqual([{ old: '_Eligibility', new: 'Eligibility' }]);
   });
@@ -978,7 +978,7 @@ describe('LINK-006 capitalization-only auto-fix', () => {
       '<p><a href="#_Step_3">link</a></p>'
     );
     const results = LINK_006.check(doc, OPTIONS);
-    const capChange = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.cap');
+    const capChange = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.fmt');
     expect(capChange).toBeUndefined();
     const issue = results.find(r => 'title' in r) as Issue | undefined;
     expect(issue?.title).toBe('Internal link anchor may need updating');
@@ -995,7 +995,7 @@ describe('LINK-006 capitalization-only auto-fix', () => {
       '<p><a href="#_Key_facts">link</a></p>'
     );
     const results = LINK_006.check(doc, OPTIONS);
-    const change = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.cap') as AutoAppliedChange | undefined;
+    const change = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.fmt') as AutoAppliedChange | undefined;
     expect(change).toBeDefined();
     expect('title' in change!).toBe(false);
     const pairs = JSON.parse(change!.value!) as { old: string; new: string }[];
@@ -1010,7 +1010,7 @@ describe('LINK-006 capitalization-only auto-fix', () => {
       '<p><a href="#_key_facts">link</a></p>'
     );
     const results = LINK_006.check(doc, OPTIONS);
-    const change = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.cap') as AutoAppliedChange | undefined;
+    const change = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.fmt') as AutoAppliedChange | undefined;
     expect(change).toBeDefined();
     const pairs = JSON.parse(change!.value!) as { old: string; new: string }[];
     expect(pairs).toEqual([{ old: '_key_facts', new: 'Key_facts' }]);
@@ -1030,7 +1030,7 @@ describe('LINK-006 capitalization-only auto-fix', () => {
     const suggestion = results.find(r => (r as Issue).severity === 'suggestion') as Issue | undefined;
     expect(suggestion).toBeDefined();
     expect(suggestion!.title).toBe('Consider adding destination heading name to link text');
-    const capChange = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.cap') as AutoAppliedChange | undefined;
+    const capChange = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.fmt') as AutoAppliedChange | undefined;
     expect(capChange).toBeDefined();
   });
 });

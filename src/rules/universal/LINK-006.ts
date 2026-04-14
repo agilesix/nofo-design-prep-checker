@@ -52,10 +52,14 @@ function cleanHeadingId(rawId: string): string {
 
 /**
  * Returns true when the anchor and fuzzy target differ only by leading/trailing
- * underscores (deterministic heading/anchor formatting artifacts, including
- * leading-space cleanup from CLEAN-008) and/or capitalization. Both are
- * deterministic formatting differences that can be silently auto-fixed — no
- * Issue surfaced.
+ * underscores and/or capitalization — all deterministic formatting differences
+ * that can be silently auto-fixed without surfacing an Issue.
+ *
+ * Leading underscores on anchors come from heading text with a leading space.
+ * CLEAN-008 removes leading spaces from headings in the output, so the correct
+ * anchor lacks the leading underscore. Trailing underscores come from heading
+ * text with a trailing space; CLEAN-008 does not strip trailing heading spaces,
+ * so trailing-underscore artifacts are handled here defensively.
  *
  * Covered cases (all treated as high-confidence):
  *  - Cap-only:        "eligibility"  → "Eligibility"
@@ -93,17 +97,19 @@ const LINK_006: Rule = {
     // Cache fuzzy results — the same broken anchor may appear in many links
     const fuzzyCache = new Map<string, FuzzyMatchResult>();
     const getContext = buildLocationLookup(htmlDoc);
-    // De-duplicated old→new anchor map for cap-only fixes (keyed by old anchor).
+    // De-duplicated old→new anchor map for high-confidence formatting fixes
+    // (capitalization and/or leading/trailing underscore differences).
     // A separate occurrence counter drives the description; the map avoids writing
     // duplicate {old,new} pairs into the JSON stored in value when the same broken
     // anchor appears in multiple links.
-    const capFixMap = new Map<string, string>();
-    let capFixOccurrences = 0;
+    const fmtFixMap = new Map<string, string>();
+    let fmtFixOccurrences = 0;
 
     // Precompute clean heading slug → element map so Tier 1c can (a) validate
-    // anchors that target headings with leading/trailing spaces (which CLEAN-008
-    // strips in the output) and (b) still surface link-text suggestions when the
-    // link text doesn't reference the heading name.
+    // anchors that target headings with leading spaces (stripped by CLEAN-008)
+    // or trailing spaces (not stripped by CLEAN-008, handled defensively) and
+    // (b) still surface link-text suggestions when the link text doesn't
+    // reference the heading name.
     const cleanHeadingSlugMap = new Map<string, Element>(
       Array.from(htmlDoc.querySelectorAll('h1,h2,h3,h4,h5,h6'))
         .map(h => [slugifyHeading((h.textContent ?? '').trim()), h] as const)
@@ -139,9 +145,10 @@ const LINK_006: Rule = {
       if (ooxmlBookmarkNames && ooxmlBookmarkNames.has(anchor)) return;
 
       // Tier 1c: match via slug of trimmed heading text.
-      // Handles headings with leading/trailing spaces (which CLEAN-008 strips in
-      // the output): a link pointing to the clean slug (e.g. #Contacts_and_Support)
-      // is valid even when the heading element's id is still #_Contacts_and_Support.
+      // Handles headings with leading spaces (CLEAN-008 strips these in the output)
+      // and trailing spaces (not stripped by CLEAN-008, handled defensively): a link
+      // pointing to the clean slug (e.g. #Contacts_and_Support) is valid even when
+      // the heading element's id is still #_Contacts_and_Support.
       // Also surfaces a link-text suggestion when the link text doesn't name the
       // heading destination (consistent with the Tier 1a behaviour).
       const tier1cHeading = cleanHeadingSlugMap.get(anchor);
@@ -166,15 +173,15 @@ const LINK_006: Rule = {
         const headingText = fuzzyResult.headingText;
         const sectionId = findSectionForElement(link, doc);
 
-        // Capitalization-only mismatch: auto-fix silently, no Issue surfaced.
-        // The anchor and the matched target are identical when lowercased, meaning
-        // the only difference is capitalization (e.g. #eligibility → #Eligibility).
-        // Each new unique broken anchor is recorded in capFixMap (old → new) to
+        // High-confidence formatting fix: auto-fix silently, no Issue surfaced.
+        // Covers capitalization-only (#eligibility → #Eligibility), leading/trailing
+        // underscore-only (#_Key_facts → #Key_facts), and both combined.
+        // Each unique broken anchor is recorded in fmtFixMap (old → new) to
         // de-duplicate the JSON patch payload; occurrences are counted separately
         // so repeated broken anchors are reflected in the description count.
         if (isHighConfidenceAutoFix(anchor, fuzzy)) {
-          capFixMap.set(anchor, fuzzy);
-          capFixOccurrences++;
+          fmtFixMap.set(anchor, fuzzy);
+          fmtFixOccurrences++;
           // Still surface a link-text suggestion if the heading name isn't in the link text.
           if (headingText && !linkTextContainsHeading(linkText, headingText)) {
             const suppressSee = hasSeeBeforeLink(link as Element);
@@ -268,16 +275,16 @@ const LINK_006: Rule = {
       } as Issue);
     });
 
-    if (capFixMap.size > 0) {
-      const count = capFixOccurrences;
+    if (fmtFixMap.size > 0) {
+      const count = fmtFixOccurrences;
       results.push({
         ruleId: 'LINK-006',
         description: `${count} internal link anchor${count === 1 ? '' : 's'} corrected for capitalization or leading/trailing underscores`,
-        targetField: 'link.anchor.cap',
+        targetField: 'link.anchor.fmt',
         // De-duplicated map serialized as an array of {old,new} pairs. Each entry
         // represents a distinct broken anchor → correct anchor mapping; one entry
         // may cover many link elements that shared the same broken anchor.
-        value: JSON.stringify(Array.from(capFixMap, ([old, newAnchor]) => ({ old, new: newAnchor }))),
+        value: JSON.stringify(Array.from(fmtFixMap, ([old, newAnchor]) => ({ old, new: newAnchor }))),
       } as AutoAppliedChange);
     }
 
@@ -470,9 +477,11 @@ function matchByNormalizedValue(
 
   // ── Source 2: HTML element IDs (mammoth-mapped bookmarks) ──────────────────
   // For heading elements, strip leading/trailing underscores from the id before
-  // using it as a candidate anchor.  Heading ids with a leading underscore (e.g.
-  // _Contacts_and_Support) come from headings whose text has a leading space —
-  // CLEAN-008 removes those spaces, so the correct anchor lacks the underscore.
+  // using it as a candidate anchor.  Leading underscores (e.g. _Contacts_and_Support)
+  // come from headings whose text has a leading space — CLEAN-008 removes leading
+  // spaces from headings in the output, so the correct anchor lacks the leading
+  // underscore. Trailing underscores (from trailing spaces in headings, which
+  // CLEAN-008 does not remove) are also stripped defensively.
   const allIds = Array.from(htmlDoc.querySelectorAll('[id]'))
     .map(el => {
       const rawId = el.getAttribute('id') ?? '';
@@ -501,10 +510,10 @@ function matchByNormalizedValue(
   //
   // The suggested anchor prefers the heading's own id if mammoth assigned one;
   // otherwise derives from the matched heading text via slugifyHeading().
-  // Leading/trailing underscores are stripped from heading ids — they are Word
-  // artifacts of headings whose text begins/ends with a space (CLEAN-008 removes
-  // those spaces in the output, so the correct anchor lacks the underscore).
-  // This mirrors the stripping already applied to heading ids in Source 2 above.
+  // Leading underscores are stripped from heading ids — they come from headings
+  // whose text begins with a space (CLEAN-008 removes leading heading spaces in
+  // the output). Trailing underscores (from trailing spaces not stripped by
+  // CLEAN-008) are also stripped defensively — mirrors Source 2 above.
   // headingText is carried through so the Review card can display it.
   const cleanAnchor = removeStopWords(normalizedAnchor);
   const headings = Array.from(htmlDoc.querySelectorAll('h1,h2,h3,h4,h5,h6'));
