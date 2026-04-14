@@ -4,15 +4,22 @@ import { buildLocationLookup } from '../../utils/locationContext';
 /**
  * TABLE-002: Tables missing a caption
  *
- * Flags tables that do not have a <caption> element, with two tiers:
- *  1. Exempt tables — suppressed entirely (application contents, standard forms,
- *     application checklist, merit review criteria, reporting tables)
- *  2. All other uncaptioned tables — warning with guidance on the required
- *     "Table: Title" format and a note that some standard tables are exempt
+ * A table is considered captioned when any of the following is true:
+ *  1. It has a non-empty <caption> element
+ *  2. It is directly preceded (no blank line) by a non-empty <p> paragraph —
+ *     any non-empty paragraph text is accepted as a valid caption regardless of
+ *     whether it starts with "Table:" and regardless of bold or other formatting
  *
- * Exemption detection uses the section heading the table appears in and the
- * text of the table's first row. Detection is best-effort; the issue card
- * always notes the exempt categories so users can apply their own judgment.
+ * When a valid caption is found, a secondary check surfaces a low-priority
+ * suggestion if the caption text appears to use title case or all-caps rather
+ * than the sentence case recommended by the SimplerNOFOs style guide.
+ *
+ * Exempt tables (suppressed entirely):
+ *  - Single-cell tables (callout boxes)
+ *  - Key facts / key dates tables
+ *  - Application contents / standard forms
+ *  - Application checklist / merit review criteria / reporting tables
+ *  - Tables preceded by a heading within 50 words of body text
  */
 const TABLE_002: Rule = {
   id: 'TABLE-002',
@@ -25,20 +32,36 @@ const TABLE_002: Rule = {
     const getContext = buildLocationLookup(htmlDoc);
 
     tables.forEach((table, index) => {
-      const caption = table.querySelector('caption');
-      if (caption && caption.textContent?.trim() !== '') return;
-
-      // A paragraph directly above the table whose text starts with "Table:"
-      // (case-insensitive) is a valid caption regardless of bold or other
-      // character-level formatting — the prefix is the reliable signal.
-      const prevEl = table.previousElementSibling;
-      if (prevEl?.matches('p') && /^table:/i.test((prevEl.textContent ?? '').trim())) return;
-
-      const firstRowText = table.querySelector('tr')?.textContent?.trim().slice(0, 60) ?? '';
+      // Compute context upfront — needed for both the suggestion and the warning.
       const section = findSectionForElement(table, doc);
+      const sectionId = section?.id ?? doc.sections[0]?.id ?? 'section-preamble';
+      const { nearestHeading } = getContext(table);
       const sectionHeading = section?.heading ?? '';
+      const firstRowText = table.querySelector('tr')?.textContent?.trim().slice(0, 60) ?? '';
 
-      // Single-cell tables are callout boxes per the SimplerNOFOs style guide — not data tables.
+      // ── Tier 1: <caption> element ──────────────────────────────────────────────
+      const caption = table.querySelector('caption');
+      const captionText = (caption?.textContent ?? '').trim();
+      if (caption && captionText !== '') {
+        if (looksLikeTitleOrAllCaps(captionText)) {
+          issues.push(makeSentenceCaseSuggestion(`TABLE-002-sc-${index}`, captionText, sectionId, nearestHeading));
+        }
+        return;
+      }
+
+      // ── Tier 2: paragraph directly above the table ────────────────────────────
+      // Any non-empty <p> immediately preceding the table (normal or bold text) is
+      // accepted as a valid caption — "Table:" prefix is not required.
+      const prevEl = table.previousElementSibling;
+      const prevText = (prevEl?.textContent ?? '').trim();
+      if (prevEl?.matches('p') && prevText !== '') {
+        if (looksLikeTitleOrAllCaps(prevText)) {
+          issues.push(makeSentenceCaseSuggestion(`TABLE-002-sc-${index}`, prevText, sectionId, nearestHeading));
+        }
+        return;
+      }
+
+      // ── Single-cell tables (callout boxes) — exempt ────────────────────────────
       // Use :scope child combinators so cells inside nested tables are not counted.
       const directCells = table.querySelectorAll(
         ':scope > tr > td, :scope > tr > th,' +
@@ -48,17 +71,16 @@ const TABLE_002: Rule = {
       );
       if (directCells.length === 1) return;
 
-      // Suppress for table types that are exempt per the SimplerNOFOs style guide
+      // ── Other exempt table types ───────────────────────────────────────────────
       if (isExemptFromCaption(table, sectionHeading)) return;
 
+      // ── Nearby heading caption substitute ─────────────────────────────────────
       // A heading preceding the table with ≤ 50 words of body text between them
       // serves as a caption substitute — common NOFO pattern:
       // heading → short intro sentence(s) → table.
       if (hasNearbyHeadingCaption(table)) return;
 
-      const sectionId = section?.id ?? doc.sections[0]?.id ?? 'section-preamble';
-      const { nearestHeading } = getContext(table);
-
+      // ── Missing caption warning ────────────────────────────────────────────────
       issues.push({
         id: `TABLE-002-${index}`,
         ruleId: 'TABLE-002',
@@ -67,9 +89,10 @@ const TABLE_002: Rule = {
         sectionId,
         nearestHeading,
         description:
-          `A table${firstRowText ? ` starting with "${firstRowText}\u2026"` : ''} does not have a caption. ` +
-          `Per the SimplerNOFOs style guide, captions must follow the format \u201cTable: Title of table\u201d ` +
-          `in normal (unstyled) text, placed directly above the table with no blank line. ` +
+          `A table${firstRowText ? ` starting with \u201c${firstRowText}\u2026\u201d` : ''} does not have a caption. ` +
+          `Per the SimplerNOFOs style guide, place a caption paragraph directly above the table ` +
+          `with no blank line between the caption and the table. Any non-empty paragraph in normal ` +
+          `or bold text is accepted as a valid caption. ` +
           `A heading (H1\u2013H6) can serve as a caption substitute when it precedes the table ` +
           `with 50 words or fewer of body text between it and the table \u2014 this table was ` +
           `flagged because no such heading was found, or the intervening text exceeded 50 words. ` +
@@ -78,9 +101,9 @@ const TABLE_002: Rule = {
           `and reporting tables are exempt from this requirement \u2014 use your judgment if this table ` +
           `falls into one of those categories.`,
         suggestedFix:
-          `Either add a caption directly above the table (format: \u201cTable: Title of table\u201d in normal ` +
-          `unstyled text, no blank line between caption and table), or move the relevant heading closer ` +
-          `to the table so that no more than 50 words of body text separate them.`,
+          `Either add a caption paragraph directly above the table (no blank line between caption ` +
+          `and table), or move the relevant heading closer to the table so that no more than 50 ` +
+          `words of body text separate them.`,
         instructionOnly: true,
       });
     });
@@ -88,6 +111,65 @@ const TABLE_002: Rule = {
     return issues;
   },
 };
+
+// ─── Sentence case check ──────────────────────────────────────────────────────
+
+/**
+ * Returns true when the caption text appears to use title case or all-caps rather
+ * than the sentence case recommended by the SimplerNOFOs style guide.
+ *
+ * Heuristic: after stripping an optional "Table:" prefix, first detect captions
+ * that are entirely all-caps (including single-word captions such as "TIMELINE").
+ * Otherwise, if any word after the first word (of length > 1) starts with an
+ * uppercase letter, the text is likely title case.
+ *
+ * Single-letter words (e.g. "A", "I") are excluded from the title-case check
+ * because they appear in both sentence case and title case.
+ *
+ * Note: proper nouns in sentence case will also trigger this check. Since the
+ * result is a suggestion-only instruction-only issue, false positives are
+ * acceptable.
+ */
+function looksLikeTitleOrAllCaps(text: string): boolean {
+  // Strip optional "Table:" prefix (e.g. "Table: Program Timeline" → "Program Timeline")
+  const body = text.replace(/^table\s*:\s*/i, '').trim();
+  if (!body) return false;
+
+  // Explicitly catch all-caps captions, including single-word captions such as "TIMELINE".
+  // Require at least one letter so punctuation/numbers alone do not trigger.
+  if (/[A-Z]/.test(body) && !/[a-z]/.test(body)) return true;
+
+  // Only consider words of length > 1 to skip single-letter words
+  const words = body.split(/\s+/).filter(w => w.length > 1);
+  if (words.length < 2) return false;
+  // Title case: any word after the first starts with an uppercase letter
+  return words.slice(1).some(w => /^[A-Z]/.test(w));
+}
+
+// ─── Issue factories ──────────────────────────────────────────────────────────
+
+function makeSentenceCaseSuggestion(
+  id: string,
+  captionText: string,
+  sectionId: string,
+  nearestHeading: string | null
+): Issue {
+  return {
+    id,
+    ruleId: 'TABLE-002',
+    title: 'Table caption should use sentence case',
+    severity: 'suggestion',
+    sectionId,
+    nearestHeading,
+    description:
+      `The caption \u201c${captionText}\u201d appears to use title case or all-caps. ` +
+      `Per the SimplerNOFOs style guide, caption text should use sentence case \u2014 ` +
+      `capitalize only the first word and proper nouns.`,
+    instructionOnly: true,
+  } as Issue;
+}
+
+// ─── Exemption detection ──────────────────────────────────────────────────────
 
 /**
  * Returns true if the table appears to be one of the types that are exempt
