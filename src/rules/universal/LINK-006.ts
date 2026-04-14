@@ -52,9 +52,10 @@ function cleanHeadingId(rawId: string): string {
 
 /**
  * Returns true when the anchor and fuzzy target differ only by leading/trailing
- * underscores (artifacts of heading text that has leading/trailing spaces, which
- * CLEAN-008 removes in the output) and/or capitalization. Both are deterministic
- * formatting differences that can be silently auto-fixed — no Issue surfaced.
+ * underscores (deterministic heading/anchor formatting artifacts, including
+ * leading-space cleanup from CLEAN-008) and/or capitalization. Both are
+ * deterministic formatting differences that can be silently auto-fixed — no
+ * Issue surfaced.
  *
  * Covered cases (all treated as high-confidence):
  *  - Cap-only:        "eligibility"  → "Eligibility"
