@@ -118,12 +118,13 @@ const TABLE_002: Rule = {
  * Returns true when the caption text appears to use title case or all-caps rather
  * than the sentence case recommended by the SimplerNOFOs style guide.
  *
- * Heuristic: after stripping an optional "Table:" prefix, if any word after the
- * first word (of length > 1) starts with an uppercase letter, the text is likely
- * title case or all-caps.
+ * Heuristic: after stripping an optional "Table:" prefix, first detect captions
+ * that are entirely all-caps (including single-word captions such as "TIMELINE").
+ * Otherwise, if any word after the first word (of length > 1) starts with an
+ * uppercase letter, the text is likely title case.
  *
- * Single-letter words (e.g. "A", "I") are excluded from the check because they
- * appear in both sentence case and title case.
+ * Single-letter words (e.g. "A", "I") are excluded from the title-case check
+ * because they appear in both sentence case and title case.
  *
  * Note: proper nouns in sentence case will also trigger this check. Since the
  * result is a suggestion-only instruction-only issue, false positives are
@@ -133,10 +134,15 @@ function looksLikeTitleOrAllCaps(text: string): boolean {
   // Strip optional "Table:" prefix (e.g. "Table: Program Timeline" → "Program Timeline")
   const body = text.replace(/^table\s*:\s*/i, '').trim();
   if (!body) return false;
+
+  // Explicitly catch all-caps captions, including single-word captions such as "TIMELINE".
+  // Require at least one letter so punctuation/numbers alone do not trigger.
+  if (/[A-Z]/.test(body) && !/[a-z]/.test(body)) return true;
+
   // Only consider words of length > 1 to skip single-letter words
   const words = body.split(/\s+/).filter(w => w.length > 1);
   if (words.length < 2) return false;
-  // Title case / all-caps: any word after the first starts with an uppercase letter
+  // Title case: any word after the first starts with an uppercase letter
   return words.slice(1).some(w => /^[A-Z]/.test(w));
 }
 
