@@ -978,8 +978,8 @@ describe('LINK-006 anchor formatting auto-fix', () => {
       '<p><a href="#_Step_3">link</a></p>'
     );
     const results = LINK_006.check(doc, OPTIONS);
-    const capChange = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.fmt');
-    expect(capChange).toBeUndefined();
+    const fmtChange = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.fmt');
+    expect(fmtChange).toBeUndefined();
     const issue = results.find(r => 'title' in r) as Issue | undefined;
     expect(issue?.title).toBe('Internal link anchor may need updating');
   });
@@ -1030,7 +1030,7 @@ describe('LINK-006 anchor formatting auto-fix', () => {
     const suggestion = results.find(r => (r as Issue).severity === 'suggestion') as Issue | undefined;
     expect(suggestion).toBeDefined();
     expect(suggestion!.title).toBe('Consider adding destination heading name to link text');
-    const capChange = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.fmt') as AutoAppliedChange | undefined;
-    expect(capChange).toBeDefined();
+    const fmtChange = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.fmt') as AutoAppliedChange | undefined;
+    expect(fmtChange).toBeDefined();
   });
 });
