@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.3](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.0.2...v1.0.3) (2026-04-14)
+
+
+### Bug Fixes
+
+* adding exceptions for headings rules ([49b8085](https://github.com/agilesix/nofo-design-prep-checker/commit/49b80853e0c69e9bbcae8c80eccc459b22d8a3a0), [436fccc](https://github.com/agilesix/nofo-design-prep-checker/commit/436fcccda709b8381a24058ce525a2936d5bba2b))
+* adding known proper nouns for headings check ([09c50f9](https://github.com/agilesix/nofo-design-prep-checker/commit/09c50f90e0441733017a58008c0c0ece1714bead), [7c70522](https://github.com/agilesix/nofo-design-prep-checker/commit/7c7052204f65270a898a31dd0230f1e8f97fdf01))
+* get rid of dupe alerts for internal link cap auto apply ([b376f36](https://github.com/agilesix/nofo-design-prep-checker/commit/b376f3617f47b7bfd6a7e9a7c5eaba66c1c3ac93), [3d7868e](https://github.com/agilesix/nofo-design-prep-checker/commit/3d7868e27a8bfbf247c8aa8a424793845aeac37a))
+* minor rule revisions ([cd65c59](https://github.com/agilesix/nofo-design-prep-checker/commit/cd65c599c56b6b71a3c5ad0eba3b8f3c53bad16f), [2cfd9f8](https://github.com/agilesix/nofo-design-prep-checker/commit/2cfd9f896fc2988494bab044dcae485595d0cafb))
+* relax the table title rule ([df8c68d](https://github.com/agilesix/nofo-design-prep-checker/commit/df8c68dc7d3936172b94fcaa8419adb0af958413), [1e626f8](https://github.com/agilesix/nofo-design-prep-checker/commit/1e626f8dd47e03feeb4b3e968b8873e36f472be6))
+* removing dupe routing of alerts ([74c0ff9](https://github.com/agilesix/nofo-design-prep-checker/commit/74c0ff930cc351804d7a1cbe5e92899c142b7504), [f1694c9](https://github.com/agilesix/nofo-design-prep-checker/commit/f1694c9659a072d0f2ad7c09eee44c98def64be5))
+* resolve merge conflict in rules.md ([d5d0f2c](https://github.com/agilesix/nofo-design-prep-checker/commit/d5d0f2cbe00b018d0337e1efb62eb2b2dcdd83dc))
+* strip the leading heading space again ([849053c](https://github.com/agilesix/nofo-design-prep-checker/commit/849053c5e60f1518356f037dad6216ed59ece254), [aa91718](https://github.com/agilesix/nofo-design-prep-checker/commit/aa91718b69049fd48589d37c3359c6d5a68e6375))
+
 ## [1.0.2](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.0.1...v1.0.2) (2026-04-13)
 
 
