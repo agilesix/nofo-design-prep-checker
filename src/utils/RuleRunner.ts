@@ -5,6 +5,17 @@ export interface RuleRunnerResult {
   autoAppliedChanges: AutoAppliedChange[];
 }
 
+/**
+ * Type guard that distinguishes an AutoAppliedChange from an Issue.
+ *
+ * Both types carry `ruleId`, so that field is not a useful discriminator.
+ * The reliable signal is that AutoAppliedChange deliberately has no `severity`
+ * field, while every Issue requires one.
+ */
+function isAutoAppliedChange(item: Issue | AutoAppliedChange): item is AutoAppliedChange {
+  return !('severity' in item);
+}
+
 export class RuleRunner {
   private rules: Rule[];
 
@@ -20,32 +31,14 @@ export class RuleRunner {
     const autoRules = this.rules.filter(r => r.autoApply === true && this.shouldRunRule(r, options));
     const regularRules = this.rules.filter(r => r.autoApply !== true && this.shouldRunRule(r, options));
 
-    for (const rule of autoRules) {
+    for (const rule of [...autoRules, ...regularRules]) {
       try {
         const result = rule.check(doc, options);
         for (const item of result) {
-          if ('ruleId' in item && !('severity' in item)) {
-            autoAppliedChanges.push(item as AutoAppliedChange);
+          if (isAutoAppliedChange(item)) {
+            autoAppliedChanges.push(item);
           } else {
-            issues.push(item as Issue);
-          }
-        }
-      } catch (err) {
-        console.error(`Rule ${rule.id} failed:`, err);
-      }
-    }
-
-    for (const rule of regularRules) {
-      try {
-        const result = rule.check(doc, options);
-        for (const item of result) {
-          // Use the same discriminator as auto-apply rules: absence of severity
-          // means the item is an AutoAppliedChange (e.g. LINK-006 anchor fmt fixes),
-          // not an Issue.
-          if ('ruleId' in item && !('severity' in item)) {
-            autoAppliedChanges.push(item as AutoAppliedChange);
-          } else {
-            issues.push(item as Issue);
+            issues.push(item);
           }
         }
       } catch (err) {
