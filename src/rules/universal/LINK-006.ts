@@ -63,7 +63,7 @@ function cleanHeadingId(rawId: string): string {
  *  - Both combined:   "_key_facts"   → "Key_facts"
  */
 function isHighConfidenceAutoFix(anchor: string, fuzzy: string): boolean {
-  return anchor.replace(/^_+|_+$/g, '').toLowerCase() === fuzzy.toLowerCase();
+  return cleanHeadingId(anchor).toLowerCase() === cleanHeadingId(fuzzy).toLowerCase();
 }
 
 const LINK_006: Rule = {
