@@ -447,10 +447,43 @@ export default function AboutPage(): React.ReactElement {
                     requirements in EO 14332.
                   </li>
                   <li>
-                    <strong>Consistency checking</strong> — A model could detect when
-                    a scoring criterion mentioned in the Merit Review section is not
-                    defined earlier in the document, or when a date appears in one
-                    section but not another.
+                    <strong>Metadata keyword and subject generation</strong> — An LLM
+                    could read the program description, opportunity name, and agency
+                    information to generate genuinely contextual metadata keywords and
+                    a subject line, rather than the current algorithmic extraction
+                    approach. This is one of the more near-term viable additions since
+                    these fields are suggestions the user reviews before accepting.
+                  </li>
+                  <li>
+                    <strong>Link text suggestions</strong> — When the tool identifies a
+                    link with non-descriptive text, an LLM could read the surrounding
+                    sentence and the link destination to suggest replacement text that
+                    fits naturally into the existing prose, rather than relying on a
+                    formula.
+                  </li>
+                  <li>
+                    <strong>Pre-NOFO to content guide mapping</strong> — Given the
+                    pre-NOFO detection now built into the tool, an LLM could go
+                    further: read a pre-NOFO document, identify each program section,
+                    and suggest where that content maps in the corresponding content
+                    guide — reducing the manual copy-paste burden that makes the
+                    pre-NOFO-to-content-guide transition a known pain point.
+                  </li>
+                  <li>
+                    <strong>Cross-document consistency checking</strong> — An LLM could
+                    detect when a scoring criterion mentioned in the merit review
+                    section was not defined earlier in the document, or when a deadline
+                    appears in one section but not another. These cross-document checks
+                    currently require a human reader to hold the full document in mind
+                    simultaneously.
+                  </li>
+                  <li>
+                    <strong>Full document quality assurance</strong> — A more ambitious
+                    use case: an LLM agent that reads the entire NOFO and produces a
+                    structured QA report covering plain language compliance, internal
+                    consistency, completeness against the content guide, and
+                    accessibility of the narrative. This would require multi-step
+                    reasoning across the full document and is further out.
                   </li>
                   <li>
                     <strong>Draft content suggestions</strong> — For sections where
@@ -458,7 +491,28 @@ export default function AboutPage(): React.ReactElement {
                     draft text based on the document context, which a writer could
                     then review and accept or edit.
                   </li>
+                  <li>
+                    <strong>Agentic design prep</strong> — The most speculative use
+                    case: rather than surfacing issues one by one for the user to
+                    review, an AI agent could propose a complete set of document
+                    changes, explain its reasoning for each, and ask the user to
+                    approve or reject the batch. This is a fundamentally different
+                    interaction model from the current tool and would require a full
+                    agent loop — perceive, plan, act, verify, iterate.
+                  </li>
                 </ul>
+                <p>
+                  These use cases differ in how they would be implemented. Some —
+                  like keyword generation and link text suggestions — are
+                  straightforward LLM API calls: send content, receive a response,
+                  present it to the user for review. Others — like consistency
+                  checking and pre-NOFO mapping — require the model to reason across
+                  multiple document sections, making them more complex but still
+                  structured. The most ambitious cases, like agentic design prep,
+                  would require a true agent loop where the model plans, takes
+                  actions, observes results, and iterates — a meaningfully different
+                  architecture from a single API call.
+                </p>
                 <p>
                   None of these features are in this tool today. If HHS or a future
                   vendor builds them, the data sensitivity and governance questions
