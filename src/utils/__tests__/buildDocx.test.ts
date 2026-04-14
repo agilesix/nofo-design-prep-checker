@@ -1638,10 +1638,10 @@ describe('buildDocx — LINK-006 cap-anchor auto-fix', () => {
   // XMLSerializer stripping the w: namespace prefix — the same rationale as
   // the link-text hyperlink-preservation tests above.
 
-  function makeCapAnchorChange(pairs: { old: string; new: string }[]): AutoAppliedChange {
+  function makeAnchorFmtChange(pairs: { old: string; new: string }[]): AutoAppliedChange {
     return {
       ruleId: 'LINK-006',
-      description: `${pairs.length} internal link anchor${pairs.length === 1 ? '' : 's'} corrected for capitalization`,
+      description: `${pairs.length} internal link anchor${pairs.length === 1 ? '' : 's'} corrected for capitalization or leading/trailing underscores`,
       targetField: 'link.anchor.fmt',
       value: JSON.stringify(pairs),
     };
@@ -1651,7 +1651,7 @@ describe('buildDocx — LINK-006 cap-anchor auto-fix', () => {
     const zip = new JSZip();
     zip.file('word/document.xml', makeHyperlinkDocXml({ anchor: 'eligibility', linkText: 'link' }));
 
-    const outXml = await getOutputDocXml(zip, [], [makeCapAnchorChange([{ old: 'eligibility', new: 'Eligibility' }])]);
+    const outXml = await getOutputDocXml(zip, [], [makeAnchorFmtChange([{ old: 'eligibility', new: 'Eligibility' }])]);
 
     // The serialized XML must contain the namespace-prefixed attribute with the new value.
     expect(outXml).toMatch(/w:anchor="Eligibility"/);
@@ -1666,7 +1666,7 @@ describe('buildDocx — LINK-006 cap-anchor auto-fix', () => {
     const zip = new JSZip();
     zip.file('word/document.xml', makeHyperlinkDocXml({ anchor: 'overview', linkText: 'link' }));
 
-    const outXml = await getOutputDocXml(zip, [], [makeCapAnchorChange([{ old: 'overview', new: 'Overview' }])]);
+    const outXml = await getOutputDocXml(zip, [], [makeAnchorFmtChange([{ old: 'overview', new: 'Overview' }])]);
 
     expect(outXml).toMatch(/w:anchor="Overview"/);
   });
@@ -1683,7 +1683,7 @@ describe('buildDocx — LINK-006 cap-anchor auto-fix', () => {
     const zip = new JSZip();
     zip.file('word/document.xml', twoLinkXml);
 
-    const outXml = await getOutputDocXml(zip, [], [makeCapAnchorChange([{ old: 'eligibility', new: 'Eligibility' }])]);
+    const outXml = await getOutputDocXml(zip, [], [makeAnchorFmtChange([{ old: 'eligibility', new: 'Eligibility' }])]);
 
     const parser = new DOMParser();
     const doc = parser.parseFromString(outXml, 'application/xml');
@@ -1706,7 +1706,7 @@ describe('buildDocx — LINK-006 cap-anchor auto-fix', () => {
     const zip = new JSZip();
     zip.file('word/document.xml', mixedXml);
 
-    const outXml = await getOutputDocXml(zip, [], [makeCapAnchorChange([{ old: 'eligibility', new: 'Eligibility' }])]);
+    const outXml = await getOutputDocXml(zip, [], [makeAnchorFmtChange([{ old: 'eligibility', new: 'Eligibility' }])]);
 
     const parser = new DOMParser();
     const doc = parser.parseFromString(outXml, 'application/xml');
