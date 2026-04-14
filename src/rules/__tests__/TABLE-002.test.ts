@@ -63,14 +63,28 @@ describe('TABLE-002 basic detection', () => {
 
   it('does not flag a table preceded by a bold "Table:" paragraph', () => {
     // Bold formatting is applied at the character level inside the <p> via <strong>.
-    // The "Table:" prefix is the reliable caption signal — formatting must not matter.
     const doc = makeDoc('<p><strong>Table: Project timeline</strong></p>' + SIMPLE_TABLE);
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
 
-  it('flags a table when the preceding paragraph starts with text other than "Table:"', () => {
+  it('does not flag a table preceded by a bold caption that does not start with "Table:"', () => {
+    // Any non-empty paragraph (normal or bold) is a valid caption — "Table:" prefix
+    // is not required. Uses sentence case so no sentence-case suggestion is emitted.
+    const doc = makeDoc('<p><strong>Program timeline overview</strong></p>' + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a table preceded by a plain text caption that does not start with "Table:"', () => {
+    // A plain non-empty paragraph immediately above the table is accepted as a caption.
+    const doc = makeDoc('<p>Program timeline overview</p>' + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a table preceded by any non-empty paragraph (any text is a valid caption)', () => {
+    // Per the relaxed style guide: any non-empty paragraph directly above the table
+    // is accepted as a valid caption regardless of content.
     const doc = makeDoc('<p>See the data below.</p>' + SIMPLE_TABLE);
-    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(1);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
 
   it('flags a table whose caption element is present but empty', () => {
@@ -115,10 +129,29 @@ describe('TABLE-002 nearby heading caption substitute', () => {
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
 
-  it('flags when the heading + intro exceeds 50 words between heading and table', () => {
-    // 51-word paragraph — heading is too far removed to serve as a caption.
+  it('does not flag when a long paragraph serves as the caption (paragraph directly above table)', () => {
+    // A 51-word paragraph directly above the table is accepted as a valid caption —
+    // the new rule accepts any non-empty paragraph as a caption. The heading
+    // too-far-away logic only applies when there is no paragraph caption.
     const longParagraph = '<p>' + Array(51).fill('word').join(' ') + '</p>';
     const doc = makeDoc('<h2>Key dates</h2>' + longParagraph + SIMPLE_TABLE);
+    // The long paragraph IS the caption → no missing-caption warning.
+    // (It may emit a sentence-case suggestion since "word" repeated is lowercase — no suggestion here.)
+    const results = TABLE_002.check(doc, OPTIONS);
+    const warning = results.find(r => (r as Issue).severity === 'warning');
+    expect(warning).toBeUndefined();
+  });
+
+  it('flags when the heading is more than 50 words away and no paragraph caption is present', () => {
+    // 51-word paragraph + non-paragraph element before the table so the table has
+    // no paragraph caption. The heading is > 50 words away → flagged.
+    const longParagraph = '<p>' + Array(51).fill('word').join(' ') + '</p>';
+    const doc = makeDoc(
+      '<h2>Key dates</h2>' +
+      longParagraph +
+      '<ol><li>Important note.</li></ol>' +
+      SIMPLE_TABLE
+    );
     const results = TABLE_002.check(doc, OPTIONS);
     expect(results).toHaveLength(1);
     expect((results[0] as Issue).title).toBe('Table is missing a caption');
@@ -224,5 +257,71 @@ describe('TABLE-002 existing exemptions', () => {
       '</tbody></table>'
     );
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+});
+
+// ─── Sentence case suggestion ─────────────────────────────────────────────────
+
+describe('TABLE-002 sentence case suggestion', () => {
+  it('surfaces a sentence-case suggestion when the <caption> element text is all-caps', () => {
+    // Caption is detected — no missing-caption warning. But the text is all-caps,
+    // so a separate low-priority suggestion is emitted.
+    const doc = makeDoc(
+      '<table>' +
+        '<caption>PROGRAM TIMELINE</caption>' +
+        '<tbody><tr><td>A</td><td>B</td></tr></tbody>' +
+      '</table>'
+    );
+    const results = TABLE_002.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const suggestion = results[0] as Issue;
+    expect(suggestion.severity).toBe('suggestion');
+    expect(suggestion.title).toBe('Table caption should use sentence case');
+    expect(suggestion.instructionOnly).toBe(true);
+    // No missing-caption warning alongside the suggestion
+    expect(results.find(r => (r as Issue).severity === 'warning')).toBeUndefined();
+  });
+
+  it('surfaces a sentence-case suggestion when the paragraph caption is all-caps', () => {
+    // Paragraph caption is detected (no missing-caption warning), but text is all-caps.
+    const doc = makeDoc('<p>PROGRAM TIMELINE</p>' + SIMPLE_TABLE);
+    const results = TABLE_002.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const suggestion = results[0] as Issue;
+    expect(suggestion.severity).toBe('suggestion');
+    expect(suggestion.title).toBe('Table caption should use sentence case');
+    expect(suggestion.instructionOnly).toBe(true);
+    expect(results.find(r => (r as Issue).severity === 'warning')).toBeUndefined();
+  });
+
+  it('surfaces a sentence-case suggestion when the paragraph caption is title case', () => {
+    // "Program Timeline Overview" — "Timeline" and "Overview" start with uppercase
+    // after the first word → title case detected.
+    const doc = makeDoc('<p>Program Timeline Overview</p>' + SIMPLE_TABLE);
+    const results = TABLE_002.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as Issue).severity).toBe('suggestion');
+    expect((results[0] as Issue).title).toBe('Table caption should use sentence case');
+  });
+
+  it('does not surface a sentence-case suggestion for a sentence-case caption', () => {
+    // "Program timeline overview" — only the first word is capitalized → sentence case.
+    const doc = makeDoc('<p>Program timeline overview</p>' + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not surface a sentence-case suggestion for a "Table:" prefixed sentence-case caption', () => {
+    // "Table:" is the optional prefix; the body "Project timeline" is sentence case.
+    const doc = makeDoc('<p>Table: Project timeline</p>' + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not surface a suggestion when no caption is present (only the missing-caption warning is emitted)', () => {
+    // No caption of any kind → only the warning, no sentence-case suggestion.
+    const doc = makeDoc(SIMPLE_TABLE);
+    const results = TABLE_002.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as Issue).severity).toBe('warning');
+    expect((results[0] as Issue).title).toBe('Table is missing a caption');
   });
 });
