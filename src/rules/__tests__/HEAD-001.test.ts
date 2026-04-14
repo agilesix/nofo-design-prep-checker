@@ -288,6 +288,103 @@ describe('HEAD-001: federal law and directive exceptions', () => {
   });
 });
 
+// ─── Form identifier exemption ───────────────────────────────────────────────
+
+describe('HEAD-001: form identifier headings are exempt from the general cap check', () => {
+  it('does not flag an H3 with an SF-form identifier for title case', () => {
+    // "SF-424 Application Overview" would normally be flagged as title case,
+    // but the SF-424 form identifier makes this heading exempt.
+    const doc = makeDoc('<h3>SF-424 Application Overview</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not auto-fix an H2 with a form identifier', () => {
+    // "PHS 398 application instructions" would normally be auto-fixed to title case,
+    // but the PHS 398 form identifier makes this heading exempt.
+    const doc = makeDoc('<h2>PHS 398 application instructions</h2>');
+    const changes = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as AutoAppliedChange).targetField === 'heading.h2.titlecase'
+    );
+    expect(changes).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing R&R for title case', () => {
+    const doc = makeDoc('<h3>R&R Budget Detail</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('still flags "Form" capitalized in a form-identifier heading', () => {
+    // The form identifier exempts from the general cap check, but the "Form"
+    // check still applies: "Form" is capitalized in a non-first position.
+    const doc = makeDoc('<h3>SF-424 Application Form</h3>');
+    const results = HEAD_001.check(doc, OPTIONS);
+    const formIssue = results.find(
+      r => (r as Issue).title === '\u201cForm\u201d may need to be lowercase in heading'
+    ) as Issue | undefined;
+    expect(formIssue).toBeDefined();
+    // No general sentence-case suggestion — form identifier heading is exempt
+    const titleCaseIssue = results.find(r => (r as Issue).title?.includes('sentence case'));
+    expect(titleCaseIssue).toBeUndefined();
+  });
+});
+
+// ─── Capitalized "Form" suggestion ───────────────────────────────────────────
+
+describe('HEAD-001: capitalized "Form" suggestion', () => {
+  it('flags "Form" capitalized mid-heading as a suggestion', () => {
+    const doc = makeDoc('<h4>SF-424 Application Form instructions</h4>');
+    const results = HEAD_001.check(doc, OPTIONS);
+    const issue = results.find(
+      r => (r as Issue).title === '\u201cForm\u201d may need to be lowercase in heading'
+    ) as Issue | undefined;
+    expect(issue).toBeDefined();
+    expect(issue!.severity).toBe('suggestion');
+    expect(issue!.instructionOnly).toBe(true);
+    expect(issue!.description).toContain('form\u201d should be lowercase');
+  });
+
+  it('does not flag lowercase "form" in a heading', () => {
+    const doc = makeDoc('<h3>SF-424 application form</h3>');
+    const issue = HEAD_001.check(doc, OPTIONS).find(
+      r => (r as Issue).title === '\u201cForm\u201d may need to be lowercase in heading'
+    );
+    expect(issue).toBeUndefined();
+  });
+
+  it('does not flag "Form" when it is the first word of the heading', () => {
+    const doc = makeDoc('<h3>Form completion instructions</h3>');
+    const issue = HEAD_001.check(doc, OPTIONS).find(
+      r => (r as Issue).title === '\u201cForm\u201d may need to be lowercase in heading'
+    );
+    expect(issue).toBeUndefined();
+  });
+
+  it('flags "Form" mid-heading even in a non-form-identifier heading', () => {
+    // A heading without a form identifier that still capitalizes "Form"
+    const doc = makeDoc('<h3>Application Form instructions</h3>');
+    const issue = HEAD_001.check(doc, OPTIONS).find(
+      r => (r as Issue).title === '\u201cForm\u201d may need to be lowercase in heading'
+    ) as Issue | undefined;
+    expect(issue).toBeDefined();
+    expect(issue!.severity).toBe('suggestion');
+  });
+
+  it('flags "Form" mid-heading in an H1', () => {
+    // The "Form" check applies to H1–H6
+    const doc = makeDoc('<h1>SF-424 Application Form</h1>');
+    const issue = HEAD_001.check(doc, OPTIONS).find(
+      r => (r as Issue).title === '\u201cForm\u201d may need to be lowercase in heading'
+    ) as Issue | undefined;
+    expect(issue).toBeDefined();
+  });
+});
+
 // ─── Only Word-styled headings are checked ────────────────────────────────────
 
 describe('HEAD-001: only Word paragraph styles Heading 1–6 are checked', () => {

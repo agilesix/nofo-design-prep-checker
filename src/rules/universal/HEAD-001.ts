@@ -16,11 +16,20 @@ import type { Rule, Issue, AutoAppliedChange, ParsedDocument, RuleRunnerOptions 
  *
  * Exceptions (not flagged and not auto-fixed):
  *   • Headings that reference federal laws, acts, or directives (see isFederalLawException).
+ *   • Headings containing form identifiers (SF-424, PHS 398, R&R, etc.) are exempt from
+ *     the general capitalization check — their capitalization is intentional. The "Form"
+ *     capitalization check (see below) still applies to these headings.
  *   • First word of the heading (always capitalised in both styles).
  *   • First word after a colon within the heading (sentence restart).
  *   • Minor words: articles (a/an/the), short prepositions, conjunctions.
  *   • ALL-CAPS words and words without lowercase letters: acronyms (CDC, HRSA),
  *     form names (SF-424), and other all-cap tokens are skipped entirely.
+ *
+ * Additional check — capitalized "Form" (H1–H6):
+ *   If the word "Form" (capital F) appears in any non-first-word position, a
+ *   suggestion-level instruction-only issue is emitted. Per the SimplerNOFOs style
+ *   guide, "form" should be lowercase when it follows a form name — for example,
+ *   "SF-424 application form" not "SF-424 Application Form".
  *
  * H2 auto-fix title case rules (applied when sentence case is detected):
  *   • Capitalize the first word always.
@@ -199,6 +208,37 @@ function isFederalLawException(text: string): boolean {
   return false;
 }
 
+/**
+ * Returns true when the heading contains a recognizable form identifier such
+ * as SF-424, SF-424A, SF-LLL, PHS 398, or R&R. Headings with form identifiers
+ * use intentional capitalization and are exempt from the general heading
+ * capitalization check (H2 auto-fix and H3–H6 sentence-case suggestion).
+ *
+ * Pattern: 2–4 uppercase letters followed by a hyphen or space and one or
+ * more uppercase letters or digits (e.g. SF-424, SF-424A, SF-LLL, PHS 398).
+ * R&R is matched explicitly due to its single-letter, ampersand-separated format.
+ */
+function isFormIdentifierHeading(text: string): boolean {
+  if (/\b[A-Z]{2,4}[-\s][A-Z0-9]+\b/.test(text)) return true;
+  if (/\bR&R\b/.test(text)) return true;
+  return false;
+}
+
+/**
+ * Returns true when the word "Form" (capital F) appears in any position
+ * other than as the first word of the heading.
+ *
+ * Per the SimplerNOFOs style guide, "form" should be lowercase when it
+ * follows a form name (e.g. "SF-424 application form", not
+ * "SF-424 Application Form").
+ */
+function hasCapitalizedFormMidHeading(text: string): boolean {
+  const trimmed = text.trim();
+  const spaceIdx = trimmed.search(/\s/);
+  if (spaceIdx === -1) return false; // single-word heading
+  return /\bForm\b/.test(trimmed.slice(spaceIdx + 1));
+}
+
 function findSectionForElement(el: Element, doc: ParsedDocument): string {
   const text = el.textContent ?? '';
   for (const section of doc.sections) {
@@ -214,7 +254,7 @@ const HEAD_001: Rule = {
     const results: (Issue | AutoAppliedChange)[] = [];
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
-    const headings = Array.from(htmlDoc.querySelectorAll('h2, h3, h4, h5, h6'));
+    const headings = Array.from(htmlDoc.querySelectorAll('h1, h2, h3, h4, h5, h6'));
 
     // Collect H2 sentence-case corrections; a single AutoAppliedChange is
     // emitted after the loop so the count in the description is accurate.
@@ -235,6 +275,31 @@ const HEAD_001: Rule = {
 
       const sectionId = findSectionForElement(heading, doc);
 
+      // ── Capitalized "Form" check (H1–H6) ─────────────────────────────────────
+      // Flag when "Form" (capital F) appears in any non-first-word position.
+      // Applies even to form-identifier headings (which are otherwise exempt).
+      if (hasCapitalizedFormMidHeading(text)) {
+        results.push({
+          id: `HEAD-001-form-${idx}`,
+          ruleId: 'HEAD-001',
+          title: '\u201cForm\u201d may need to be lowercase in heading',
+          severity: 'suggestion',
+          sectionId,
+          nearestHeading: text,
+          description:
+            `The word \u201cForm\u201d appears capitalized in this heading. ` +
+            `Per the SimplerNOFOs style guide, \u201cform\u201d should be lowercase when it follows a form name \u2014 ` +
+            `for example, \u201cSF-424 application form\u201d not \u201cSF-424 Application Form\u201d. ` +
+            `Correct in your Word document if needed.`,
+          instructionOnly: true,
+        } as Issue);
+      }
+
+      // ── General capitalization check ──────────────────────────────────────────
+      // H1 is not checked. Form identifier headings (SF-424, PHS 398, R&R, etc.)
+      // are exempt — their capitalization is intentional.
+      if (level === 1 || isFormIdentifierHeading(text)) return;
+
       if (level === 2 && looksLikeSentenceCase(text)) {
         const corrected = toTitleCase(text);
         if (corrected !== text) {
@@ -249,8 +314,8 @@ const HEAD_001: Rule = {
           sectionId,
           nearestHeading: text,
           description:
-            `The H${level} heading "${text}" appears to use title case. ` +
-            `Per the SimplerNOFOs style guide, H3–H6 headings use sentence case (capitalize only the first word and proper nouns). ` +
+            `The H${level} heading \u201c${text}\u201d appears to use title case. ` +
+            `Per the SimplerNOFOs style guide, H3\u2013H6 headings use sentence case (capitalize only the first word and proper nouns). ` +
             `H2 headings use title case. ` +
             exceptionNote,
           instructionOnly: true,
