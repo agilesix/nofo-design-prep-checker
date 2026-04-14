@@ -352,9 +352,11 @@ describe('HEAD-001: federal grants system names are exempt from the general cap 
 // ─── Mixed-case proper noun word handling (eRA, etc.) ────────────────────────
 
 describe('HEAD-001: words starting with lowercase + uppercase are skipped', () => {
-  it('does not trigger sentence-case auto-fix for an H2 where the only lowercase-starting word is "eRA"', () => {
+  it('preserves "eRA" during H2 sentence-case auto-fix when another lowercase content word triggers the fix', () => {
     // "eRA" starts with lowercase and has uppercase, so it is treated as an
     // intentional mixed-case proper noun — not evidence of sentence case.
+    // This heading is still auto-fixed because "reporting" is a lowercase
+    // content word; the fix must preserve "eRA" unchanged.
     const doc = makeDoc('<h2>Using eRA for reporting</h2>');
     const changes = HEAD_001.check(doc, OPTIONS).filter(
       r => (r as AutoAppliedChange).targetField === 'heading.h2.titlecase'
