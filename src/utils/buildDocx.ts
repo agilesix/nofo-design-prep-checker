@@ -52,8 +52,8 @@ export async function buildDocx(
   const hasPdfLabelFix = autoAppliedChanges.some(
     c => c.targetField === 'link.pdf.label'
   );
-  const capAnchorChanges = autoAppliedChanges.filter(
-    c => c.targetField === 'link.anchor.cap' && c.value
+  const fmtAnchorChanges = autoAppliedChanges.filter(
+    c => c.targetField === 'link.anchor.fmt' && c.value
   );
   const hasAsteriskedBoldFix = autoAppliedChanges.some(
     c => c.targetField === 'text.asterisked.bold'
@@ -80,9 +80,10 @@ export async function buildDocx(
     await applyEmailMailtoFixes(zip, emailChanges.map(c => c.value as string));
   }
 
-  // Retarget internal bookmark anchors corrected for capitalization only
-  if (capAnchorChanges.length > 0) {
-    await applyCapAnchorFixes(zip, capAnchorChanges);
+  // Retarget internal bookmark anchors corrected for formatting (capitalization
+  // and/or leading/trailing underscores from heading whitespace artifacts)
+  if (fmtAnchorChanges.length > 0) {
+    await applyAnchorFmtFixes(zip, fmtAnchorChanges);
   }
 
   // Apply double-space collapse
@@ -374,12 +375,13 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
 
 /**
  * LINK-006: Retarget internal bookmark anchors that differ from the correct
- * target only by capitalization (e.g. #eligibility → #Eligibility).
+ * target only by capitalization and/or leading/trailing underscores
+ * (e.g. #eligibility → #Eligibility, #_Key_facts → #Key_facts).
  * Each AutoAppliedChange carries a JSON-encoded array of {old, new} pairs in
  * its `value` field. All w:hyperlink elements whose w:anchor matches an old
- * anchor are rewritten to the correctly-cased new anchor.
+ * anchor are rewritten to the corrected new anchor.
  */
-async function applyCapAnchorFixes(zip: JSZip, changes: AutoAppliedChange[]): Promise<void> {
+async function applyAnchorFmtFixes(zip: JSZip, changes: AutoAppliedChange[]): Promise<void> {
   const docFile = zip.file('word/document.xml');
   if (!docFile) return;
 

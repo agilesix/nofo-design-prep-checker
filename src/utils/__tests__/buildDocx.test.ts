@@ -1642,7 +1642,7 @@ describe('buildDocx — LINK-006 cap-anchor auto-fix', () => {
     return {
       ruleId: 'LINK-006',
       description: `${pairs.length} internal link anchor${pairs.length === 1 ? '' : 's'} corrected for capitalization`,
-      targetField: 'link.anchor.cap',
+      targetField: 'link.anchor.fmt',
       value: JSON.stringify(pairs),
     };
   }
@@ -1722,7 +1722,7 @@ describe('buildDocx — LINK-006 cap-anchor auto-fix', () => {
     const badChange: AutoAppliedChange = {
       ruleId: 'LINK-006',
       description: 'cap fix',
-      targetField: 'link.anchor.cap',
+      targetField: 'link.anchor.fmt',
       value: 'NOT_VALID_JSON',
     };
 
@@ -1739,7 +1739,7 @@ describe('buildDocx — LINK-006 cap-anchor auto-fix', () => {
     const badChange: AutoAppliedChange = {
       ruleId: 'LINK-006',
       description: 'cap fix',
-      targetField: 'link.anchor.cap',
+      targetField: 'link.anchor.fmt',
       value: JSON.stringify({ old: 'eligibility', new: 'Eligibility' }), // object, not array
     };
 
