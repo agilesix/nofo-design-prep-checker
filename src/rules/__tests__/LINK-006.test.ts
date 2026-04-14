@@ -896,10 +896,10 @@ describe('LINK-006 Source 3 and Pass 3 — heading id underscore stripping and b
   });
 });
 
-// ─── Capitalization-only auto-fix ─────────────────────────────────────────────
+// ─── Anchor formatting auto-fix (capitalization and leading/trailing underscores) ───
 
-describe('LINK-006 capitalization-only auto-fix', () => {
-  it('emits an AutoAppliedChange (not an Issue) when the mismatch is capitalization-only', () => {
+describe('LINK-006 anchor formatting auto-fix', () => {
+  it('emits an AutoAppliedChange (not an Issue) for a high-confidence anchor mismatch', () => {
     // #eligibility → #Eligibility: identical when lowercased → auto-fixed
     const doc = makeDoc(
       '<p><a href="#eligibility">link</a></p>',

@@ -4,7 +4,8 @@ import type { Rule, Issue, AutoAppliedChange, ParsedDocument, RuleRunnerOptions 
  * HEAD-001: Heading capitalization
  *
  * Per the SimplerNOFOs style guide:
- *   H1  — title case; not checked (rule is silent on H1).
+ *   H1  — excluded from general capitalization enforcement (no auto-fix, no style suggestion).
+ *          The capitalized-"Form" check (see below) still applies to H1 headings.
  *   H2  — must use title case; auto-fixed silently when sentence case is detected.
  *   H3–H6 — must use sentence case; flagged as a suggestion if title case is detected.
  *
@@ -19,11 +20,17 @@ import type { Rule, Issue, AutoAppliedChange, ParsedDocument, RuleRunnerOptions 
  *   • Headings containing form identifiers (SF-424, PHS 398, R&R, etc.) are exempt from
  *     the general capitalization check — their capitalization is intentional. The "Form"
  *     capitalization check (see below) still applies to these headings.
+ *   • Headings containing federal grants system names (eRA Commons, Grants.gov, SAM.gov,
+ *     USASpending.gov, PaymentManagement.gov, GrantSolutions) are exempt from the general
+ *     capitalization check — these proper names use non-standard casing by convention.
+ *     The "Form" capitalization check still applies.
  *   • First word of the heading (always capitalised in both styles).
  *   • First word after a colon within the heading (sentence restart).
  *   • Minor words: articles (a/an/the), short prepositions, conjunctions.
  *   • ALL-CAPS words and words without lowercase letters: acronyms (CDC, HRSA),
  *     form names (SF-424), and other all-cap tokens are skipped entirely.
+ *   • Words starting with a lowercase letter followed by uppercase (e.g. "eRA") are
+ *     treated as intentional mixed-case proper nouns and skipped at the word level.
  *
  * Additional check — capitalized "Form" (H1–H6):
  *   If the word "Form" (capital F) appears in any non-first-word position, a
@@ -52,6 +59,9 @@ const MINOR_WORDS = new Set([
  * Returns true when the word should be skipped during capitalization checks:
  *   • Minor/function word (always lowercase regardless of style)
  *   • No lowercase letters (ALL CAPS acronym, number, or special character only)
+ *   • Starts with a lowercase letter and contains an uppercase letter — intentional
+ *     mixed-case proper nouns like "eRA" that must not be capitalized or treated as
+ *     sentence-case evidence
  *
  * Trailing punctuation (e.g. "and,", "of.") is stripped before the MINOR_WORDS
  * lookup so that punctuation attached to a word does not prevent recognition.
@@ -60,6 +70,8 @@ function isSkippable(word: string): boolean {
   const stripped = word.replace(/[^a-zA-Z0-9]+$/, '');
   if (MINOR_WORDS.has(stripped.toLowerCase())) return true;
   if (!/[a-z]/.test(word)) return true; // ALL CAPS / numeric / punctuation-only
+  // Intentional mixed-case proper nouns (e.g. "eRA"): lowercase start + uppercase mid
+  if (/^[a-z]/.test(stripped) && /[A-Z]/.test(stripped)) return true;
   return false;
 }
 
@@ -161,6 +173,9 @@ function toTitleCase(text: string): string {
     // ALL-CAPS word (acronym like HRSA, CDC) → leave unchanged
     if (!/[a-z]/.test(clean)) return token;
 
+    // Intentional mixed-case proper noun (e.g. "eRA") → leave unchanged
+    if (/^[a-z]/.test(clean) && /[A-Z]/.test(clean)) return token;
+
     // Already capitalized (proper noun or mid-sentence cap) → leave unchanged
     if (/^[A-Z]/.test(clean)) return token;
 
@@ -222,6 +237,27 @@ function isFormIdentifierHeading(text: string): boolean {
   if (/\b[A-Z]{2,4}[-\s][A-Z0-9]+\b/.test(text)) return true;
   if (/\bR&R\b/.test(text)) return true;
   return false;
+}
+
+/**
+ * Returns true when the heading contains a federal grants system or portal
+ * name that uses non-standard casing by convention. Such headings are exempt
+ * from the general heading capitalization check (H2 auto-fix and H3–H6
+ * sentence-case suggestion). The "Form" capitalization check still applies.
+ *
+ * Recognized names (matched case-insensitively):
+ *   eRA Commons, Grants.gov, SAM.gov, USASpending.gov,
+ *   PaymentManagement.gov, GrantSolutions
+ */
+function isFederalSystemException(text: string): boolean {
+  return (
+    /\bera\s+commons\b/i.test(text) ||
+    /\bgrants\.gov\b/i.test(text) ||
+    /\bsam\.gov\b/i.test(text) ||
+    /\busaspending\.gov\b/i.test(text) ||
+    /\bpaymentmanagement\.gov\b/i.test(text) ||
+    /\bgrantsolutions\b/i.test(text)
+  );
 }
 
 /**
@@ -296,9 +332,10 @@ const HEAD_001: Rule = {
       }
 
       // ── General capitalization check ──────────────────────────────────────────
-      // H1 is not checked. Form identifier headings (SF-424, PHS 398, R&R, etc.)
-      // are exempt — their capitalization is intentional.
-      if (level === 1 || isFormIdentifierHeading(text)) return;
+      // H1 is not checked. Headings with form identifiers (SF-424, PHS 398, R&R)
+      // or federal grants system names (eRA Commons, Grants.gov, etc.) are exempt
+      // from the general cap check — their capitalization is intentional.
+      if (level === 1 || isFormIdentifierHeading(text) || isFederalSystemException(text)) return;
 
       if (level === 2 && looksLikeSentenceCase(text)) {
         const corrected = toTitleCase(text);

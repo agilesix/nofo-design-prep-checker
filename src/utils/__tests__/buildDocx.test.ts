@@ -1631,9 +1631,9 @@ describe('buildDocx — CLEAN-012: asterisked bold OOXML patch', () => {
   });
 });
 
-// ─── LINK-006 cap-anchor auto-fix: hyperlink retargeting ─────────────────────
+// ─── LINK-006 anchor-fmt auto-fix: hyperlink retargeting ─────────────────────
 
-describe('buildDocx — LINK-006 cap-anchor auto-fix', () => {
+describe('buildDocx — LINK-006 anchor formatting auto-fix', () => {
   // NOTE: these tests check the RAW SERIALIZED XML string so they catch
   // XMLSerializer stripping the w: namespace prefix — the same rationale as
   // the link-text hyperlink-preservation tests above.
@@ -1695,7 +1695,7 @@ describe('buildDocx — LINK-006 cap-anchor auto-fix', () => {
   });
 
   it('does not touch hyperlinks whose anchor does not match the old value', async () => {
-    // Document has two internal hyperlinks; only one matches the cap-fix pair
+    // Document has two internal hyperlinks; only one matches the anchor-fmt pair
     const mixedXml =
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
       `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}">` +

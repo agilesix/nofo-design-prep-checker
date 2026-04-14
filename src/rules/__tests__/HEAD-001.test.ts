@@ -288,6 +288,103 @@ describe('HEAD-001: federal law and directive exceptions', () => {
   });
 });
 
+// ─── Federal grants system exceptions ────────────────────────────────────────
+
+describe('HEAD-001: federal grants system names are exempt from the general cap check', () => {
+  it('does not flag an H3 containing "eRA Commons"', () => {
+    const doc = makeDoc('<h3>eRA Commons Registration Requirements</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "Grants.gov"', () => {
+    const doc = makeDoc('<h3>Grants.gov Application Submission</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "SAM.gov"', () => {
+    const doc = makeDoc('<h3>SAM.gov Registration Requirements</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "USASpending.gov"', () => {
+    const doc = makeDoc('<h3>USASpending.gov Reporting Requirements</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "PaymentManagement.gov"', () => {
+    const doc = makeDoc('<h3>PaymentManagement.gov Cash Drawdown Procedures</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "GrantSolutions"', () => {
+    const doc = makeDoc('<h3>GrantSolutions Portal Access Instructions</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not auto-fix an H2 containing "Grants.gov"', () => {
+    // H2 auto-fix is also suppressed for federal system headings
+    const doc = makeDoc('<h2>grants.gov submission instructions</h2>');
+    const changes = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as AutoAppliedChange).targetField === 'heading.h2.titlecase'
+    );
+    expect(changes).toHaveLength(0);
+  });
+});
+
+// ─── Mixed-case proper noun word handling (eRA, etc.) ────────────────────────
+
+describe('HEAD-001: words starting with lowercase + uppercase are skipped', () => {
+  it('preserves "eRA" during H2 sentence-case auto-fix when another lowercase content word triggers the fix', () => {
+    // "eRA" starts with lowercase and has uppercase, so it is treated as an
+    // intentional mixed-case proper noun — not evidence of sentence case.
+    // This heading is still auto-fixed because "reporting" is a lowercase
+    // content word; the fix must preserve "eRA" unchanged.
+    const doc = makeDoc('<h2>Using eRA for reporting</h2>');
+    const changes = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as AutoAppliedChange).targetField === 'heading.h2.titlecase'
+    );
+    // "for" is minor, "reporting" is lowercase content → sentence case IS detected
+    // but "eRA" itself does not trigger or misfire the check.
+    // The corrected title-case must preserve "eRA" unchanged.
+    expect(changes).toHaveLength(1);
+    const pairs = JSON.parse((changes[0] as AutoAppliedChange).value!) as { old: string; new: string }[];
+    expect(pairs[0]!.new).toContain('eRA'); // eRA preserved as-is
+    expect(pairs[0]!.new).toBe('Using eRA for Reporting');
+  });
+
+  it('does not capitalize "eRA" when auto-fixing an H2 to title case', () => {
+    // "eRA" is NOT "eRA Commons" — this heading is not exempt from the general cap check.
+    // "via" is minor, "eRA" is mixed-case (skipped), "and" is minor, "grants" and "portal"
+    // are lowercase content words → sentence case detected → auto-fix triggered.
+    // The fix must preserve "eRA" unchanged (not capitalize it to "ERA").
+    const doc = makeDoc('<h2>submit via eRA and grants portal</h2>');
+    const changes = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as AutoAppliedChange).targetField === 'heading.h2.titlecase'
+    );
+    expect(changes).toHaveLength(1);
+    const pairs = JSON.parse((changes[0] as AutoAppliedChange).value!) as { old: string; new: string }[];
+    expect(pairs[0]!.new).toBe('Submit via eRA and Grants Portal');
+  });
+});
+
 // ─── Form identifier exemption ───────────────────────────────────────────────
 
 describe('HEAD-001: form identifier headings are exempt from the general cap check', () => {
