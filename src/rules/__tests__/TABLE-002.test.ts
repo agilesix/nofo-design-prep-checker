@@ -282,6 +282,23 @@ describe('TABLE-002 sentence case suggestion', () => {
     expect(results.find(r => (r as Issue).severity === 'warning')).toBeUndefined();
   });
 
+  it('surfaces a sentence-case suggestion when the <caption> element text is a single all-caps word', () => {
+    // Single-word all-caps captions should also be treated as non-sentence-case.
+    const doc = makeDoc(
+      '<table>' +
+        '<caption>TIMELINE</caption>' +
+        '<tbody><tr><td>A</td><td>B</td></tr></tbody>' +
+      '</table>'
+    );
+    const results = TABLE_002.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const suggestion = results[0] as Issue;
+    expect(suggestion.severity).toBe('suggestion');
+    expect(suggestion.title).toBe('Table caption should use sentence case');
+    expect(suggestion.instructionOnly).toBe(true);
+    expect(results.find(r => (r as Issue).severity === 'warning')).toBeUndefined();
+  });
+
   it('surfaces a sentence-case suggestion when the paragraph caption is all-caps', () => {
     // Paragraph caption is detected (no missing-caption warning), but text is all-caps.
     const doc = makeDoc('<p>PROGRAM TIMELINE</p>' + SIMPLE_TABLE);
