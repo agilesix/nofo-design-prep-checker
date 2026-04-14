@@ -111,6 +111,41 @@ describe('RuleRunner', () => {
     expect(result.issues).toHaveLength(0);
   });
 
+  it('routes AutoAppliedChange objects from a regular (non-auto-apply) rule to autoAppliedChanges, not issues', () => {
+    // Regression: before the fix, the regularRules loop cast everything as Issue,
+    // so AutoAppliedChange objects (no severity field) from rules like LINK-006
+    // ended up in issues and were rendered as issue cards instead of the
+    // auto-applied changes summary block.
+    const mixedRule: Rule = {
+      id: 'MIXED-001',
+      // autoApply is NOT set (defaults to undefined/false)
+      check: () => [
+        {
+          id: 'MIXED-001-a',
+          ruleId: 'MIXED-001',
+          title: 'Regular issue',
+          severity: 'warning',
+          sectionId: 'section-preamble',
+          description: 'A regular issue.',
+        },
+        {
+          // No severity → AutoAppliedChange
+          ruleId: 'MIXED-001',
+          description: 'A silent auto-fix from a non-auto-apply rule.',
+          targetField: 'some.field',
+          value: 'fixed',
+        },
+      ],
+    };
+
+    const runner = new RuleRunner([mixedRule]);
+    const result = runner.run(makeMinimalDoc(), { contentGuideId: null });
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0]?.title).toBe('Regular issue');
+    expect(result.autoAppliedChanges).toHaveLength(1);
+    expect(result.autoAppliedChanges[0]?.description).toBe('A silent auto-fix from a non-auto-apply rule.');
+  });
+
   it('runs auto-apply rules and collects AutoAppliedChange results', () => {
     const autoRule: Rule = {
       id: 'AUTO-001',

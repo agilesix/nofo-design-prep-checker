@@ -27,7 +27,6 @@ export class RuleRunner {
           if ('ruleId' in item && !('severity' in item)) {
             autoAppliedChanges.push(item as AutoAppliedChange);
           } else {
-            // LINK-006 fallback: returns Issue[] for unresolvable bookmarks
             issues.push(item as Issue);
           }
         }
@@ -40,7 +39,14 @@ export class RuleRunner {
       try {
         const result = rule.check(doc, options);
         for (const item of result) {
-          issues.push(item as Issue);
+          // Use the same discriminator as auto-apply rules: absence of severity
+          // means the item is an AutoAppliedChange (e.g. LINK-006 anchor fmt fixes),
+          // not an Issue.
+          if ('ruleId' in item && !('severity' in item)) {
+            autoAppliedChanges.push(item as AutoAppliedChange);
+          } else {
+            issues.push(item as Issue);
+          }
         }
       } catch (err) {
         console.error(`Rule ${rule.id} failed:`, err);
