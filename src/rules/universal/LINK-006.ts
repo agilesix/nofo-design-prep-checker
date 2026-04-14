@@ -50,6 +50,22 @@ function cleanHeadingId(rawId: string): string {
   return rawId.replace(/^_+|_+$/g, '') || rawId;
 }
 
+/**
+ * Returns true when the anchor and fuzzy target differ only by leading/trailing
+ * underscores (deterministic heading/anchor formatting artifacts, including
+ * leading-space cleanup from CLEAN-008) and/or capitalization. Both are
+ * deterministic formatting differences that can be silently auto-fixed — no
+ * Issue surfaced.
+ *
+ * Covered cases (all treated as high-confidence):
+ *  - Cap-only:        "eligibility"  → "Eligibility"
+ *  - Underscore-only: "_Key_facts"   → "Key_facts"
+ *  - Both combined:   "_key_facts"   → "Key_facts"
+ */
+function isHighConfidenceAutoFix(anchor: string, fuzzy: string): boolean {
+  return cleanHeadingId(anchor).toLowerCase() === cleanHeadingId(fuzzy).toLowerCase();
+}
+
 const LINK_006: Rule = {
   id: 'LINK-006',
   autoApply: false,
@@ -156,7 +172,7 @@ const LINK_006: Rule = {
         // Each new unique broken anchor is recorded in capFixMap (old → new) to
         // de-duplicate the JSON patch payload; occurrences are counted separately
         // so repeated broken anchors are reflected in the description count.
-        if (anchor.toLowerCase() === fuzzy.toLowerCase()) {
+        if (isHighConfidenceAutoFix(anchor, fuzzy)) {
           capFixMap.set(anchor, fuzzy);
           capFixOccurrences++;
           // Still surface a link-text suggestion if the heading name isn't in the link text.
@@ -256,7 +272,7 @@ const LINK_006: Rule = {
       const count = capFixOccurrences;
       results.push({
         ruleId: 'LINK-006',
-        description: `${count} internal link anchor${count === 1 ? '' : 's'} corrected for capitalization`,
+        description: `${count} internal link anchor${count === 1 ? '' : 's'} corrected for capitalization or leading/trailing underscores`,
         targetField: 'link.anchor.cap',
         // De-duplicated map serialized as an array of {old,new} pairs. Each entry
         // represents a distinct broken anchor → correct anchor mapping; one entry
