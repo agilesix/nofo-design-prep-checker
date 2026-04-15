@@ -7,7 +7,18 @@
  */
 
 export interface LocationContext {
-  /** Text of the nearest preceding h1–h4, or null if none has been seen yet. */
+  /**
+   * Text of the nearest preceding H1–H4, or null if none has been seen yet.
+   *
+   * **H1–H4 only, by design.** This field is used for issue display context
+   * (showing users which section an issue is in). H5/H6 are excluded because
+   * they are rarely used as top-level section headings in NOFOs, and including
+   * them would add noise to the context label shown in the UI.
+   *
+   * Rules that need to detect H5/H6 headings for logic purposes (e.g. the
+   * TABLE-002 exemption signal) must perform their own local sibling scan
+   * rather than relying on this field.
+   */
   nearestHeading: string | null;
 }
 
@@ -15,8 +26,10 @@ export interface LocationContext {
  * Scans `htmlDoc` in tree order and returns a lookup function that maps any
  * Element in the document to its LocationContext.
  *
- * nearestHeading — the text of the h1–h4 element most recently encountered
- *                  before the queried element in document order (null if none)
+ * nearestHeading — the text of the H1–H4 element most recently encountered
+ *                  before the queried element in document order (null if none).
+ *                  H5/H6 are intentionally excluded — see the LocationContext
+ *                  interface comment for the rationale.
  *
  * Elements not found in the map fall back to { nearestHeading: null }.
  */
