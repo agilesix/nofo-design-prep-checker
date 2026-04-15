@@ -279,7 +279,7 @@ const LINK_006: Rule = {
       const count = fmtFixOccurrences;
       results.push({
         ruleId: 'LINK-006',
-        description: `${count} internal link anchor${count === 1 ? '' : 's'} corrected for capitalization or leading/trailing underscores`,
+        description: `${count} internal link anchor${count === 1 ? '' : 's'} corrected for capitalization or leading/trailing underscores.`,
         targetField: 'link.anchor.fmt',
         // De-duplicated map serialized as an array of {old,new} pairs. Each entry
         // represents a distinct broken anchor → correct anchor mapping; one entry

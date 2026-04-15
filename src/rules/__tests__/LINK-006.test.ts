@@ -919,7 +919,7 @@ describe('LINK-006 anchor formatting auto-fix', () => {
       xmlWithBookmarks('Eligibility')
     );
     const change = LINK_006.check(doc, OPTIONS)[0] as AutoAppliedChange;
-    expect(change.description).toBe('1 internal link anchor corrected for capitalization or leading/trailing underscores');
+    expect(change.description).toBe('1 internal link anchor corrected for capitalization or leading/trailing underscores.');
   });
 
   it('description uses plural form and counts each link occurrence, not unique anchors', () => {
@@ -932,7 +932,7 @@ describe('LINK-006 anchor formatting auto-fix', () => {
     const results = LINK_006.check(doc, OPTIONS);
     expect(results).toHaveLength(1);
     const change = results[0] as AutoAppliedChange;
-    expect(change.description).toBe('2 internal link anchors corrected for capitalization or leading/trailing underscores');
+    expect(change.description).toBe('2 internal link anchors corrected for capitalization or leading/trailing underscores.');
     // value is de-duplicated: only one pair even though two links share the anchor
     const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
     expect(pairs).toHaveLength(1);
@@ -947,7 +947,7 @@ describe('LINK-006 anchor formatting auto-fix', () => {
       xmlWithBookmarks('Eligibility', 'Overview')
     );
     const change = LINK_006.check(doc, OPTIONS)[0] as AutoAppliedChange;
-    expect(change.description).toBe('2 internal link anchors corrected for capitalization or leading/trailing underscores');
+    expect(change.description).toBe('2 internal link anchors corrected for capitalization or leading/trailing underscores.');
     const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
     expect(pairs).toHaveLength(2);
     expect(pairs).toContainEqual({ old: 'eligibility', new: 'Eligibility' });

@@ -535,3 +535,75 @@ describe('HEAD-001: only Word paragraph styles Heading 1–6 are checked', () =>
     expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
   });
 });
+
+// ─── Leading non-alphabetic tokens ───────────────────────────────────────────
+
+describe('HEAD-001: leading non-alphabetic tokens are skipped when identifying the first word', () => {
+  it('does not flag an H3 starting with a number followed by a capitalised first word', () => {
+    // "501" is purely numeric — skipped. "Non-profit" is the first alphabetic
+    // token and is treated as the sentence start, so its capitalisation is not
+    // counted as title-case evidence.
+    const doc = makeDoc('<h3>501 Non-profit organization requirements</h3>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag an H3 starting with a number and parenthetical reference before the first word', () => {
+    // "501" (numeric) and "(c)(3)" (parenthetical, begins with "(") are both
+    // skipped. "Non-profit" at position 2 is the first token starting with a
+    // letter and is treated as the sentence start.
+    const doc = makeDoc('<h3>501 (c)(3) Non-profit organizations</h3>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag an H3 starting with a parenthetical token before the first word', () => {
+    // "(a)" begins with "(" — not a letter — so "Application" at position 1 is
+    // treated as the first word and its capitalisation is not a title-case flag.
+    const doc = makeDoc('<h3>(a) Application requirements overview</h3>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+});
+
+// ─── Native American / Indigenous proper noun exemption ──────────────────────
+
+describe('HEAD-001: Native American and Indigenous proper noun terms are exempt from the title-case check', () => {
+  it('does not flag an H3 containing "Tribal Organizations"', () => {
+    // "Tribal" is a federal proper noun — the heading is exempt from the
+    // title-case suggestion even though "Tribal" and "Organizations" are
+    // capitalised mid-heading.
+    const doc = makeDoc('<h3>Support for Tribal Organizations</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "Urban Indian Organizations"', () => {
+    // "Indian" is a federal proper noun — heading is exempt from the
+    // title-case suggestion.
+    const doc = makeDoc('<h3>Urban Indian Organizations health programs</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "AI/AN"', () => {
+    // "AI/AN" triggers the indigenous-term exemption — subsequent capitalised
+    // words in the heading are not flagged.
+    const doc = makeDoc('<h3>AI/AN Community Health Programs</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('still auto-fixes an H2 that contains an indigenous term but has other lowercase content words', () => {
+    // The indigenous-term exemption only suppresses H3–H6 suggestions.
+    // H2 headings with sentence-case content words are still auto-fixed.
+    const doc = makeDoc('<h2>Tribal health programs and services</h2>');
+    const changes = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as AutoAppliedChange).targetField === 'heading.h2.titlecase'
+    );
+    expect(changes).toHaveLength(1);
+  });
+});
