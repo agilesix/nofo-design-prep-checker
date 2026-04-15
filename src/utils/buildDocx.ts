@@ -1219,8 +1219,6 @@ async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<v
   const parser = new DOMParser();
   const serializer = new XMLSerializer();
 
-  // ── Collect all XML parts to process ──────────────────────────────────────
-  // ── Process each part ─────────────────────────────────────────────────────
   for (const path of getStoryPartPaths(zip)) {
     const file = zip.file(path);
     if (!file) continue;
