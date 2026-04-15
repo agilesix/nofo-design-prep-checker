@@ -191,7 +191,7 @@ function looksLikeTitleOrAllCaps(text: string): boolean {
  */
 function looksLikeCaption(text: string): boolean {
   if (text.endsWith(':')) return false;
-  if (text.includes('[PDF]')) return false;
+  if (/\[pdf\]/i.test(text)) return false;
   return text.trim().split(/\s+/).length <= 10;
 }
 
