@@ -262,7 +262,7 @@ function scanBackwardForHeading(table: Element): HeadingScanResult {
     }
 
     const text = (el.textContent ?? '').trim();
-    if (text) {
+    if (text && interveningWords <= 50) {
       interveningWords += text.split(/\s+/).length;
     }
 
