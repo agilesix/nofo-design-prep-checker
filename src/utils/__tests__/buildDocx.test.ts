@@ -633,6 +633,80 @@ describe('buildDocx — CLEAN-008: heading leading-space removal', () => {
     const texts = extractParagraphTexts(outXml);
     expect(texts[0]).toBe(' Leading Space');
   });
+
+  // ── Anchor update when heading slug changes ────────────────────────────────
+
+  /**
+   * Build a minimal document.xml containing a heading paragraph with a leading
+   * space and a w:hyperlink paragraph whose w:anchor is the given value.
+   * Used to verify that CLEAN-008 updates the hyperlink anchor when the heading
+   * slug changes.
+   */
+  function makeHeadingWithLinkDocXml(opts: {
+    headingText: string;
+    linkAnchor: string;
+  }): string {
+    const preserve = opts.headingText !== opts.headingText.trimStart()
+      ? ' xml:space="preserve"'
+      : '';
+    return (
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_HEADING}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading1"/></w:pPr>` +
+      `<w:r><w:t${preserve}>${opts.headingText}</w:t></w:r>` +
+      `</w:p>` +
+      `<w:p>` +
+      `<w:hyperlink w:anchor="${opts.linkAnchor}" w:history="1">` +
+      `<w:r><w:t>link text</w:t></w:r>` +
+      `</w:hyperlink>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body></w:document>`
+    );
+  }
+
+  it('updates a w:hyperlink anchor that targets the old (leading-underscore) slug when the heading is cleaned', async () => {
+    // " Contacts and Support" has anchor slug "_Contacts_and_Support".
+    // After CLEAN-008 the heading becomes "Contacts and Support" and the slug
+    // becomes "Contacts_and_Support".  The hyperlink must be updated to match.
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingWithLinkDocXml({
+        headingText: ' Contacts and Support',
+        linkAnchor: '_Contacts_and_Support',
+      })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+
+    // Raw serialized XML must carry the namespace-prefixed attribute with the new slug.
+    expect(outXml).toMatch(/w:anchor="Contacts_and_Support"/);
+    expect(outXml).not.toMatch(/w:anchor="_Contacts_and_Support"/);
+    // The heading text itself must also be clean.
+    expect(extractParagraphTexts(outXml)[0]).toBe('Contacts and Support');
+  });
+
+  it('does not modify a hyperlink that targets a different anchor when a heading is cleaned', async () => {
+    // The hyperlink points at "Overview" — unrelated to the cleaned heading.
+    // It must be left untouched.
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingWithLinkDocXml({
+        headingText: ' Contacts and Support',
+        linkAnchor: 'Overview',
+      })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+
+    expect(outXml).toMatch(/w:anchor="Overview"/);
+    // Heading is still cleaned regardless.
+    expect(extractParagraphTexts(outXml)[0]).toBe('Contacts and Support');
+  });
 });
 
 // ─── applyAcceptTrackedChangesAndRemoveComments (CLEAN-009) ──────────────────

@@ -703,6 +703,10 @@ async function applyRemoveDghtScaffolding(zip: JSZip): Promise<void> {
  * are left intact. The xml:space="preserve" attribute is removed from any
  * text node that no longer contains leading or trailing whitespace after the
  * fix is applied.
+ *
+ * After all heading paragraphs are processed, any w:hyperlink elements whose
+ * w:anchor value matched the old (leading-underscore) slug are updated to the
+ * new (clean) slug in the same pass — no separate iteration is needed.
  */
 async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
   const docFile = zip.file('word/document.xml');
@@ -711,9 +715,14 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
   const xmlStr = await docFile.async('string');
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
   const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
   let changed = false;
+  // Maps old anchor slug → new anchor slug for every heading whose leading
+  // space was removed.  Anchor slugs are the heading text with spaces replaced
+  // by underscores — a leading space becomes a leading underscore.
+  const anchorRemap = new Map<string, string>();
 
   for (const wP of paragraphs) {
     if (!isHeadingParagraph(wP)) continue;
@@ -724,6 +733,8 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
     // Only process paragraphs whose full text starts with a space
     const paraText = getParaText(wP);
     if (paraText.length === 0 || paraText[0] !== ' ') continue;
+
+    const oldAnchor = paraText.replace(/ /g, '_');
 
     // Walk <w:t> nodes from the front, stripping leading spaces until we hit
     // content. This correctly handles leading spaces spread across multiple runs.
@@ -752,6 +763,24 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
           wT.removeAttribute('xml:space');
         }
         stillTrimming = false;
+      }
+    }
+
+    // Record the anchor remapping now that the paragraph text has been updated.
+    const newAnchor = getParaText(wP).replace(/ /g, '_');
+    if (newAnchor !== oldAnchor) {
+      anchorRemap.set(oldAnchor, newAnchor);
+    }
+  }
+
+  // Rewrite internal hyperlinks whose w:anchor referenced a heading that had
+  // its leading space removed.  The anchor slug changes in lock-step with the
+  // heading text; without this update the link would become a broken reference.
+  if (anchorRemap.size > 0) {
+    for (const link of Array.from(xmlDoc.getElementsByTagName('w:hyperlink'))) {
+      const anchor = link.getAttributeNS(W, 'anchor');
+      if (anchor && anchorRemap.has(anchor)) {
+        link.setAttributeNS(W, 'w:anchor', anchorRemap.get(anchor)!);
       }
     }
   }
