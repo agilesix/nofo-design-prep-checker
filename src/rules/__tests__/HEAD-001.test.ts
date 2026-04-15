@@ -499,6 +499,25 @@ describe('HEAD-001: capitalized "Form" suggestion', () => {
     ) as Issue | undefined;
     expect(issue).toBeDefined();
   });
+
+  it('produces only the "Form" suggestion when both the "Form" rule and sentence case rule would fire for the same heading', () => {
+    // "Other Attachments Form" has two apparent problems: "Attachments" is a
+    // title-case mid-heading word AND "Form" is capitalised mid-heading. Both
+    // checks would independently fire, but showing both is redundant — they
+    // describe the same underlying issue. Only the "Form" suggestion should
+    // be emitted; the general sentence-case suggestion should be suppressed.
+    const doc = makeDoc('<h3>Other Attachments Form</h3>');
+    const results = HEAD_001.check(doc, OPTIONS);
+    const formIssue = results.find(
+      r => (r as Issue).title === '\u201cForm\u201d may need to be lowercase in heading'
+    );
+    const sentenceCaseIssue = results.find(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(formIssue).toBeDefined();
+    expect(sentenceCaseIssue).toBeUndefined();
+    expect(results).toHaveLength(1);
+  });
 });
 
 // ─── Only Word-styled headings are checked ────────────────────────────────────
@@ -629,5 +648,42 @@ describe('HEAD-001: Native American and Indigenous proper noun terms are exempt 
       r => (r as AutoAppliedChange).targetField === 'heading.h2.titlecase'
     );
     expect(changes).toHaveLength(1);
+  });
+});
+
+// ─── Proper noun + parenthetical acronym exemption ───────────────────────────
+
+describe('HEAD-001: proper noun phrases followed by a parenthetical acronym are exempt from the title-case check', () => {
+  it('does not flag an H3 where a multi-word proper noun is followed by its acronym in parentheses', () => {
+    // "National Mesothelioma Virtual Bank" is a proper noun. The words are
+    // capitalized mid-heading, but the trailing "(NMVB)" identifies the entire
+    // preceding phrase as an organization name that should not be flagged.
+    // "overview", "of", and "the" are lowercase/minor — not affected.
+    const doc = makeDoc('<h3>An overview of the National Mesothelioma Virtual Bank (NMVB)</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 where a proper noun with embedded minor words is followed by its acronym', () => {
+    // "Office of Global Affairs" — "of" is a minor word embedded in the name.
+    // The backward scan continues past it to exempt "Office" and "Global
+    // Affairs". "programs" is lowercase and not part of the phrase.
+    const doc = makeDoc('<h3>Office of Global Affairs (OGA) programs</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('still flags title-case words that appear after the acronym and are unrelated to the proper noun', () => {
+    // "National Advisory Board" is exempt (precedes "(NAB)"), but "Review" and
+    // "Criteria" follow the acronym and are ordinary title-cased words.
+    const doc = makeDoc('<h3>National Advisory Board (NAB) Review Criteria</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(1);
   });
 });
