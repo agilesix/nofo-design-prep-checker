@@ -291,11 +291,19 @@ function isFederalSystemException(text: string): boolean {
  *
  * AI/AN is omitted: it contains no lowercase letters and is already treated
  * as skippable by isSkippable (ALL-CAPS / no-lowercase rule).
+ *
+ * Possessive normalization: bare() strips leading/trailing punctuation and
+ * then removes a trailing possessive suffix (\u2018s / \u2019s / 's) so that
+ * "Tribe's", "Tribal\u2019s", etc. resolve to their base form before
+ * comparison. (The plural-possessive "Tribes'" is already handled by the
+ * trailing-punctuation strip since the apostrophe is the final character.)
  */
 function indigenousExemptPositions(words: string[]): Set<number> {
   const exempt = new Set<number>();
   const bare = (w: string) =>
-    w.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '');
+    w.replace(/^[^a-zA-Z0-9]+/, '')
+      .replace(/[^a-zA-Z0-9]+$/, '')
+      .replace(/['\u2018\u2019]s$/i, '');
 
   for (let i = 0; i < words.length; i++) {
     const w0 = bare(words[i] ?? '');
