@@ -32,6 +32,19 @@ const TABLE_002: Rule = {
     const getContext = buildLocationLookup(htmlDoc);
 
     tables.forEach((table, index) => {
+      // ── Single-cell tables (callout boxes) — exempt ────────────────────────────
+      // Exemption is purely structural: count direct cells only (no inspection of
+      // cell content). Use :scope child combinators so cells inside nested tables
+      // are not counted. If exactly one cell exists, skip all further checks —
+      // single-cell tables are suppressed entirely.
+      const directCells = table.querySelectorAll(
+        ':scope > tr > td, :scope > tr > th,' +
+        ':scope > tbody > tr > td, :scope > tbody > tr > th,' +
+        ':scope > thead > tr > td, :scope > thead > tr > th,' +
+        ':scope > tfoot > tr > td, :scope > tfoot > tr > th'
+      );
+      if (directCells.length === 1) return;
+
       // Compute context upfront — needed for both the suggestion and the warning.
       const section = findSectionForElement(table, doc);
       const sectionId = section?.id ?? doc.sections[0]?.id ?? 'section-preamble';
@@ -61,18 +74,8 @@ const TABLE_002: Rule = {
         return;
       }
 
-      // ── Single-cell tables (callout boxes) — exempt ────────────────────────────
-      // Use :scope child combinators so cells inside nested tables are not counted.
-      const directCells = table.querySelectorAll(
-        ':scope > tr > td, :scope > tr > th,' +
-        ':scope > tbody > tr > td, :scope > tbody > tr > th,' +
-        ':scope > thead > tr > td, :scope > thead > tr > th,' +
-        ':scope > tfoot > tr > td, :scope > tfoot > tr > th'
-      );
-      if (directCells.length === 1) return;
-
       // ── Other exempt table types ───────────────────────────────────────────────
-      if (isExemptFromCaption(table, sectionHeading)) return;
+      if (isExemptFromCaption(table, sectionHeading, nearestHeading ?? '')) return;
 
       // ── Nearby heading caption substitute ─────────────────────────────────────
       // A heading preceding the table with ≤ 50 words of body text between them
@@ -142,8 +145,10 @@ function looksLikeTitleOrAllCaps(text: string): boolean {
   // Only consider words of length > 1 to skip single-letter words
   const words = body.split(/\s+/).filter(w => w.length > 1);
   if (words.length < 2) return false;
-  // Title case: any word after the first starts with an uppercase letter
-  return words.slice(1).some(w => /^[A-Z]/.test(w));
+  // Title case: any word after the first starts with an uppercase letter AND has
+  // at least one lowercase letter. All-caps words (PDF, CDC, HRSA) are acronyms
+  // and are not evidence of title-case formatting — skip them entirely.
+  return words.slice(1).some(w => /^[A-Z]/.test(w) && /[a-z]/.test(w));
 }
 
 // ─── Issue factories ──────────────────────────────────────────────────────────
@@ -172,39 +177,87 @@ function makeSentenceCaseSuggestion(
 // ─── Exemption detection ──────────────────────────────────────────────────────
 
 /**
+ * Returns true when the (already lower-cased) heading text matches any of the
+ * exempt-section patterns. Used to check both the section heading from the
+ * parsed section tree and the nearest DOM heading above the table.
+ *
+ * Exempt heading patterns:
+ *  - Application contents / table of contents
+ *  - Standard forms / required forms
+ *  - Application checklist
+ *  - Merit review (catches "Merit review criteria (50 points)" etc.)
+ *  - Review and selection / selection criteria
+ *  - Reporting (any heading that contains the word "reporting")
+ */
+function matchesExemptHeadingText(lower: string): boolean {
+  return (
+    /application\s+contents?/.test(lower) ||
+    /table\s+of\s+contents/.test(lower) ||
+    /standard\s+forms?/.test(lower) ||
+    /required\s+forms?/.test(lower) ||
+    /application\s+checklist/.test(lower) ||
+    /merit\s+review/.test(lower) ||
+    /review\s+(and\s+)?selection/.test(lower) ||
+    /selection\s+criteria/.test(lower) ||
+    /\breporting\b/.test(lower)
+  );
+}
+
+/**
+ * Returns true when the table looks like an application checklist based on
+ * structure alone: at least two rows whose first-column cell begins with a
+ * checkbox glyph (◻ ☐ □ ☑ ☒). Used as a fallback when no heading signal
+ * is present, ensuring checklist tables are exempt regardless of section naming.
+ */
+function looksLikeApplicationChecklist(table: Element): boolean {
+  const CHECKBOX = /^[\s\u00a0]*[◻☐□☑☒]/;
+  const rows = Array.from(table.querySelectorAll(':scope > tr, :scope > tbody > tr'));
+  if (rows.length < 2) return false;
+  let glyphCount = 0;
+  for (const row of rows) {
+    const firstCell = row.querySelector('td, th');
+    if (firstCell && CHECKBOX.test(firstCell.textContent ?? '')) {
+      glyphCount++;
+    }
+  }
+  return glyphCount >= 2;
+}
+
+/**
  * Returns true if the table appears to be one of the types that are exempt
  * from the caption requirement per the SimplerNOFOs style guide:
  *  - Application contents tables
- *  - Standard forms tables  (SF-424 etc.)
+ *  - Standard forms tables (SF-424 etc.)
  *  - Application checklist tables
  *  - Merit review criteria tables (total and individual)
  *  - Reporting tables
+ *  - Key facts / key dates tables
  *
- * Detection checks the section heading the table is in and the table's
- * first-row text. Either signal alone is sufficient to suppress the warning.
+ * Detection uses four independent signals; any one is sufficient:
+ *  1. The section heading (from the parsed section tree) matches an exempt pattern.
+ *  2. The nearest DOM heading above the table matches an exempt pattern — catches
+ *     tables in subsections where the section-tree heading is a higher-level ancestor.
+ *  3. The table's first-row or first-cell text contains a known exempt identifier.
+ *  4. The table's first column uses checkbox glyphs (◻ ☐ □ ☑ ☒) in at least two
+ *     rows — structural signal for application checklist tables.
  */
-function isExemptFromCaption(table: Element, sectionHeading: string): boolean {
-  const heading = sectionHeading.toLowerCase();
-
+function isExemptFromCaption(
+  table: Element,
+  sectionHeading: string,
+  nearestDomHeading: string
+): boolean {
+  // Signals 1 & 2: heading text (section heading or nearest DOM heading)
   if (
-    /application\s+contents?/.test(heading) ||
-    /table\s+of\s+contents/.test(heading) ||
-    /standard\s+forms?/.test(heading) ||
-    /required\s+forms?/.test(heading) ||
-    /application\s+checklist/.test(heading) ||
-    /merit\s+review/.test(heading) ||
-    /review\s+(and\s+)?selection/.test(heading) ||
-    /selection\s+criteria/.test(heading) ||
-    /reporting\s+requirements?/.test(heading) ||
-    /post.?award\s+reporting/.test(heading)
+    matchesExemptHeadingText(sectionHeading.toLowerCase()) ||
+    matchesExemptHeadingText(nearestDomHeading.toLowerCase())
   ) {
     return true;
   }
 
-  // Table first-row / first-cell content signals
+  // Signal 3: table first-row / first-cell content
   const firstCellText = (table.querySelector('td, th')?.textContent ?? '').toLowerCase();
   const firstRowText = (table.querySelector('tr')?.textContent ?? '').toLowerCase();
-  return (
+  if (
     /key\s+facts/.test(firstCellText) ||
     /key\s+dates/.test(firstCellText) ||
     /key\s+facts/.test(firstRowText) ||
@@ -216,7 +269,12 @@ function isExemptFromCaption(table: Element, sectionHeading: string): boolean {
     /report\s+type/.test(firstRowText) ||
     /sf.?424/.test(firstRowText) ||
     /standard\s+form\s+\d/.test(firstRowText)
-  );
+  ) {
+    return true;
+  }
+
+  // Signal 4: checkbox glyph structure (application checklist)
+  return looksLikeApplicationChecklist(table);
 }
 
 /**
