@@ -15,10 +15,8 @@
 
 * adding pronoun exceptions for headings and table captions ([d69c0ab](https://github.com/agilesix/nofo-design-prep-checker/commit/d69c0ab22bdd37070535c2ac9a14b5e00bf9ece7))
 * adding pronoun exceptions for headings and table captions ([7812fbd](https://github.com/agilesix/nofo-design-prep-checker/commit/7812fbdf5947a1e504fe636eda53e896b3bf808e))
-* **buildDocx:** remove stale unprefixed anchor/name attrs after names… ([8a96776](https://github.com/agilesix/nofo-design-prep-checker/commit/8a96776d424c28fb7d09792dcd0712fc0b5139ba))
-* **buildDocx:** remove stale unprefixed anchor/name attrs after namespace-fallback update ([a5e716d](https://github.com/agilesix/nofo-design-prep-checker/commit/a5e716de26dcc8c7e44e8de0fc695846f2fb8d65))
-* **buildDocx:** update bookmarks and defend against namespace strippi… ([eb1c731](https://github.com/agilesix/nofo-design-prep-checker/commit/eb1c731fcd91a7d4b6b1f9ab503e922aa9e7ba1f))
-* **buildDocx:** update bookmarks and defend against namespace stripping in CLEAN-008 anchor sync ([33d0cbb](https://github.com/agilesix/nofo-design-prep-checker/commit/33d0cbbe83d24cfabb371b044aedb9a12f10485b))
+* **buildDocx:** remove stale unprefixed anchor/name attrs after namespace-fallback update ([8a96776](https://github.com/agilesix/nofo-design-prep-checker/commit/8a96776d424c28fb7d09792dcd0712fc0b5139ba), [a5e716d](https://github.com/agilesix/nofo-design-prep-checker/commit/a5e716de26dcc8c7e44e8de0fc695846f2fb8d65))
+* **buildDocx:** update bookmarks and defend against namespace stripping in CLEAN-008 anchor sync ([eb1c731](https://github.com/agilesix/nofo-design-prep-checker/commit/eb1c731fcd91a7d4b6b1f9ab503e922aa9e7ba1f), [33d0cbb](https://github.com/agilesix/nofo-design-prep-checker/commit/33d0cbbe83d24cfabb371b044aedb9a12f10485b))
 * content control clean up in header and footer ([594b780](https://github.com/agilesix/nofo-design-prep-checker/commit/594b7800e6f878f3ccbd7f042e8df3624bc332a7))
 * content control clean up in header and footer ([8fce5c5](https://github.com/agilesix/nofo-design-prep-checker/commit/8fce5c523dfe8140eb09b7a3a798cacebe72bec7))
 * ensure content controls removed on export ([b28ec6c](https://github.com/agilesix/nofo-design-prep-checker/commit/b28ec6c3fd077250f5e7aad3bce4f6eb35260517))
