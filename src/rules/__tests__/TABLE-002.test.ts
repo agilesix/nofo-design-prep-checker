@@ -3,13 +3,21 @@ import JSZip from 'jszip';
 import TABLE_002 from '../universal/TABLE-002';
 import type { ParsedDocument, Issue } from '../../types';
 
-function makeDoc(html: string): ParsedDocument {
+/**
+ * Build a minimal ParsedDocument from an HTML string.
+ *
+ * @param html          The document HTML.
+ * @param sectionHeading  The heading of the single section (default: "Document start").
+ *                       Pass an exempt heading (e.g. "Application checklist") to test
+ *                       the section-heading exemption signal in TABLE-002.
+ */
+function makeDoc(html: string, sectionHeading = 'Document start'): ParsedDocument {
   return {
     html,
     sections: [
       {
         id: 'section-preamble',
-        heading: 'Document start',
+        heading: sectionHeading,
         headingLevel: 0,
         html,
         rawText: html.replace(/<[^>]+>/g, ''),
@@ -209,15 +217,36 @@ describe('TABLE-002 nearby heading caption substitute', () => {
   });
 });
 
-// ─── Existing exemptions still apply ─────────────────────────────────────────
+// ─── Callout box (single-cell) exemption ─────────────────────────────────────
 
-describe('TABLE-002 existing exemptions', () => {
+describe('TABLE-002 single-cell table (callout box) exemption', () => {
   it('does not flag a single-cell table (callout box)', () => {
     const doc = makeDoc(
       '<table><tbody><tr><td>Single cell content</td></tr></tbody></table>'
     );
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
+
+  it('does not flag a single-cell table whose cell contains a heading and multiple paragraphs', () => {
+    // Exemption is purely structural: exactly one <td> in the table, regardless
+    // of what that cell contains. A callout box with an internal heading and
+    // several body paragraphs must not be flagged for a missing caption.
+    const doc = makeDoc(
+      '<table><tbody><tr><td>' +
+        '<h2>Callout box heading</h2>' +
+        '<p>First paragraph of callout content.</p>' +
+        '<p>Second paragraph of callout content.</p>' +
+        '<p>Third paragraph of callout content.</p>' +
+      '</td></tr></tbody></table>'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+});
+
+// ─── Standard table-type exemptions ──────────────────────────────────────────
+
+describe('TABLE-002 standard table-type exemptions', () => {
+  // ── Key facts / key dates ────────────────────────────────────────────────────
 
   it('does not flag a key facts table (first-cell signal)', () => {
     const doc = makeDoc(
@@ -239,6 +268,102 @@ describe('TABLE-002 existing exemptions', () => {
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
 
+  // ── Application contents ─────────────────────────────────────────────────────
+
+  it('does not flag a table in an "Application contents" section (section heading signal)', () => {
+    const doc = makeDoc(SIMPLE_TABLE, 'Application contents');
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a table when the nearest DOM heading is "Application contents"', () => {
+    // Table is more than 50 words from the heading (so hasNearbyHeadingCaption
+    // does not fire), but nearestDomHeading still reflects the exempt heading.
+    const longParagraph = '<p>' + Array(51).fill('word').join(' ') + '</p>';
+    const doc = makeDoc(
+      '<h2>Application contents</h2>' + longParagraph + SIMPLE_TABLE,
+      'Award information'  // non-exempt section heading
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  // ── Standard forms ───────────────────────────────────────────────────────────
+
+  it('does not flag a table in a "Standard forms" section (section heading signal)', () => {
+    const doc = makeDoc(SIMPLE_TABLE, 'Standard forms');
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a table in a "Required forms" section (section heading signal)', () => {
+    const doc = makeDoc(SIMPLE_TABLE, 'Required forms');
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag an SF-424 standard form table (first-row signal)', () => {
+    const doc = makeDoc(
+      '<table><tbody>' +
+        '<tr><td>SF-424 Application for Federal Assistance</td><td></td></tr>' +
+        '<tr><td>Field A</td><td>Field B</td></tr>' +
+      '</tbody></table>'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  // ── Application checklist ────────────────────────────────────────────────────
+
+  it('does not flag a table in an "Application checklist" section (section heading signal)', () => {
+    const doc = makeDoc(SIMPLE_TABLE, 'Application checklist');
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a table whose first row contains "Application checklist" (first-row signal)', () => {
+    const doc = makeDoc(
+      '<table><tbody>' +
+        '<tr><th>Application checklist</th><th>Status</th></tr>' +
+        '<tr><td>Project narrative</td><td>Required</td></tr>' +
+      '</tbody></table>'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag an application checklist table identified by checkbox glyphs (structural signal)', () => {
+    // No explicit heading or first-row text — exemption fires purely because
+    // at least two rows have a checkbox glyph (◻) in the first column.
+    const doc = makeDoc(
+      '<table><tbody>' +
+        '<tr><td>◻ Project narrative</td><td>Required</td></tr>' +
+        '<tr><td>◻ Budget justification</td><td>Required</td></tr>' +
+        '<tr><td>◻ Letters of support</td><td>Optional</td></tr>' +
+      '</tbody></table>'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag an application checklist table identified by ☐ ballot-box glyphs (structural signal)', () => {
+    // ☐ (U+2610) is an acceptable checkbox substitute recognised by the rule.
+    const doc = makeDoc(
+      '<table><tbody>' +
+        '<tr><td>☐ Project narrative</td><td>Required</td></tr>' +
+        '<tr><td>☐ Budget justification</td><td>Required</td></tr>' +
+      '</tbody></table>'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not exempt a table with only one checkbox-glyph row (minimum is two)', () => {
+    // A single checkbox row is not enough to identify a checklist — could just
+    // be incidental formatting. The table should still be flagged.
+    const doc = makeDoc(
+      '<table><tbody>' +
+        '<tr><td>◻ Project narrative</td><td>Required</td></tr>' +
+        '<tr><td>Regular row</td><td>Value</td></tr>' +
+      '</tbody></table>'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(1);
+    expect((TABLE_002.check(doc, OPTIONS)[0] as Issue).title).toBe('Table is missing a caption');
+  });
+
+  // ── Merit review criteria ────────────────────────────────────────────────────
+
   it('does not flag a merit review criteria table (first-row signal)', () => {
     const doc = makeDoc(
       '<table><tbody>' +
@@ -249,11 +374,62 @@ describe('TABLE-002 existing exemptions', () => {
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
 
-  it('does not flag an SF-424 standard form table (first-row signal)', () => {
+  it('does not flag a merit review table in a "Merit review" section (section heading signal)', () => {
+    const doc = makeDoc(SIMPLE_TABLE, 'Merit review');
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a merit review table when the heading includes a point total in parentheses', () => {
+    // "Merit review criteria (50 points)" — the parenthetical must not prevent
+    // the pattern /merit\s+review/ from matching the heading.
+    const doc = makeDoc(SIMPLE_TABLE, 'Merit review criteria (50 points)');
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a total-points merit review table (first-row signal)', () => {
     const doc = makeDoc(
       '<table><tbody>' +
-        '<tr><td>SF-424 Application for Federal Assistance</td><td></td></tr>' +
-        '<tr><td>Field A</td><td>Field B</td></tr>' +
+        '<tr><th>Total points</th><th>100</th></tr>' +
+        '<tr><td>Criterion A</td><td>40</td></tr>' +
+        '<tr><td>Criterion B</td><td>60</td></tr>' +
+      '</tbody></table>'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag an individual merit review table (maximum points first-row signal)', () => {
+    const doc = makeDoc(
+      '<table><tbody>' +
+        '<tr><th>Criterion</th><th>Maximum points</th></tr>' +
+        '<tr><td>Approach</td><td>30</td></tr>' +
+      '</tbody></table>'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  // ── Reporting ────────────────────────────────────────────────────────────────
+
+  it('does not flag a table in a "Reporting" section (section heading signal)', () => {
+    // A section heading that is simply "Reporting" must trigger the exemption.
+    const doc = makeDoc(SIMPLE_TABLE, 'Reporting');
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a table in a "Reporting requirements" section (section heading signal)', () => {
+    const doc = makeDoc(SIMPLE_TABLE, 'Reporting requirements');
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a table in a "Post-award reporting" section (section heading signal)', () => {
+    const doc = makeDoc(SIMPLE_TABLE, 'Post-award reporting');
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a reporting table identified by "Report type" in the first row (first-row signal)', () => {
+    const doc = makeDoc(
+      '<table><tbody>' +
+        '<tr><th>Report type</th><th>Frequency</th></tr>' +
+        '<tr><td>Progress report</td><td>Semi-annual</td></tr>' +
       '</tbody></table>'
     );
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
@@ -325,6 +501,23 @@ describe('TABLE-002 sentence case suggestion', () => {
     // "Program timeline overview" — only the first word is capitalized → sentence case.
     const doc = makeDoc('<p>Program timeline overview</p>' + SIMPLE_TABLE);
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not surface a sentence-case suggestion for a caption whose only non-first uppercase word is "PDF"', () => {
+    // "PDF" is an all-caps acronym and must never count as title-case evidence.
+    // "Submission checklist for PDF" is sentence case — no suggestion.
+    const doc = makeDoc('<p>Submission checklist for PDF</p>' + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('surfaces a sentence-case suggestion when genuine title-case words appear alongside "PDF"', () => {
+    // "Submission Checklist for PDF" — "Checklist" is a genuine title-case word.
+    // "PDF" is exempt (all-caps acronym), but the issue is still emitted for "Checklist".
+    const doc = makeDoc('<p>Submission Checklist for PDF</p>' + SIMPLE_TABLE);
+    const results = TABLE_002.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as Issue).severity).toBe('suggestion');
+    expect((results[0] as Issue).title).toBe('Table caption should use sentence case');
   });
 
   it('does not surface a sentence-case suggestion for a "Table:" prefixed sentence-case caption', () => {

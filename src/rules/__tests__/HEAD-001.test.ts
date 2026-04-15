@@ -203,6 +203,25 @@ describe('HEAD-001: ALL-CAPS words are skipped', () => {
     // HRSA preserved; "funding" and "overview" capitalized
     expect(pairs[0]!.new).toBe('HRSA Funding Overview');
   });
+
+  it('does not flag an H3 whose only non-first uppercase word is "PDF"', () => {
+    // "PDF" has no lowercase letters → treated as an acronym, skipped entirely.
+    // The only uppercase word after the first is "PDF" → no title-case evidence.
+    const doc = makeDoc('<h3>How to submit PDF documents</h3>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('still flags an H3 with genuine title-case words when "PDF" is also present', () => {
+    // "Submit" and "Documents" are genuine title-case words (they have lowercase
+    // letters). "PDF" is an acronym and contributes no title-case evidence, but
+    // the other capitalized words are still flagged.
+    const doc = makeDoc('<h3>How to Submit PDF Documents</h3>');
+    const results = HEAD_001.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const issue = results[0] as Issue;
+    expect(issue.title).toBe('H3 heading may need sentence case');
+    expect(issue.severity).toBe('suggestion');
+  });
 });
 
 // ─── Colon restart ───────────────────────────────────────────────────────────
