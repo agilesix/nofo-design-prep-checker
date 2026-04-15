@@ -707,6 +707,82 @@ describe('buildDocx — CLEAN-008: heading leading-space removal', () => {
     // Heading is still cleaned regardless.
     expect(extractParagraphTexts(outXml)[0]).toBe('Contacts and Support');
   });
+
+  it('also updates the w:bookmarkStart name so the hyperlink target still resolves in Word', async () => {
+    // Real OOXML documents have a <w:bookmarkStart w:name="..."/> inside the
+    // heading paragraph.  Updating w:hyperlink w:anchor without also updating
+    // the bookmark name leaves the link pointing at a non-existent target.
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_HEADING}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading1"/></w:pPr>` +
+      `<w:bookmarkStart w:id="0" w:name="_Contacts_and_Support"/>` +
+      `<w:r><w:t xml:space="preserve"> Contacts and Support</w:t></w:r>` +
+      `<w:bookmarkEnd w:id="0"/>` +
+      `</w:p>` +
+      `<w:p>` +
+      `<w:hyperlink w:anchor="_Contacts_and_Support" w:history="1">` +
+      `<w:r><w:t>link text</w:t></w:r>` +
+      `</w:hyperlink>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body></w:document>`
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+
+    // Bookmark name must be updated to the clean slug (no leading underscore).
+    expect(outXml).toMatch(/w:name="Contacts_and_Support"/);
+    expect(outXml).not.toMatch(/w:name="_Contacts_and_Support"/);
+    // Hyperlink anchor must also be updated.
+    expect(outXml).toMatch(/w:anchor="Contacts_and_Support"/);
+    expect(outXml).not.toMatch(/w:anchor="_Contacts_and_Support"/);
+    // Heading text must also be clean.
+    expect(extractParagraphTexts(outXml)[0]).toBe('Contacts and Support');
+  });
+
+  it('still updates the hyperlink anchor when the w: prefix has been stripped from w:anchor (namespace fallback)', async () => {
+    // Simulates the state after a prior XMLSerializer pass dropped the "w:"
+    // prefix: the hyperlink carries anchor="_Contacts_and_Support" (no
+    // namespace) rather than w:anchor="...".  getAttributeNS(W, 'anchor')
+    // returns null in this case, so the function must fall back to
+    // getAttribute('anchor').  Using a bare anchor= attribute here makes the
+    // test deterministic: it fails if the fallback is removed.
+    // After the fix the output must contain the namespaced w:anchor with the
+    // clean slug and must not carry a stale unprefixed anchor= attribute.
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_HEADING}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading1"/></w:pPr>` +
+      `<w:r><w:t xml:space="preserve"> Contacts and Support</w:t></w:r>` +
+      `</w:p>` +
+      `<w:p>` +
+      `<w:hyperlink anchor="_Contacts_and_Support" w:history="1">` +
+      `<w:r><w:t>link text</w:t></w:r>` +
+      `</w:hyperlink>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body></w:document>`
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+
+    // Hyperlink must be updated to the clean namespaced slug.
+    expect(outXml).toMatch(/w:anchor="Contacts_and_Support"/);
+    expect(outXml).not.toMatch(/w:anchor="_Contacts_and_Support"/);
+    // No stale unprefixed anchor= attribute must remain in the output.
+    expect(outXml).not.toMatch(/\banchor="_Contacts_and_Support"/);
+    // Heading must be clean.
+    expect(extractParagraphTexts(outXml)[0]).toBe('Contacts and Support');
+  });
 });
 
 // ─── applyAcceptTrackedChangesAndRemoveComments (CLEAN-009) ──────────────────

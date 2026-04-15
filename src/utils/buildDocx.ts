@@ -777,11 +777,36 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
   // Rewrite internal hyperlinks whose w:anchor referenced a heading that had
   // its leading space removed.  The anchor slug changes in lock-step with the
   // heading text; without this update the link would become a broken reference.
+  //
+  // Two-part update required:
+  //  1. w:hyperlink w:anchor — the navigation target stored on the link element.
+  //  2. w:bookmarkStart w:name — the bookmark Word resolves the anchor against.
+  //     Updating the hyperlink without also updating the bookmark leaves the link
+  //     pointing to a non-existent target, so the link is broken in Word.
+  //
+  // getAttributeNS is the canonical read for namespace-qualified attributes.
+  // We also fall back to getAttribute('anchor') / getAttribute('name') as a
+  // defence against prior XMLSerializer passes that may have emitted the
+  // attribute without the 'w:' prefix — in that case the re-parsed DOM holds a
+  // non-namespaced attribute that getAttributeNS cannot see.  (This is the same
+  // concern documented in applyDocumentBodyFixes for LINK-006.)
   if (anchorRemap.size > 0) {
     for (const link of Array.from(xmlDoc.getElementsByTagName('w:hyperlink'))) {
-      const anchor = link.getAttributeNS(W, 'anchor');
+      const anchor = link.getAttributeNS(W, 'anchor') ?? link.getAttribute('anchor');
       if (anchor && anchorRemap.has(anchor)) {
         link.setAttributeNS(W, 'w:anchor', anchorRemap.get(anchor)!);
+        // If the attribute was unprefixed (the serializer-stripping fallback path),
+        // setAttributeNS adds a new namespaced attribute but leaves the old
+        // unprefixed one in place.  Remove it so serialized XML never carries both.
+        link.removeAttribute('anchor');
+      }
+    }
+    for (const bm of Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))) {
+      const name = bm.getAttributeNS(W, 'name') ?? bm.getAttribute('name');
+      if (name && anchorRemap.has(name)) {
+        bm.setAttributeNS(W, 'w:name', anchorRemap.get(name)!);
+        // Same stale-attribute cleanup as above.
+        bm.removeAttribute('name');
       }
     }
   }
