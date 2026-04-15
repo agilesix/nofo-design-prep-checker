@@ -463,6 +463,22 @@ async function applyDoublespaceFix(zip: JSZip): Promise<void> {
   zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
 }
 
+/**
+ * Returns the canonical set of OOXML "story part" paths that carry document
+ * body content: the main document, footnotes, endnotes, and any header/footer
+ * parts present in the ZIP.
+ *
+ * Any function that needs to operate across all text-bearing parts should use
+ * this helper so the set stays consistent in one place.
+ */
+function getStoryPartPaths(zip: JSZip): string[] {
+  const fixed = ['word/document.xml', 'word/footnotes.xml', 'word/endnotes.xml'];
+  const headerFooter = Object.keys(zip.files).filter(name =>
+    /^word\/(header|footer)\d*\.xml$/.test(name)
+  );
+  return [...fixed, ...headerFooter];
+}
+
 function findAncestorByLocalName(el: Element, localName: string): Element | null {
   let current: Element | null = el.parentElement;
   while (current) {
@@ -1204,14 +1220,8 @@ async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<v
   const serializer = new XMLSerializer();
 
   // ── Collect all XML parts to process ──────────────────────────────────────
-  const fixedParts = ['word/document.xml', 'word/footnotes.xml', 'word/endnotes.xml'];
-  const headerFooterParts = Object.keys(zip.files).filter(name =>
-    /^word\/(header|footer)\d*\.xml$/.test(name)
-  );
-  const allParts = [...fixedParts, ...headerFooterParts];
-
   // ── Process each part ─────────────────────────────────────────────────────
-  for (const path of allParts) {
+  for (const path of getStoryPartPaths(zip)) {
     const file = zip.file(path);
     if (!file) continue;
 
@@ -1915,16 +1925,10 @@ async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
  * no content controls, keeping the common case (no content controls) nearly free.
  */
 async function applyRemoveContentControls(zip: JSZip): Promise<void> {
-  const fixedParts = ['word/document.xml', 'word/footnotes.xml', 'word/endnotes.xml'];
-  const headerFooterParts = Object.keys(zip.files).filter(name =>
-    /^word\/(header|footer)\d*\.xml$/.test(name)
-  );
-  const allParts = [...fixedParts, ...headerFooterParts];
-
   const parser = new DOMParser();
   const serializer = new XMLSerializer();
 
-  for (const path of allParts) {
+  for (const path of getStoryPartPaths(zip)) {
     const file = zip.file(path);
     if (!file) continue;
 
