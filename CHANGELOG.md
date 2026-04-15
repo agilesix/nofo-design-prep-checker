@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.1.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.0.4...v1.1.0) (2026-04-15)
+
+
+### Features
+
+* **buildDocx:** update internal link anchors when CLEAN-008 removes … ([929900a](https://github.com/agilesix/nofo-design-prep-checker/commit/929900a65c750497c08f02c672156e528a6b9134))
+* **buildDocx:** update internal link anchors when CLEAN-008 removes heading leading spaces ([9ad7df9](https://github.com/agilesix/nofo-design-prep-checker/commit/9ad7df9c256c62e410781054a4afec46b99d2eb5))
+* suppress duplicate sentence case suggestion when Form rule fires ([fe3952e](https://github.com/agilesix/nofo-design-prep-checker/commit/fe3952e15769df420da04cdc4cec68b81d3984b2))
+* suppress duplicate sentence case suggestion when Form rule fires ([ccc064b](https://github.com/agilesix/nofo-design-prep-checker/commit/ccc064b4a6be2683db7440d1cb426a692eeababa))
+
+
+### Bug Fixes
+
+* adding pronoun exceptions for headings and table captions ([d69c0ab](https://github.com/agilesix/nofo-design-prep-checker/commit/d69c0ab22bdd37070535c2ac9a14b5e00bf9ece7))
+* adding pronoun exceptions for headings and table captions ([7812fbd](https://github.com/agilesix/nofo-design-prep-checker/commit/7812fbdf5947a1e504fe636eda53e896b3bf808e))
+* **buildDocx:** remove stale unprefixed anchor/name attrs after names… ([8a96776](https://github.com/agilesix/nofo-design-prep-checker/commit/8a96776d424c28fb7d09792dcd0712fc0b5139ba))
+* **buildDocx:** remove stale unprefixed anchor/name attrs after namespace-fallback update ([a5e716d](https://github.com/agilesix/nofo-design-prep-checker/commit/a5e716de26dcc8c7e44e8de0fc695846f2fb8d65))
+* **buildDocx:** update bookmarks and defend against namespace strippi… ([eb1c731](https://github.com/agilesix/nofo-design-prep-checker/commit/eb1c731fcd91a7d4b6b1f9ab503e922aa9e7ba1f))
+* **buildDocx:** update bookmarks and defend against namespace stripping in CLEAN-008 anchor sync ([33d0cbb](https://github.com/agilesix/nofo-design-prep-checker/commit/33d0cbbe83d24cfabb371b044aedb9a12f10485b))
+* content control clean up in header and footer ([594b780](https://github.com/agilesix/nofo-design-prep-checker/commit/594b7800e6f878f3ccbd7f042e8df3624bc332a7))
+* content control clean up in header and footer ([8fce5c5](https://github.com/agilesix/nofo-design-prep-checker/commit/8fce5c523dfe8140eb09b7a3a798cacebe72bec7))
+* ensure content controls removed on export ([b28ec6c](https://github.com/agilesix/nofo-design-prep-checker/commit/b28ec6c3fd077250f5e7aad3bce4f6eb35260517))
+* ensure content controls removed on export ([8603856](https://github.com/agilesix/nofo-design-prep-checker/commit/8603856868f023ffde4e4bf0575d778253311e93))
+* fixes for ihs list exemptions for headings ([8f444e6](https://github.com/agilesix/nofo-design-prep-checker/commit/8f444e657e717cc6e83f18aad3a6e6b325b45499))
+* fixes for ihs list exemptions for headings ([4d31c1a](https://github.com/agilesix/nofo-design-prep-checker/commit/4d31c1aa46fe84b26b73a7ef387002a956db295a))
+* only flag actual captions plus content controls clean up ([e28193f](https://github.com/agilesix/nofo-design-prep-checker/commit/e28193f5f3f7c27fdb872649c421faf75d6b7e72))
+* only flag actual captions plus content controls clean up ([6dfeb0f](https://github.com/agilesix/nofo-design-prep-checker/commit/6dfeb0f4cb117563269344d5c9c136de65a24d30))
+* remove orphan banners in the xml parts to process section comment ([19604f8](https://github.com/agilesix/nofo-design-prep-checker/commit/19604f89a0b858e3db296136416dcf62a4f5b88e))
+* remove orphan banners in the xml parts to process section comment ([8fd65bb](https://github.com/agilesix/nofo-design-prep-checker/commit/8fd65bba9d5afa209793fa47585e21e537a7d708))
+* replace indigenous except rule ([5bee077](https://github.com/agilesix/nofo-design-prep-checker/commit/5bee0771f1fdff25029929c94022a2326e64eac2))
+* replace indigenous except rule ([b96714b](https://github.com/agilesix/nofo-design-prep-checker/commit/b96714b56ba7426324dfccc1b92bfa49309c98a9))
+* update LINK-006 test assertions to match trailing period in description ([4282cb8](https://github.com/agilesix/nofo-design-prep-checker/commit/4282cb8b9e1e4b0fc6f6446be68bc6f5c3c6ecfe))
+
 ## [1.0.4](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.0.3...v1.0.4) (2026-04-15)
 
 
