@@ -587,14 +587,24 @@ describe('HEAD-001: Native American and Indigenous proper noun terms are exempt 
     expect(issues).toHaveLength(0);
   });
 
-  it('does not flag an H3 containing "AI/AN"', () => {
-    // "AI/AN" triggers the indigenous-term exemption — subsequent capitalised
-    // words in the heading are not flagged.
-    const doc = makeDoc('<h3>AI/AN Community Health Programs</h3>');
+  it('does not flag an H3 where "AI/AN" is the only non-sentence-start token', () => {
+    // "AI/AN" contains no lowercase letters — already treated as an acronym by
+    // isSkippable. "populations" is lowercase. Neither word is title-case evidence.
+    const doc = makeDoc('<h3>Eligibility for AI/AN populations</h3>');
     const issues = HEAD_001.check(doc, OPTIONS).filter(
       r => (r as Issue).title?.includes('sentence case')
     );
     expect(issues).toHaveLength(0);
+  });
+
+  it('still flags an H3 that has title-cased words unrelated to Indigenous terms', () => {
+    // "Tribal" is exempt as a proper noun, but "Review" and "Criteria" are
+    // ordinary title-cased words and must still be flagged.
+    const doc = makeDoc('<h3>Tribal Review Criteria</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(1);
   });
 
   it('still auto-fixes an H2 that contains an indigenous term but has other lowercase content words', () => {

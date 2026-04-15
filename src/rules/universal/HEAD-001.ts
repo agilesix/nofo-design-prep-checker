@@ -109,8 +109,10 @@ function looksLikeTitleCase(text: string): boolean {
   const words = text.trim().split(/\s+/);
   if (words.length < 2) return false;
   const starts = sentenceStartIndices(words);
+  const indigenousExempt = indigenousExemptPositions(words);
   for (let i = 0; i < words.length; i++) {
     if (starts.has(i)) continue;
+    if (indigenousExempt.has(i)) continue;
     const clean = (words[i] ?? '').replace(/^[^a-zA-Z0-9]+/, '');
     if (!clean || isSkippable(clean)) continue;
     if (/^[A-Z]/.test(clean)) return true;
@@ -273,28 +275,45 @@ function isFederalSystemException(text: string): boolean {
 }
 
 /**
- * Returns true when the heading contains a Native American or Indigenous proper
- * noun term that is conventionally capitalised per IHS style guide and other
- * federal agency guidance. H3–H6 headings containing these terms are exempt
- * from the title-case capitalization suggestion so they are not flagged solely
- * because of the capitalization of these proper nouns.
+ * Returns the set of word-array indices covered by a recognized Native American
+ * or Indigenous proper-noun term per IHS style guide and federal usage
+ * conventions. looksLikeTitleCase skips these positions so their
+ * capitalization is not treated as title-case evidence; other capitalised words
+ * in the same heading are still flagged normally.
  *
- * Recognized terms (case-sensitive — lowercase occurrences do not cause false
- * positives and do not need to be exempted):
- *   Indian, Tribe(s), Tribal, AI/AN
- *   (covers compound proper nouns: Indian Tribes, Tribal Organizations,
- *    Urban Indian Organizations)
+ * Phrase matching is longest-first so that "Urban Indian Organizations" (3
+ * tokens) is matched before the 2-token "Indian Tribes" fallback, and both
+ * are matched before the single-token "Indian" fallback.
  *
- * H2 headings are not exempted here — they may still be auto-fixed when
- * sentence-case content words (other than these proper nouns) are present.
+ * Recognized single-word terms: Indian, Tribe, Tribes, Tribal
+ * Recognized multi-word phrases: Indian Tribes · Tribal Organizations ·
+ *                                 Urban Indian Organizations
+ *
+ * AI/AN is omitted: it contains no lowercase letters and is already treated
+ * as skippable by isSkippable (ALL-CAPS / no-lowercase rule).
  */
-function isIndigenousTermHeading(text: string): boolean {
-  return (
-    /\bIndian\b/.test(text) ||
-    /\bTribes?\b/.test(text) ||
-    /\bTribal\b/.test(text) ||
-    /\bAI\/AN\b/.test(text)
-  );
+function indigenousExemptPositions(words: string[]): Set<number> {
+  const exempt = new Set<number>();
+  const bare = (w: string) =>
+    w.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '');
+
+  for (let i = 0; i < words.length; i++) {
+    const w0 = bare(words[i] ?? '');
+    const w1 = bare(words[i + 1] ?? '');
+    const w2 = bare(words[i + 2] ?? '');
+
+    if (w0 === 'Urban' && w1 === 'Indian' && w2 === 'Organizations') {
+      exempt.add(i); exempt.add(i + 1); exempt.add(i + 2);
+    } else if (w0 === 'Indian' && w1 === 'Tribes') {
+      exempt.add(i); exempt.add(i + 1);
+    } else if (w0 === 'Tribal' && w1 === 'Organizations') {
+      exempt.add(i); exempt.add(i + 1);
+    } else if (w0 === 'Indian' || w0 === 'Tribe' || w0 === 'Tribes' || w0 === 'Tribal') {
+      exempt.add(i);
+    }
+  }
+
+  return exempt;
 }
 
 /**
@@ -379,7 +398,7 @@ const HEAD_001: Rule = {
         if (corrected !== text) {
           h2Corrections.push({ old: text, new: corrected });
         }
-      } else if (level >= 3 && !isIndigenousTermHeading(text) && looksLikeTitleCase(text)) {
+      } else if (level >= 3 && looksLikeTitleCase(text)) {
         results.push({
           id: `HEAD-001-${idx}`,
           ruleId: 'HEAD-001',
