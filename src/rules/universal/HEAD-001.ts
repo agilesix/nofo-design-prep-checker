@@ -302,8 +302,8 @@ function indigenousExemptPositions(words: string[]): Set<number> {
   const exempt = new Set<number>();
   const bare = (w: string) =>
     w.replace(/^[^a-zA-Z0-9]+/, '')
-     .replace(/[^a-zA-Z0-9]+$/, '')
-     .replace(/['\u2018\u2019]s$/i, '');
+      .replace(/[^a-zA-Z0-9]+$/, '')
+      .replace(/['\u2018\u2019]s$/i, '');
 
   for (let i = 0; i < words.length; i++) {
     const w0 = bare(words[i] ?? '');
