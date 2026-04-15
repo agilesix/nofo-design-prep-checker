@@ -1902,26 +1902,57 @@ async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
 }
 
 /**
- * Strips all <w:sdt> (content control) elements from word/document.xml.
+ * Strips all <w:sdt> (content control) elements from every story part in the
+ * document: word/document.xml, word/footnotes.xml, word/endnotes.xml, and any
+ * header/footer parts present in the ZIP. This is the same part set used by
+ * applyAcceptTrackedChangesAndRemoveComments.
+ *
  * For each <w:sdt>, the visible content inside <w:sdtContent> is spliced in
  * place of the wrapper; <w:sdtPr> and <w:sdtEndPr> are discarded. Applied
- * unconditionally on every download so the output is never delivered with
- * active content controls regardless of the document's original state.
+ * unconditionally on every download.
  *
- * Processes elements in reverse document order (innermost first) so nested
- * content controls are unwrapped before their ancestors.
+ * A cheap string pre-check ('<w:sdt') skips DOM parsing for parts that contain
+ * no content controls, keeping the common case (no content controls) nearly free.
  */
 async function applyRemoveContentControls(zip: JSZip): Promise<void> {
-  const docFile = zip.file('word/document.xml');
-  if (!docFile) return;
+  const fixedParts = ['word/document.xml', 'word/footnotes.xml', 'word/endnotes.xml'];
+  const headerFooterParts = Object.keys(zip.files).filter(name =>
+    /^word\/(header|footer)\d*\.xml$/.test(name)
+  );
+  const allParts = [...fixedParts, ...headerFooterParts];
 
-  const xmlStr = await docFile.async('string');
   const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+  const serializer = new XMLSerializer();
 
-  // Reverse document order → innermost <w:sdt> processed before ancestors.
+  for (const path of allParts) {
+    const file = zip.file(path);
+    if (!file) continue;
+
+    const xmlStr = await file.async('string');
+    // Cheap pre-check: skip DOM parse when the part contains no content controls.
+    if (!xmlStr.includes('<w:sdt')) continue;
+
+    const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+    if (stripContentControlsFromXmlDoc(xmlDoc)) {
+      zip.file(path, serializer.serializeToString(xmlDoc));
+    }
+  }
+}
+
+/**
+ * Unwraps all <w:sdt> elements in the given XML document in-place, splicing
+ * each control's <w:sdtContent> children into the parent in its place.
+ * <w:sdtPr> and <w:sdtEndPr> are discarded with the wrapper.
+ * Returns true when at least one <w:sdt> was found and removed.
+ *
+ * Processes in reverse document order so nested controls are unwrapped before
+ * their ancestors — when an inner <w:sdt> is removed, its extracted children
+ * land inside the outer <w:sdtContent>, which the outer pass then hoists
+ * correctly.
+ */
+function stripContentControlsFromXmlDoc(xmlDoc: Document): boolean {
   const sdts = Array.from(xmlDoc.getElementsByTagName('w:sdt')).reverse();
-  if (sdts.length === 0) return;
+  if (sdts.length === 0) return false;
 
   for (const sdt of sdts) {
     const parent = sdt.parentNode;
@@ -1936,6 +1967,5 @@ async function applyRemoveContentControls(zip: JSZip): Promise<void> {
     parent.removeChild(sdt);
   }
 
-  const serializer = new XMLSerializer();
-  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  return true;
 }

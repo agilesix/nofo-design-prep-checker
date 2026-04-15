@@ -1866,6 +1866,15 @@ function makeSdtDocumentXml(innerXml: string): string {
   );
 }
 
+/** Run buildDocx and return the text of any named part from the output blob. */
+async function readOutputPart(zip: JSZip, path: string): Promise<string | null> {
+  const blob = await buildDocx(zip, [], []);
+  const outZip = await JSZip.loadAsync(blob);
+  const file = outZip.file(path);
+  if (!file) return null;
+  return file.async('string');
+}
+
 describe('buildDocx — content control removal', () => {
   it('removes the <w:sdt> wrapper and its <w:sdtPr> / <w:sdtContent> elements', async () => {
     const zip = new JSZip();
@@ -1900,5 +1909,74 @@ describe('buildDocx — content control removal', () => {
     const paragraphs = extractParagraphTexts(outXml);
     expect(paragraphs).toContain('First paragraph');
     expect(paragraphs).toContain('Second paragraph');
+  });
+
+  it('unwraps nested content controls, preserving the innermost text', async () => {
+    // An outer <w:sdt> wraps an inner <w:sdt>. Reverse-order processing removes
+    // the inner control first; the outer pass then correctly hoists the already-
+    // extracted content. No <w:sdt> should survive.
+    const nestedXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${SDT_NS}">` +
+      `<w:body>` +
+      `<w:sdt><w:sdtPr/>` +
+      `<w:sdtContent>` +
+      `<w:sdt><w:sdtPr/>` +
+      `<w:sdtContent><w:p><w:r><w:t>Inner text</w:t></w:r></w:p></w:sdtContent>` +
+      `</w:sdt>` +
+      `</w:sdtContent>` +
+      `</w:sdt>` +
+      `<w:sectPr/>` +
+      `</w:body>` +
+      `</w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', nestedXml);
+
+    const outXml = await getOutputDocXml(zip);
+
+    expect(outXml).not.toContain('w:sdt');
+    expect(extractParagraphTexts(outXml)).toContain('Inner text');
+  });
+
+  it('strips content controls from a header part (word/header1.xml)', async () => {
+    // Content controls in headers live in a separate ZIP entry — they must be
+    // stripped even though they are not in word/document.xml.
+    const headerXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:hdr xmlns:w="${SDT_NS}">` +
+      `<w:sdt><w:sdtPr/>` +
+      `<w:sdtContent><w:p><w:r><w:t>Header text</w:t></w:r></w:p></w:sdtContent>` +
+      `</w:sdt>` +
+      `</w:hdr>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocumentXml(['Body text']));
+    zip.file('word/header1.xml', headerXml);
+
+    const outHeaderXml = await readOutputPart(zip, 'word/header1.xml');
+
+    expect(outHeaderXml).not.toBeNull();
+    expect(outHeaderXml).not.toContain('w:sdt');
+    expect(outHeaderXml).toContain('Header text');
+  });
+
+  it('strips content controls from footnotes (word/footnotes.xml)', async () => {
+    // Content controls in footnotes are in word/footnotes.xml — they must also
+    // be stripped from the output.
+    const footnotesXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:footnotes xmlns:w="${SDT_NS}">` +
+      `<w:sdt><w:sdtPr/>` +
+      `<w:sdtContent><w:p><w:r><w:t>Footnote text</w:t></w:r></w:p></w:sdtContent>` +
+      `</w:sdt>` +
+      `</w:footnotes>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocumentXml(['Body text']));
+    zip.file('word/footnotes.xml', footnotesXml);
+
+    const outFootnotesXml = await readOutputPart(zip, 'word/footnotes.xml');
+
+    expect(outFootnotesXml).not.toBeNull();
+    expect(outFootnotesXml).not.toContain('w:sdt');
+    expect(outFootnotesXml).toContain('Footnote text');
   });
 });
