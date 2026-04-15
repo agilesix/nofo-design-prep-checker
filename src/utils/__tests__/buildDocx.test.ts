@@ -1845,3 +1845,60 @@ describe('buildDocx — applyH2TitleCaseFix', () => {
     expect(outXml).not.toContain('Program Description Information');
   });
 });
+
+// ─── applyRemoveContentControls ──────────────────────────────────────────────
+
+const SDT_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+/** Build a document.xml string that wraps `innerXml` in a single <w:sdt>. */
+function makeSdtDocumentXml(innerXml: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${SDT_NS}">` +
+    `<w:body>` +
+    `<w:sdt>` +
+    `<w:sdtPr><w:tag w:val="testControl"/></w:sdtPr>` +
+    `<w:sdtContent>${innerXml}</w:sdtContent>` +
+    `</w:sdt>` +
+    `<w:sectPr/>` +
+    `</w:body>` +
+    `</w:document>`
+  );
+}
+
+describe('buildDocx — content control removal', () => {
+  it('removes the <w:sdt> wrapper and its <w:sdtPr> / <w:sdtContent> elements', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSdtDocumentXml('<w:p><w:r><w:t>Hello</w:t></w:r></w:p>'));
+
+    const outXml = await getOutputDocXml(zip);
+
+    expect(outXml).not.toContain('w:sdt');
+    expect(outXml).not.toContain('w:sdtPr');
+    expect(outXml).not.toContain('w:sdtContent');
+  });
+
+  it('preserves the visible text content from inside the content control', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeSdtDocumentXml('<w:p><w:r><w:t>Preserved text</w:t></w:r></w:p>')
+    );
+
+    const outXml = await getOutputDocXml(zip);
+
+    const paragraphs = extractParagraphTexts(outXml);
+    expect(paragraphs).toContain('Preserved text');
+  });
+
+  it('leaves a document with no content controls unchanged', async () => {
+    const zip = await makeZip(['First paragraph', 'Second paragraph']);
+
+    const outXml = await getOutputDocXml(zip);
+
+    expect(outXml).not.toContain('w:sdt');
+    const paragraphs = extractParagraphTexts(outXml);
+    expect(paragraphs).toContain('First paragraph');
+    expect(paragraphs).toContain('Second paragraph');
+  });
+});

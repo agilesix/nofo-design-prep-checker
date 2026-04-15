@@ -154,6 +154,10 @@ export async function buildDocx(
     await applyTimeFormatCorrections(zip);
   }
 
+  // Strip content controls — unconditional, silent (documented on the Download
+  // page; no issue is surfaced to the user and no entry goes in the summary).
+  await applyRemoveContentControls(zip);
+
   return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 }
 
@@ -1895,4 +1899,43 @@ async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
     const serializer = new XMLSerializer();
     zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
   }
+}
+
+/**
+ * Strips all <w:sdt> (content control) elements from word/document.xml.
+ * For each <w:sdt>, the visible content inside <w:sdtContent> is spliced in
+ * place of the wrapper; <w:sdtPr> and <w:sdtEndPr> are discarded. Applied
+ * unconditionally on every download so the output is never delivered with
+ * active content controls regardless of the document's original state.
+ *
+ * Processes elements in reverse document order (innermost first) so nested
+ * content controls are unwrapped before their ancestors.
+ */
+async function applyRemoveContentControls(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  // Reverse document order → innermost <w:sdt> processed before ancestors.
+  const sdts = Array.from(xmlDoc.getElementsByTagName('w:sdt')).reverse();
+  if (sdts.length === 0) return;
+
+  for (const sdt of sdts) {
+    const parent = sdt.parentNode;
+    if (!parent) continue;
+    const sdtContent = Array.from(sdt.children).find(c => c.localName === 'sdtContent');
+    if (sdtContent) {
+      // Splice visible content in place of the <w:sdt> wrapper.
+      while (sdtContent.firstChild) {
+        parent.insertBefore(sdtContent.firstChild, sdt);
+      }
+    }
+    parent.removeChild(sdt);
+  }
+
+  const serializer = new XMLSerializer();
+  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
 }
