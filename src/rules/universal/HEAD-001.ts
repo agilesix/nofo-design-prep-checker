@@ -110,9 +110,11 @@ function looksLikeTitleCase(text: string): boolean {
   if (words.length < 2) return false;
   const starts = sentenceStartIndices(words);
   const indigenousExempt = indigenousExemptPositions(words);
+  const acronymExempt = acronymPhraseExemptPositions(words);
   for (let i = 0; i < words.length; i++) {
     if (starts.has(i)) continue;
     if (indigenousExempt.has(i)) continue;
+    if (acronymExempt.has(i)) continue;
     const clean = (words[i] ?? '').replace(/^[^a-zA-Z0-9]+/, '');
     if (!clean || isSkippable(clean)) continue;
     if (/^[A-Z]/.test(clean)) return true;
@@ -325,6 +327,57 @@ function indigenousExemptPositions(words: string[]): Set<number> {
 }
 
 /**
+ * Returns the set of word-array indices whose capitalization should be ignored
+ * because they are part of a proper-noun phrase immediately followed by its
+ * parenthetical acronym — e.g. "National Mesothelioma Virtual Bank (NMVB)" or
+ * "Office of Global Affairs (OGA)".
+ *
+ * Algorithm: for each token that looks like (ACRONYM) — opening paren, two or
+ * more uppercase letters, closing paren, optional trailing punctuation — scan
+ * backward through the word array and collect positions until a lowercase
+ * non-minor word is encountered. Capitalized words are marked exempt; minor
+ * words (of, and, for, …) are skipped over without being marked because they
+ * are already treated as skippable by isSkippable.
+ *
+ * The acronym token itself needs no special handling: it contains no lowercase
+ * letters and is already skipped by isSkippable.
+ */
+function acronymPhraseExemptPositions(words: string[]): Set<number> {
+  const exempt = new Set<number>();
+
+  for (let j = 0; j < words.length; j++) {
+    // Detect a parenthetical acronym token, stripping any surrounding punctuation.
+    const tokenBare = (words[j] ?? '')
+      .replace(/^[^a-zA-Z()]+/, '')
+      .replace(/[^a-zA-Z()]+$/, '');
+    if (!/^\([A-Z]{2,}\)$/.test(tokenBare)) continue;
+
+    // Scan backward to find the proper-noun phrase that precedes the acronym.
+    for (let k = j - 1; k >= 0; k--) {
+      const clean = (words[k] ?? '')
+        .replace(/^[^a-zA-Z0-9]+/, '')
+        .replace(/[^a-zA-Z0-9]+$/, '');
+      if (!clean) break;
+
+      if (/^[A-Z]/.test(clean)) {
+        // Capitalized word — part of the proper noun; mark as exempt.
+        exempt.add(k);
+      } else if (MINOR_WORDS.has(clean.toLowerCase())) {
+        // Lowercase minor word (of, and, for, …) embedded in an organization
+        // name — keep scanning without marking. Capitalized minor words are
+        // handled by the branch above and are added to `exempt`.
+        continue;
+      } else {
+        // Lowercase non-minor word — we have left the proper noun phrase.
+        break;
+      }
+    }
+  }
+
+  return exempt;
+}
+
+/**
  * Returns true when the word "Form" (capital F) appears in any position
  * other than as the first word of the heading.
  *
@@ -378,7 +431,11 @@ const HEAD_001: Rule = {
       // ── Capitalized "Form" check (H1–H6) ─────────────────────────────────────
       // Flag when "Form" (capital F) appears in any non-first-word position.
       // Applies even to form-identifier headings (which are otherwise exempt).
-      if (hasCapitalizedFormMidHeading(text)) {
+      // formFired is used below to suppress the general sentence-case suggestion
+      // when this check already fired for the same heading — showing both would
+      // be redundant since they describe the same underlying issue.
+      const formFired = hasCapitalizedFormMidHeading(text);
+      if (formFired) {
         results.push({
           id: `HEAD-001-form-${idx}`,
           ruleId: 'HEAD-001',
@@ -406,7 +463,7 @@ const HEAD_001: Rule = {
         if (corrected !== text) {
           h2Corrections.push({ old: text, new: corrected });
         }
-      } else if (level >= 3 && looksLikeTitleCase(text)) {
+      } else if (level >= 3 && !formFired && looksLikeTitleCase(text)) {
         results.push({
           id: `HEAD-001-${idx}`,
           ruleId: 'HEAD-001',
