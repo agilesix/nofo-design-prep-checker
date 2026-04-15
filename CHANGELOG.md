@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.4](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.0.3...v1.0.4) (2026-04-15)
+
+
+### Bug Fixes
+
+* adding more info about AI use cases to about page ([f52bdc5](https://github.com/agilesix/nofo-design-prep-checker/commit/f52bdc512e770fd6bb768e01530bca514f57bc09), [9a4b6d9](https://github.com/agilesix/nofo-design-prep-checker/commit/9a4b6d90ceae621ef16d256da86c797cb4c23043))
+* backward scanning for name ([6b94ba0](https://github.com/agilesix/nofo-design-prep-checker/commit/6b94ba0fd916c4ede3b9656a4a30ad488c0aa371), [50cf7d9](https://github.com/agilesix/nofo-design-prep-checker/commit/50cf7d99648b16a724235075702fa29b6710b7df))
+* fix is to split the exemption check ([f30afa8](https://github.com/agilesix/nofo-design-prep-checker/commit/f30afa8cb6a9381a30f5832d5987af5427f3b592), [ff2e6f0](https://github.com/agilesix/nofo-design-prep-checker/commit/ff2e6f05731d0316f2a76561ecf88c4a9439c803))
+* getting too many issues for table captions ([6ccdd33](https://github.com/agilesix/nofo-design-prep-checker/commit/6ccdd33dca0e58465696e26c416a39b2d5184241), [302fc73](https://github.com/agilesix/nofo-design-prep-checker/commit/302fc7358ec592477b1cae9974b5c74d750f39ba))
+* resolve merge conflicts in TABLE-002 ([2b36f33](https://github.com/agilesix/nofo-design-prep-checker/commit/2b36f33b440d64c3cc36bd5a46dee6ab43f8b1da))
+* table exceptions with finding nearest heading ([39f883d](https://github.com/agilesix/nofo-design-prep-checker/commit/39f883d3bc1a6173f7624926ed84fbf758093411), [f9386c1](https://github.com/agilesix/nofo-design-prep-checker/commit/f9386c16d28c62f7ec000d08e429c3ae6039f375))
+
 ## [1.0.3](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.0.2...v1.0.3) (2026-04-14)
 
 
