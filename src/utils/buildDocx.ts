@@ -706,7 +706,8 @@ async function applyRemoveDghtScaffolding(zip: JSZip): Promise<void> {
  *
  * After all heading paragraphs are processed, any w:hyperlink elements whose
  * w:anchor value matched the old (leading-underscore) slug are updated to the
- * new (clean) slug in the same pass — no separate iteration is needed.
+ * new (clean) slug in a second loop over hyperlinks within the same parsed XML
+ * document, so no additional parse/serialize pass is required.
  */
 async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
   const docFile = zip.file('word/document.xml');
