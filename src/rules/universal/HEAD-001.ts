@@ -79,9 +79,21 @@ function isSkippable(word: string): boolean {
  * Indices of "sentence start" words within the word array.
  * Index 0 is always a sentence start.  Any word immediately following a word
  * that ends with a colon is also a sentence start (e.g. "Background: Why this").
+ *
+ * Additionally, if the heading starts with non-alphabetic tokens (numbers,
+ * parenthetical references such as "(c)(3)", etc.), the first token that begins
+ * with a bare letter is also treated as a sentence start. This prevents a word
+ * like "Non-profit" in "501 (c)(3) Non-profit" from being counted as a
+ * mid-heading capitalised word when it is actually the first meaningful word.
  */
 function sentenceStartIndices(words: string[]): Set<number> {
   const starts = new Set<number>([0]);
+
+  // If leading tokens are purely non-alphabetic (e.g. "501", "(c)(3)"), treat
+  // the first token that starts with a letter as an additional sentence start.
+  const firstAlpha = words.findIndex(w => /^[a-zA-Z]/.test(w));
+  if (firstAlpha > 0) starts.add(firstAlpha);
+
   for (let i = 0; i < words.length - 1; i++) {
     if ((words[i] ?? '').trimEnd().endsWith(':')) starts.add(i + 1);
   }
@@ -261,6 +273,31 @@ function isFederalSystemException(text: string): boolean {
 }
 
 /**
+ * Returns true when the heading contains a Native American or Indigenous proper
+ * noun term that is conventionally capitalised per IHS style guide and other
+ * federal agency guidance. H3–H6 headings containing these terms are exempt
+ * from the title-case capitalization suggestion so they are not flagged solely
+ * because of the capitalization of these proper nouns.
+ *
+ * Recognized terms (case-sensitive — lowercase occurrences do not cause false
+ * positives and do not need to be exempted):
+ *   Indian, Tribe(s), Tribal, AI/AN
+ *   (covers compound proper nouns: Indian Tribes, Tribal Organizations,
+ *    Urban Indian Organizations)
+ *
+ * H2 headings are not exempted here — they may still be auto-fixed when
+ * sentence-case content words (other than these proper nouns) are present.
+ */
+function isIndigenousTermHeading(text: string): boolean {
+  return (
+    /\bIndian\b/.test(text) ||
+    /\bTribes?\b/.test(text) ||
+    /\bTribal\b/.test(text) ||
+    /\bAI\/AN\b/.test(text)
+  );
+}
+
+/**
  * Returns true when the word "Form" (capital F) appears in any position
  * other than as the first word of the heading.
  *
@@ -342,7 +379,7 @@ const HEAD_001: Rule = {
         if (corrected !== text) {
           h2Corrections.push({ old: text, new: corrected });
         }
-      } else if (level >= 3 && looksLikeTitleCase(text)) {
+      } else if (level >= 3 && !isIndigenousTermHeading(text) && looksLikeTitleCase(text)) {
         results.push({
           id: `HEAD-001-${idx}`,
           ruleId: 'HEAD-001',
@@ -364,7 +401,7 @@ const HEAD_001: Rule = {
       const count = h2Corrections.length;
       results.push({
         ruleId: 'HEAD-001',
-        description: `${count} H2 heading${count === 1 ? '' : 's'} corrected to title case`,
+        description: `${count} H2 heading${count === 1 ? '' : 's'} corrected to title case.`,
         targetField: 'heading.h2.titlecase',
         value: JSON.stringify(h2Corrections),
       } as AutoAppliedChange);
