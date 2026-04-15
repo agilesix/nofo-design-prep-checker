@@ -801,6 +801,7 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
       const name = bm.getAttributeNS(W, 'name') ?? bm.getAttribute('name');
       if (name && anchorRemap.has(name)) {
         bm.setAttributeNS(W, 'w:name', anchorRemap.get(name)!);
+        bm.removeAttribute('name');
       }
     }
   }
