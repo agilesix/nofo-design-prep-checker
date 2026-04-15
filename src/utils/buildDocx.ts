@@ -795,12 +795,17 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
       const anchor = link.getAttributeNS(W, 'anchor') ?? link.getAttribute('anchor');
       if (anchor && anchorRemap.has(anchor)) {
         link.setAttributeNS(W, 'w:anchor', anchorRemap.get(anchor)!);
+        // If the attribute was unprefixed (the serializer-stripping fallback path),
+        // setAttributeNS adds a new namespaced attribute but leaves the old
+        // unprefixed one in place.  Remove it so serialized XML never carries both.
+        link.removeAttribute('anchor');
       }
     }
     for (const bm of Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))) {
       const name = bm.getAttributeNS(W, 'name') ?? bm.getAttribute('name');
       if (name && anchorRemap.has(name)) {
         bm.setAttributeNS(W, 'w:name', anchorRemap.get(name)!);
+        // Same stale-attribute cleanup as above.
         bm.removeAttribute('name');
       }
     }
