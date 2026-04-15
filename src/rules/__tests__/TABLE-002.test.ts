@@ -358,8 +358,9 @@ describe('TABLE-002 standard table-type exemptions', () => {
         '<tr><td>Regular row</td><td>Value</td></tr>' +
       '</tbody></table>'
     );
-    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(1);
-    expect((TABLE_002.check(doc, OPTIONS)[0] as Issue).title).toBe('Table is missing a caption');
+    const issues = TABLE_002.check(doc, OPTIONS);
+    expect(issues).toHaveLength(1);
+    expect((issues[0] as Issue).title).toBe('Table is missing a caption');
   });
 
   // ── Merit review criteria ────────────────────────────────────────────────────
