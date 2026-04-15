@@ -346,8 +346,10 @@ function acronymPhraseExemptPositions(words: string[]): Set<number> {
   const exempt = new Set<number>();
 
   for (let j = 0; j < words.length; j++) {
-    // Detect a parenthetical acronym token, stripping any trailing punctuation.
-    const tokenBare = (words[j] ?? '').replace(/[^a-zA-Z()]+$/, '');
+    // Detect a parenthetical acronym token, stripping any surrounding punctuation.
+    const tokenBare = (words[j] ?? '')
+      .replace(/^[^a-zA-Z()]+/, '')
+      .replace(/[^a-zA-Z()]+$/, '');
     if (!/^\([A-Z]{2,}\)$/.test(tokenBare)) continue;
 
     // Scan backward to find the proper-noun phrase that precedes the acronym.
