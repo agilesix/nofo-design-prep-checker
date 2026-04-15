@@ -607,6 +607,20 @@ describe('HEAD-001: Native American and Indigenous proper noun terms are exempt 
     expect(issues).toHaveLength(1);
   });
 
+  it('does not flag an H3 where a recognised Indigenous term appears in possessive form', () => {
+    // "Tribe's" is a possessive of the proper noun "Tribe". bare() strips the
+    // possessive suffix so it resolves to "Tribe" before comparison, and the
+    // position is marked exempt. Without this normalization "Tribe's" would be
+    // seen as a mid-heading capitalised word and trigger a false positive.
+    // The Unicode right-apostrophe variant (Tribe\u2019s) is also covered by
+    // the same strip.
+    const doc = makeDoc("<h3>Eligibility for Tribe's members</h3>");
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
   it('still auto-fixes an H2 that contains an indigenous term but has other lowercase content words', () => {
     // The indigenous-term exemption only suppresses H3–H6 suggestions.
     // H2 headings with sentence-case content words are still auto-fixed.
