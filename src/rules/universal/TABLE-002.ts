@@ -76,17 +76,23 @@ const TABLE_002: Rule = {
         return;
       }
 
+      // ── Single backward scan — shared by exemption and caption-substitute checks ──
+      // Both signals require a backward sibling scan for the nearest H1–H6 heading.
+      // scanBackwardForHeading performs the traversal once, returning both the heading
+      // text (for the exemption signal) and whether it falls within 50 words (for the
+      // caption-substitute signal).  nearestHeadingText uses the full H1–H6 range
+      // rather than nearestHeading from buildLocationLookup, which only tracks H1–H4
+      // for issue display context.
+      const { nearestHeadingText, nearbyHeadingCaption } = scanBackwardForHeading(table);
+
       // ── Other exempt table types ───────────────────────────────────────────────
-      // For the nearest-heading signal we perform a local H1–H6 backward scan
-      // rather than using nearestHeading from buildLocationLookup (which only
-      // tracks H1–H4 for display-context purposes).
-      if (isExemptFromCaption(table, sectionHeading, findNearestHeadingText(table))) return;
+      if (isExemptFromCaption(table, sectionHeading, nearestHeadingText)) return;
 
       // ── Nearby heading caption substitute ─────────────────────────────────────
       // A heading preceding the table with ≤ 50 words of body text between them
       // serves as a caption substitute — common NOFO pattern:
       // heading → short intro sentence(s) → table.
-      if (hasNearbyHeadingCaption(table)) return;
+      if (nearbyHeadingCaption) return;
 
       // ── Missing caption warning ────────────────────────────────────────────────
       issues.push({
@@ -208,26 +214,62 @@ function matchesExemptHeadingText(lower: string): boolean {
   );
 }
 
+interface HeadingScanResult {
+  /** Text of the nearest preceding H1–H6 within the scan cap ('' if none found). */
+  nearestHeadingText: string;
+  /**
+   * True when the nearest heading precedes the element with ≤ 50 words of body
+   * text between them — in that case the heading serves as a caption substitute.
+   */
+  nearbyHeadingCaption: boolean;
+}
+
 /**
- * Returns the text content of the nearest H1–H6 element that precedes the
- * table as a preceding sibling, scanning up to MAX_HEADING_SCAN_SIBLINGS
- * elements back. Returns an empty string if no heading is found.
- *
- * This is intentionally a local sibling scan rather than using nearestHeading
- * from buildLocationLookup, because buildLocationLookup only tracks H1–H4 for
- * display-context purposes. The exemption signal must recognise H5/H6 as well.
+ * Maximum number of preceding siblings inspected by scanBackwardForHeading.
+ * Applies to both the exemption-heading signal and the nearby-heading
+ * caption-substitute signal, which share one traversal. This cap prevents
+ * worst-case O(n²) behaviour when a document has many tables preceded by long
+ * stretches of non-heading elements.
  */
-function findNearestHeadingText(table: Element): string {
+const BACKWARD_SIBLING_SCAN_LIMIT = 20;
+
+/**
+ * Scans backward through preceding siblings (up to BACKWARD_SIBLING_SCAN_LIMIT)
+ * to find the nearest H1–H6 heading above a table, returning both its text and
+ * whether it is close enough (≤ 50 words of intervening body text) to qualify
+ * as a caption substitute. Both signals are derived from one shared traversal.
+ *
+ * nearestHeadingText uses the full H1–H6 range rather than nearestHeading from
+ * buildLocationLookup, which only tracks H1–H4 for issue display context. The
+ * exemption signal must recognise H5/H6 as well.
+ *
+ * Example: <h2>Key dates</h2> → <p>The following dates apply.</p> → <table>
+ *   → nearestHeadingText = "Key dates", nearbyHeadingCaption = true (≤ 50 words)
+ */
+function scanBackwardForHeading(table: Element): HeadingScanResult {
+  let interveningWords = 0;
+  let siblingsScanned = 0;
   let el = table.previousElementSibling;
-  let scanned = 0;
-  while (el && scanned < MAX_HEADING_SCAN_SIBLINGS) {
-    scanned++;
+
+  while (el && siblingsScanned < BACKWARD_SIBLING_SCAN_LIMIT) {
+    siblingsScanned++;
+
     if (/^h[1-6]$/i.test(el.tagName)) {
-      return (el.textContent ?? '').trim();
+      return {
+        nearestHeadingText: (el.textContent ?? '').trim(),
+        nearbyHeadingCaption: interveningWords <= 50,
+      };
     }
+
+    const text = (el.textContent ?? '').trim();
+    if (text && interveningWords <= 50) {
+      interveningWords += text.split(/\s+/).length;
+    }
+
     el = el.previousElementSibling;
   }
-  return '';
+
+  return { nearestHeadingText: '', nearbyHeadingCaption: false };
 }
 
 /**
@@ -303,49 +345,6 @@ function isExemptFromCaption(
 
   // Signal 4: checkbox glyph structure (application checklist)
   return looksLikeApplicationChecklist(table);
-}
-
-/**
- * Returns true when a heading (h1–h6) precedes the table with ≤ 50 words of body
- * text between them. In this pattern the heading serves as the table's label.
- *
- * Example: <h2>Key dates</h2> → <p>The following dates apply.</p> → <table>
- *   Heading found above, 1 short paragraph between them → skip.
- *
- * Scans backward up to MAX_HEADING_SCAN_SIBLINGS preceding siblings, with an
- * additional early exit once the accumulated word count exceeds 50 words. The
- * sibling cap prevents worst-case O(n²) behavior across many tables in documents
- * with large stretches of low-text elements before a table that has no nearby
- * heading; the word-count exit avoids scanning the cap on normal text-heavy
- * content.
- */
-const MAX_HEADING_SCAN_SIBLINGS = 20;
-
-function hasNearbyHeadingCaption(table: Element): boolean {
-  let interveningWords = 0;
-  let siblingsScanned = 0;
-  let el = table.previousElementSibling;
-
-  while (el && siblingsScanned < MAX_HEADING_SCAN_SIBLINGS) {
-    siblingsScanned++;
-
-    if (/^h[1-6]$/i.test(el.tagName)) {
-      // Found a heading — accept it if the accumulated body text is ≤ 50 words
-      return interveningWords <= 50;
-    }
-
-    const text = (el.textContent ?? '').trim();
-    if (text) {
-      interveningWords += text.split(/\s+/).length;
-    }
-
-    // Stop early once word count exceeds threshold — no heading at this distance qualifies
-    if (interveningWords > 50) return false;
-
-    el = el.previousElementSibling;
-  }
-
-  return false;
 }
 
 function findSectionForElement(el: Element, doc: ParsedDocument): Section | undefined {
