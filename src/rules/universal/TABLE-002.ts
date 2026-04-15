@@ -76,17 +76,21 @@ const TABLE_002: Rule = {
         return;
       }
 
-      // ── Single backward scan — shared by exemption and caption-substitute checks ──
-      // Both signals require a backward sibling scan for the nearest H1–H6 heading.
-      // scanBackwardForHeading performs the traversal once, returning both the heading
-      // text (for the exemption signal) and whether it falls within 50 words (for the
-      // caption-substitute signal).  nearestHeadingText uses the full H1–H6 range
-      // rather than nearestHeading from buildLocationLookup, which only tracks H1–H4
-      // for issue display context.
+      // ── Other exempt table types — cheap signals (no DOM scan) ────────────────
+      // Section heading, first-row/cell content, and checkbox glyphs are checked
+      // before the backward scan. Tables that match any of these signals never
+      // pay the cost of a sibling traversal.
+      if (isExemptByCheapSignals(table, sectionHeading)) return;
+
+      // ── Backward scan ──────────────────────────────────────────────────────────
+      // Only reaches here when cheap signals did not exempt the table.
+      // One traversal yields both the nearest H1–H6 heading text (for the DOM
+      // heading exemption signal immediately below) and whether it falls within
+      // 50 words of the table (for the caption-substitute check).
       const { nearestHeadingText, nearbyHeadingCaption } = scanBackwardForHeading(table);
 
-      // ── Other exempt table types ───────────────────────────────────────────────
-      if (isExemptFromCaption(table, sectionHeading, nearestHeadingText)) return;
+      // ── DOM heading exemption signal ───────────────────────────────────────────
+      if (matchesExemptHeadingText(nearestHeadingText.toLowerCase())) return;
 
       // ── Nearby heading caption substitute ─────────────────────────────────────
       // A heading preceding the table with ≤ 50 words of body text between them
@@ -293,38 +297,27 @@ function looksLikeApplicationChecklist(table: Element): boolean {
 }
 
 /**
- * Returns true if the table appears to be one of the types that are exempt
- * from the caption requirement per the SimplerNOFOs style guide:
- *  - Application contents tables
- *  - Standard forms tables (SF-424 etc.)
- *  - Application checklist tables
- *  - Merit review criteria tables (total and individual)
- *  - Reporting tables
- *  - Key facts / key dates tables
+ * Returns true if the table is exempt based on signals that do not require a
+ * backward sibling scan: the section heading, the table's own first-row/cell
+ * content, and the checkbox glyph structure.
  *
- * Detection uses four independent signals; any one is sufficient:
- *  1. The section heading (from the parsed section tree) matches an exempt pattern.
- *  2. The nearest H1–H6 heading above the table (local sibling scan) matches an
- *     exempt pattern. This is a separate scan from buildLocationLookup, which only
- *     tracks H1–H4 and is used solely for issue display context.
- *  3. The table's first-row or first-cell text contains a known exempt identifier.
- *  4. The table's first column uses checkbox glyphs (◻ ☐ □ ☑ ☒) in at least two
- *     rows — structural signal for application checklist tables.
+ * The DOM heading signal (nearest H1–H6 above the table) is checked separately
+ * in the call site after scanBackwardForHeading has already run for the
+ * caption-substitute check, so no extra traversal is incurred.
+ *
+ * Exempt types detected here:
+ *  - Application contents / table of contents (section heading)
+ *  - Standard / required forms (section heading or first-row text)
+ *  - Application checklist (section heading, first-row, or checkbox glyphs)
+ *  - Merit review criteria (section heading or first-row text)
+ *  - Reporting tables (section heading or first-row text)
+ *  - Key facts / key dates tables (first-cell text)
  */
-function isExemptFromCaption(
-  table: Element,
-  sectionHeading: string,
-  nearestH1H6Text: string
-): boolean {
-  // Signals 1 & 2: heading text (section heading or nearest H1–H6 in the DOM)
-  if (
-    matchesExemptHeadingText(sectionHeading.toLowerCase()) ||
-    matchesExemptHeadingText(nearestH1H6Text.toLowerCase())
-  ) {
-    return true;
-  }
+function isExemptByCheapSignals(table: Element, sectionHeading: string): boolean {
+  // Section heading
+  if (matchesExemptHeadingText(sectionHeading.toLowerCase())) return true;
 
-  // Signal 3: table first-row / first-cell content
+  // First-row / first-cell content
   const firstCellText = (table.querySelector('td, th')?.textContent ?? '').toLowerCase();
   const firstRowText = (table.querySelector('tr')?.textContent ?? '').toLowerCase();
   if (
@@ -339,11 +332,9 @@ function isExemptFromCaption(
     /report\s+type/.test(firstRowText) ||
     /sf.?424/.test(firstRowText) ||
     /standard\s+form\s+\d/.test(firstRowText)
-  ) {
-    return true;
-  }
+  ) return true;
 
-  // Signal 4: checkbox glyph structure (application checklist)
+  // Checkbox glyph structure (application checklist)
   return looksLikeApplicationChecklist(table);
 }
 
