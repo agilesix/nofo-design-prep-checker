@@ -48,6 +48,8 @@ const TABLE_002: Rule = {
       // Compute context upfront — needed for both the suggestion and the warning.
       const section = findSectionForElement(table, doc);
       const sectionId = section?.id ?? doc.sections[0]?.id ?? 'section-preamble';
+      // nearestHeading from buildLocationLookup tracks H1–H4 only; used for
+      // display context in issue cards, not for exemption logic.
       const { nearestHeading } = getContext(table);
       const sectionHeading = section?.heading ?? '';
       const firstRowText = table.querySelector('tr')?.textContent?.trim().slice(0, 60) ?? '';
@@ -75,7 +77,10 @@ const TABLE_002: Rule = {
       }
 
       // ── Other exempt table types ───────────────────────────────────────────────
-      if (isExemptFromCaption(table, sectionHeading, nearestHeading ?? '')) return;
+      // For the nearest-heading signal we perform a local H1–H6 backward scan
+      // rather than using nearestHeading from buildLocationLookup (which only
+      // tracks H1–H4 for display-context purposes).
+      if (isExemptFromCaption(table, sectionHeading, findNearestHeadingText(table))) return;
 
       // ── Nearby heading caption substitute ─────────────────────────────────────
       // A heading preceding the table with ≤ 50 words of body text between them
@@ -124,14 +129,14 @@ const TABLE_002: Rule = {
  * Heuristic: after stripping an optional "Table:" prefix, first detect captions
  * that are entirely all-caps (including single-word captions such as "TIMELINE").
  * Otherwise, if any word after the first word (of length > 1) starts with an
- * uppercase letter, the text is likely title case.
+ * uppercase letter AND contains at least one lowercase letter, the text is likely
+ * title case.
+ *
+ * All-caps words (PDF, CDC, HRSA) are treated as acronyms and skipped — they are
+ * not evidence of title-case formatting.
  *
  * Single-letter words (e.g. "A", "I") are excluded from the title-case check
  * because they appear in both sentence case and title case.
- *
- * Note: proper nouns in sentence case will also trigger this check. Since the
- * result is a suggestion-only instruction-only issue, false positives are
- * acceptable.
  */
 function looksLikeTitleOrAllCaps(text: string): boolean {
   // Strip optional "Table:" prefix (e.g. "Table: Program Timeline" → "Program Timeline")
@@ -179,7 +184,7 @@ function makeSentenceCaseSuggestion(
 /**
  * Returns true when the (already lower-cased) heading text matches any of the
  * exempt-section patterns. Used to check both the section heading from the
- * parsed section tree and the nearest DOM heading above the table.
+ * parsed section tree and the nearest H1–H6 heading found by local DOM scan.
  *
  * Exempt heading patterns:
  *  - Application contents / table of contents
@@ -187,7 +192,7 @@ function makeSentenceCaseSuggestion(
  *  - Application checklist
  *  - Merit review (catches "Merit review criteria (50 points)" etc.)
  *  - Review and selection / selection criteria
- *  - Reporting (any heading that contains the word "reporting")
+ *  - Reporting (any heading containing the word "reporting")
  */
 function matchesExemptHeadingText(lower: string): boolean {
   return (
@@ -201,6 +206,28 @@ function matchesExemptHeadingText(lower: string): boolean {
     /selection\s+criteria/.test(lower) ||
     /\breporting\b/.test(lower)
   );
+}
+
+/**
+ * Returns the text content of the nearest H1–H6 element that precedes the
+ * table as a preceding sibling, scanning up to MAX_HEADING_SCAN_SIBLINGS
+ * elements back. Returns an empty string if no heading is found.
+ *
+ * This is intentionally a local sibling scan rather than using nearestHeading
+ * from buildLocationLookup, because buildLocationLookup only tracks H1–H4 for
+ * display-context purposes. The exemption signal must recognise H5/H6 as well.
+ */
+function findNearestHeadingText(table: Element): string {
+  let el = table.previousElementSibling;
+  let scanned = 0;
+  while (el && scanned < MAX_HEADING_SCAN_SIBLINGS) {
+    scanned++;
+    if (/^h[1-6]$/i.test(el.tagName)) {
+      return (el.textContent ?? '').trim();
+    }
+    el = el.previousElementSibling;
+  }
+  return '';
 }
 
 /**
@@ -235,8 +262,9 @@ function looksLikeApplicationChecklist(table: Element): boolean {
  *
  * Detection uses four independent signals; any one is sufficient:
  *  1. The section heading (from the parsed section tree) matches an exempt pattern.
- *  2. The nearest DOM heading above the table matches an exempt pattern — catches
- *     tables in subsections where the section-tree heading is a higher-level ancestor.
+ *  2. The nearest H1–H6 heading above the table (local sibling scan) matches an
+ *     exempt pattern. This is a separate scan from buildLocationLookup, which only
+ *     tracks H1–H4 and is used solely for issue display context.
  *  3. The table's first-row or first-cell text contains a known exempt identifier.
  *  4. The table's first column uses checkbox glyphs (◻ ☐ □ ☑ ☒) in at least two
  *     rows — structural signal for application checklist tables.
@@ -244,12 +272,12 @@ function looksLikeApplicationChecklist(table: Element): boolean {
 function isExemptFromCaption(
   table: Element,
   sectionHeading: string,
-  nearestDomHeading: string
+  nearestH1H6Text: string
 ): boolean {
-  // Signals 1 & 2: heading text (section heading or nearest DOM heading)
+  // Signals 1 & 2: heading text (section heading or nearest H1–H6 in the DOM)
   if (
     matchesExemptHeadingText(sectionHeading.toLowerCase()) ||
-    matchesExemptHeadingText(nearestDomHeading.toLowerCase())
+    matchesExemptHeadingText(nearestH1H6Text.toLowerCase())
   ) {
     return true;
   }

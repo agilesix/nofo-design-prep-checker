@@ -6,10 +6,10 @@ import type { ParsedDocument, Issue } from '../../types';
 /**
  * Build a minimal ParsedDocument from an HTML string.
  *
- * @param html          The document HTML.
+ * @param html            The document HTML.
  * @param sectionHeading  The heading of the single section (default: "Document start").
- *                       Pass an exempt heading (e.g. "Application checklist") to test
- *                       the section-heading exemption signal in TABLE-002.
+ *                        Pass an exempt heading (e.g. "Application checklist") to test
+ *                        the section-heading exemption signal in TABLE-002.
  */
 function makeDoc(html: string, sectionHeading = 'Document start'): ParsedDocument {
   return {
@@ -275,12 +275,13 @@ describe('TABLE-002 standard table-type exemptions', () => {
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
 
-  it('does not flag a table when the nearest DOM heading is "Application contents"', () => {
-    // Table is more than 50 words from the heading (so hasNearbyHeadingCaption
-    // does not fire), but nearestDomHeading still reflects the exempt heading.
-    const longParagraph = '<p>' + Array(51).fill('word').join(' ') + '</p>';
+  it('does not flag a table when the nearest DOM heading is "Application contents" (H2)', () => {
+    // A long list (> 50 words) separates the heading from the table so that
+    // hasNearbyHeadingCaption does not fire; only the exemption signal can suppress it.
+    const longList =
+      '<ul>' + Array(10).fill('<li>This is a longer list item with several words here.</li>').join('') + '</ul>';
     const doc = makeDoc(
-      '<h2>Application contents</h2>' + longParagraph + SIMPLE_TABLE,
+      '<h2>Application contents</h2>' + longList + SIMPLE_TABLE,
       'Award information'  // non-exempt section heading
     );
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
@@ -325,9 +326,9 @@ describe('TABLE-002 standard table-type exemptions', () => {
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
 
-  it('does not flag an application checklist table identified by checkbox glyphs (structural signal)', () => {
+  it('does not flag an application checklist identified by ◻ checkbox glyphs (structural signal)', () => {
     // No explicit heading or first-row text — exemption fires purely because
-    // at least two rows have a checkbox glyph (◻) in the first column.
+    // at least two rows have a ◻ glyph (U+25FB) in the first column.
     const doc = makeDoc(
       '<table><tbody>' +
         '<tr><td>◻ Project narrative</td><td>Required</td></tr>' +
@@ -338,7 +339,7 @@ describe('TABLE-002 standard table-type exemptions', () => {
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
 
-  it('does not flag an application checklist table identified by ☐ ballot-box glyphs (structural signal)', () => {
+  it('does not flag an application checklist identified by ☐ ballot-box glyphs (structural signal)', () => {
     // ☐ (U+2610) is an acceptable checkbox substitute recognised by the rule.
     const doc = makeDoc(
       '<table><tbody>' +
@@ -358,9 +359,9 @@ describe('TABLE-002 standard table-type exemptions', () => {
         '<tr><td>Regular row</td><td>Value</td></tr>' +
       '</tbody></table>'
     );
-    const issues = TABLE_002.check(doc, OPTIONS);
-    expect(issues).toHaveLength(1);
-    expect((issues[0] as Issue).title).toBe('Table is missing a caption');
+    const results = TABLE_002.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as Issue).title).toBe('Table is missing a caption');
   });
 
   // ── Merit review criteria ────────────────────────────────────────────────────
@@ -375,7 +376,7 @@ describe('TABLE-002 standard table-type exemptions', () => {
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
 
-  it('does not flag a merit review table in a "Merit review" section (section heading signal)', () => {
+  it('does not flag a table in a "Merit review" section (section heading signal)', () => {
     const doc = makeDoc(SIMPLE_TABLE, 'Merit review');
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
@@ -432,6 +433,33 @@ describe('TABLE-002 standard table-type exemptions', () => {
         '<tr><th>Report type</th><th>Frequency</th></tr>' +
         '<tr><td>Progress report</td><td>Semi-annual</td></tr>' +
       '</tbody></table>'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  // ── Nearest-heading signal covers H5/H6 ─────────────────────────────────────
+
+  it('does not flag a table when the nearest exempt heading is H5', () => {
+    // buildLocationLookup only tracks H1–H4 for display context. The exemption
+    // signal uses a local H1–H6 sibling scan. This test confirms H5 headings are
+    // recognised. A long list (> 50 words) prevents hasNearbyHeadingCaption from
+    // firing, so only the exemption signal can suppress the warning.
+    const longList =
+      '<ul>' + Array(10).fill('<li>This is a longer list item with several words here.</li>').join('') + '</ul>';
+    const doc = makeDoc(
+      '<h5>Application checklist</h5>' + longList + SIMPLE_TABLE,
+      'Award information'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a table when the nearest exempt heading is H6', () => {
+    // Same as above but with H6 — also outside buildLocationLookup's H1–H4 range.
+    const longList =
+      '<ul>' + Array(10).fill('<li>This is a longer list item with several words here.</li>').join('') + '</ul>';
+    const doc = makeDoc(
+      '<h6>Merit review criteria (50 points)</h6>' + longList + SIMPLE_TABLE,
+      'Award information'
     );
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
