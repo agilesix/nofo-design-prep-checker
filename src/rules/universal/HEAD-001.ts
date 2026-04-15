@@ -363,8 +363,9 @@ function acronymPhraseExemptPositions(words: string[]): Set<number> {
         // Capitalized word — part of the proper noun; mark as exempt.
         exempt.add(k);
       } else if (MINOR_WORDS.has(clean.toLowerCase())) {
-        // Minor word (of, and, for, …) embedded in an organization name — keep
-        // scanning without marking (it is already skippable by isSkippable).
+        // Lowercase minor word (of, and, for, …) embedded in an organization
+        // name — keep scanning without marking. Capitalized minor words are
+        // handled by the branch above and are added to `exempt`.
         continue;
       } else {
         // Lowercase non-minor word — we have left the proper noun phrase.
