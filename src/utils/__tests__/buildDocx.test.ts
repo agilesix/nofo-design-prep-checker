@@ -779,7 +779,7 @@ describe('buildDocx — CLEAN-008: heading leading-space removal', () => {
     expect(outXml).toMatch(/w:anchor="Contacts_and_Support"/);
     expect(outXml).not.toMatch(/w:anchor="_Contacts_and_Support"/);
     // No stale unprefixed anchor= attribute must remain in the output.
-    expect(outXml).not.toMatch(/\banchor="_Contacts_and_Support"/);
+    expect(outXml).not.toMatch(/(?<!:)anchor="_Contacts_and_Support"/);
     // Heading must be clean.
     expect(extractParagraphTexts(outXml)[0]).toBe('Contacts and Support');
   });
