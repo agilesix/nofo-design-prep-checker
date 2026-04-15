@@ -70,8 +70,18 @@ const TABLE_002: Rule = {
       const prevEl = table.previousElementSibling;
       const prevText = (prevEl?.textContent ?? '').trim();
       if (prevEl?.matches('p') && prevText !== '') {
-        if (looksLikeTitleOrAllCaps(prevText)) {
-          issues.push(makeSentenceCaseSuggestion(`TABLE-002-sc-${index}`, prevText, sectionId, nearestHeading));
+        // Only suggest sentence case when the paragraph is caption-like (≤ 10 words,
+        // not ending with ':', not containing '[PDF]'). Body text paragraphs that
+        // happen to precede a table are not captions and should never be flagged.
+        // Tables in exempt sections or near a form-identifier heading (PHS 398,
+        // SF-424, etc.) are also fully exempt from the sentence case check.
+        if (looksLikeCaption(prevText) && looksLikeTitleOrAllCaps(prevText)) {
+          if (!isExemptByCheapSignals(table, sectionHeading)) {
+            const { nearestHeadingText } = scanBackwardForHeading(table);
+            if (!matchesExemptHeadingText(nearestHeadingText.toLowerCase())) {
+              issues.push(makeSentenceCaseSuggestion(`TABLE-002-sc-${index}`, prevText, sectionId, nearestHeading));
+            }
+          }
         }
         return;
       }
@@ -166,6 +176,25 @@ function looksLikeTitleOrAllCaps(text: string): boolean {
   return words.slice(1).some(w => /^[A-Z]/.test(w) && /[a-z]/.test(w));
 }
 
+/**
+ * Returns true when a preceding paragraph's text looks like a genuine table
+ * caption rather than introductory body text.
+ *
+ * A paragraph is treated as body text (not a caption) when any of the
+ * following is true:
+ *  - More than 10 words  — full sentences are body text, not labels
+ *  - Ends with ":"       — introductory sentence ("See the table below:")
+ *  - Contains "[PDF]"    — body text referencing an external document
+ *
+ * Note: this guard applies only to Tier 2 paragraph captions. <caption>
+ * elements (Tier 1) are always genuine captions regardless of length.
+ */
+function looksLikeCaption(text: string): boolean {
+  if (text.endsWith(':')) return false;
+  if (text.includes('[PDF]')) return false;
+  return text.trim().split(/\s+/).length <= 10;
+}
+
 // ─── Issue factories ──────────────────────────────────────────────────────────
 
 function makeSentenceCaseSuggestion(
@@ -214,7 +243,12 @@ function matchesExemptHeadingText(lower: string): boolean {
     /merit\s+review/.test(lower) ||
     /review\s+(and\s+)?selection/.test(lower) ||
     /selection\s+criteria/.test(lower) ||
-    /\breporting\b/.test(lower)
+    /\breporting\b/.test(lower) ||
+    // Form identifiers in headings (e.g. "SF-424 Application for Federal
+    // Assistance", "PHS 398 Research Strategy") — consistent with the
+    // first-row content patterns in isExemptByCheapSignals.
+    /sf.?424/.test(lower) ||
+    /\bphs\s*398\b/.test(lower)
   );
 }
 

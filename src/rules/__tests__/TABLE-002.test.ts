@@ -563,4 +563,69 @@ describe('TABLE-002 sentence case suggestion', () => {
     expect((results[0] as Issue).severity).toBe('warning');
     expect((results[0] as Issue).title).toBe('Table is missing a caption');
   });
+
+  // ── Body text is not flagged for sentence case ───────────────────────────────
+
+  it('does not flag a paragraph of more than 10 words above a table for sentence case', () => {
+    // Long body text introduces a table — it is not a caption and must not be
+    // flagged even when it contains title-case words.
+    const doc = makeDoc(
+      '<p>To Complete This Section Use The Instructions Beginning On Page 83</p>' +
+      SIMPLE_TABLE
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a paragraph ending with ":" above a table for sentence case', () => {
+    // An introductory sentence ending with a colon is body text, not a caption.
+    const doc = makeDoc('<p>Required Documents:</p>' + SIMPLE_TABLE);
+    // "Required Documents:" is 2 words, title case, but ends with ":" → not a caption.
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a paragraph containing "[PDF]" above a table for sentence case', () => {
+    // A paragraph with an attached [PDF] label is a link annotation, not a caption.
+    const doc = makeDoc('<p>Download Application [PDF]</p>' + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('still flags a genuine short title-case caption (≤ 10 words)', () => {
+    // "Program Timeline Overview" is 3 words and title case — should still be flagged.
+    const doc = makeDoc('<p>Program Timeline Overview</p>' + SIMPLE_TABLE);
+    const results = TABLE_002.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as Issue).severity).toBe('suggestion');
+    expect((results[0] as Issue).title).toBe('Table caption should use sentence case');
+  });
+
+  // ── Form heading exemption ───────────────────────────────────────────────────
+
+  it('does not flag sentence case when the nearest DOM heading is an SF-424 form identifier', () => {
+    // A heading like "SF-424 Application for Federal Assistance" makes the table
+    // fully exempt from the sentence case check.
+    const doc = makeDoc(
+      '<h2>SF-424 Application for Federal Assistance</h2>' +
+      '<p>Program Timeline Overview</p>' +
+      SIMPLE_TABLE,
+      'Award information'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag sentence case when the nearest DOM heading is a PHS 398 form identifier', () => {
+    const doc = makeDoc(
+      '<h2>PHS 398 Research Strategy</h2>' +
+      '<p>Program Timeline Overview</p>' +
+      SIMPLE_TABLE,
+      'Award information'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag sentence case when the section heading is an exempt type', () => {
+    // Tables in an "Application checklist" section are fully exempt — no sentence
+    // case suggestion regardless of what the preceding paragraph says.
+    const doc = makeDoc('<p>Program Timeline Overview</p>' + SIMPLE_TABLE, 'Application checklist');
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
 });
