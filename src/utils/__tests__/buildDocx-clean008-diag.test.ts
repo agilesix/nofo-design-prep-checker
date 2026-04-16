@@ -70,11 +70,14 @@ async function getOutputDocXml(
 function extractHyperlinkAnchor(xml: string): string | null {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, 'application/xml');
-  const hyperlinks = Array.from(doc.getElementsByTagName('w:hyperlink'));
+  const hyperlinks = Array.from(
+    doc.getElementsByTagNameNS(W_NS, 'hyperlink'),
+  );
   if (hyperlinks.length === 0) return null;
   const el = hyperlinks[0]!;
   return (
     el.getAttributeNS(W_NS, 'anchor') ??
+    el.getAttribute('w:anchor') ??
     el.getAttribute('anchor') ??
     null
   );
@@ -83,10 +86,10 @@ function extractHyperlinkAnchor(xml: string): string | null {
 function extractParagraphText(xml: string, index: number): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, 'application/xml');
-  const paras = Array.from(doc.getElementsByTagName('w:p'));
+  const paras = Array.from(doc.getElementsByTagNameNS(W_NS, 'p'));
   const para = paras[index];
   if (!para) return '';
-  return Array.from(para.getElementsByTagName('w:t'))
+  return Array.from(para.getElementsByTagNameNS(W_NS, 't'))
     .map(t => t.textContent ?? '')
     .join('');
 }
