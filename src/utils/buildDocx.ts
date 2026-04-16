@@ -3,6 +3,11 @@ import type { AcceptedFix, AutoAppliedChange } from '../types';
 import { DGHT_STEP1_ANCHOR } from '../rules/opdiv/CLEAN-007-constants';
 import { groupListParagraphs } from './listHelpers';
 
+const BUILD_DOCX_DEBUG =
+  (globalThis as typeof globalThis & {
+    process?: { env?: Record<string, string | undefined> };
+  }).process?.env?.DEBUG_BUILD_DOCX === 'true';
+
 export async function buildDocx(
   originalArchive: JSZip,
   acceptedFixes: AcceptedFix[],
@@ -714,15 +719,19 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
   if (!docFile) return;
 
   const xmlStr = await docFile.async('string');
-  console.log('[CLEAN-008] applyHeadingLeadingSpaceFix: starting');
-  console.log('[CLEAN-008] Raw XML snippet (first 500 chars):', xmlStr.slice(0, 500));
+  if (BUILD_DOCX_DEBUG) {
+    console.log('[CLEAN-008] applyHeadingLeadingSpaceFix: starting');
+    console.log('[CLEAN-008] Raw XML snippet (first 500 chars):', xmlStr.slice(0, 500));
+  }
 
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
   const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
   const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
-  console.log(`[CLEAN-008] Total w:p elements found: ${paragraphs.length}`);
+  if (BUILD_DOCX_DEBUG) {
+    console.log(`[CLEAN-008] Total w:p elements found: ${paragraphs.length}`);
+  }
   let changed = false;
   // Maps old anchor slug → new anchor slug for every heading whose leading
   // space was removed.  Anchor slugs are the heading text with spaces replaced
