@@ -285,15 +285,21 @@ describe('CLEAN-008 diagnostic — realistic OOXML scenarios', () => {
 
     // After re-serialization, can we still find w:hyperlink elements?
     const reparsed = parser.parseFromString(reserialized, 'application/xml');
-    const hyperlinks = Array.from(reparsed.getElementsByTagName('w:hyperlink'));
-    console.log(`[DIAG-4] getElementsByTagName('w:hyperlink') after re-parse: found ${hyperlinks.length}`);
+    // NS-aware lookup is reliable regardless of prefix remapping.
+    const hyperlinksByNS = Array.from(reparsed.getElementsByTagNameNS(W_NS, 'hyperlink'));
+    // Qualified-name lookup is diagnostic only — may return 0 if the prefix was remapped.
+    const hyperlinksByTag = Array.from(reparsed.getElementsByTagName('w:hyperlink'));
+    console.log(`[DIAG-4] getElementsByTagNameNS after re-parse: found ${hyperlinksByNS.length}`);
+    console.log(`[DIAG-4] getElementsByTagName('w:hyperlink') after re-parse: found ${hyperlinksByTag.length}`);
 
-    if (hyperlinks.length > 0) {
-      const el = hyperlinks[0]!;
+    if (hyperlinksByNS.length > 0) {
+      const el = hyperlinksByNS[0]!;
       const anchorNS = el.getAttributeNS(W_NS, 'anchor');
       const anchorPlain = el.getAttribute('anchor');
+      const anchorQual = el.getAttribute('w:anchor');
       console.log(`[DIAG-4] anchor via getAttributeNS: "${anchorNS}"`);
       console.log(`[DIAG-4] anchor via getAttribute('anchor'): "${anchorPlain}"`);
+      console.log(`[DIAG-4] anchor via getAttribute('w:anchor'): "${anchorQual}"`);
     }
 
     // Also check element tag names in the re-parsed document
@@ -303,7 +309,9 @@ describe('CLEAN-008 diagnostic — realistic OOXML scenarios', () => {
       console.log(`[DIAG-4]   tagName="${el.tagName}" localName="${el.localName}" namespaceURI="${el.namespaceURI}"`);
     });
 
-    expect(hyperlinks.length).toBeGreaterThan(0);
+    // Assert on the namespace-aware lookup — this must work regardless of
+    // whether XMLSerializer remapped the 'w:' prefix.
+    expect(hyperlinksByNS.length).toBeGreaterThan(0);
   });
 
   it('DIAG-5: w:hyperlink with w:anchor — what does jsdom vs browser do with getAttributeNS?', async () => {
@@ -432,10 +440,8 @@ describe('CLEAN-008 diagnostic — realistic OOXML scenarios', () => {
       console.warn('[DIAG-8] byTag tagNames:', byTag.map(e => e.tagName));
     }
 
-    // Namespace-aware lookup must always work.
+    // Namespace-aware lookup must always work regardless of prefix remapping.
     expect(byNS.length).toBeGreaterThan(0);
-    // Both must agree in jsdom (the diagnostic value is in browser DevTools).
-    expect(byNS.length).toBe(byTag.length);
   });
 
 });

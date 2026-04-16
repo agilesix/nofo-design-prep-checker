@@ -517,9 +517,15 @@ function isExcludedParagraph(wP: Element): boolean {
  * Concatenate the text content of all <w:t> descendants of a <w:p> element.
  */
 function getParaText(para: Element): string {
-  return Array.from(para.getElementsByTagName('w:t'))
-    .map(t => t.textContent ?? '')
-    .join('');
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const byNS = Array.from(para.getElementsByTagNameNS(W, 't'));
+  const byTag = Array.from(para.getElementsByTagName('w:t'));
+  const seen = new Set<Element>();
+  const nodes: Element[] = [];
+  for (const el of [...byNS, ...byTag]) {
+    if (!seen.has(el)) { seen.add(el); nodes.push(el); }
+  }
+  return nodes.map(t => t.textContent ?? '').join('');
 }
 
 /**
@@ -728,10 +734,18 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
   const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
-  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
-  if (BUILD_DOCX_DEBUG) {
-    console.log(`[CLEAN-008] Total w:p elements found: ${paragraphs.length}`);
+  const dbg = (...args: Parameters<typeof console.log>) => {
+    if (BUILD_DOCX_DEBUG) console.log(...args);
+  };
+
+  const paragraphsByNS = Array.from(xmlDoc.getElementsByTagNameNS(W, 'p'));
+  const paragraphsByTag = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  const seenP = new Set<Element>();
+  const paragraphs: Element[] = [];
+  for (const el of [...paragraphsByNS, ...paragraphsByTag]) {
+    if (!seenP.has(el)) { seenP.add(el); paragraphs.push(el); }
   }
+  dbg(`[CLEAN-008] Total w:p elements found: ${paragraphs.length}`);
   let changed = false;
   // Maps old anchor slug → new anchor slug for every heading whose leading
   // space was removed.  Anchor slugs are the heading text with spaces replaced
@@ -741,16 +755,22 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
   for (const wP of paragraphs) {
     if (!isHeadingParagraph(wP)) continue;
 
-    const allWTs = Array.from(wP.getElementsByTagName('w:t'));
+    const allWTsByNS = Array.from(wP.getElementsByTagNameNS(W, 't'));
+    const allWTsByTag = Array.from(wP.getElementsByTagName('w:t'));
+    const seenT = new Set<Element>();
+    const allWTs: Element[] = [];
+    for (const el of [...allWTsByNS, ...allWTsByTag]) {
+      if (!seenT.has(el)) { seenT.add(el); allWTs.push(el); }
+    }
     if (allWTs.length === 0) continue;
 
     // Only process paragraphs whose full text starts with a space
     const paraText = getParaText(wP);
     if (paraText.length === 0 || paraText[0] !== ' ') continue;
 
-    console.log(`[CLEAN-008] Found heading with leading space: "${paraText}"`);
+    dbg(`[CLEAN-008] Found heading with leading space: "${paraText}"`);
     const oldAnchor = paraText.replace(/ /g, '_');
-    console.log(`[CLEAN-008]   oldAnchor = "${oldAnchor}"`);
+    dbg(`[CLEAN-008]   oldAnchor = "${oldAnchor}"`);
 
     // Walk <w:t> nodes from the front, stripping leading spaces until we hit
     // content. This correctly handles leading spaces spread across multiple runs.
@@ -784,18 +804,18 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
 
     // Record the anchor remapping now that the paragraph text has been updated.
     const newAnchor = getParaText(wP).replace(/ /g, '_');
-    console.log(`[CLEAN-008]   newAnchor after fix = "${newAnchor}"`);
+    dbg(`[CLEAN-008]   newAnchor after fix = "${newAnchor}"`);
     if (newAnchor !== oldAnchor) {
       anchorRemap.set(oldAnchor, newAnchor);
-      console.log(`[CLEAN-008]   Remap added: "${oldAnchor}" → "${newAnchor}"`);
+      dbg(`[CLEAN-008]   Remap added: "${oldAnchor}" → "${newAnchor}"`);
     } else {
-      console.log(`[CLEAN-008]   WARNING: oldAnchor === newAnchor ("${oldAnchor}"), no remap added`);
+      dbg(`[CLEAN-008]   WARNING: oldAnchor === newAnchor ("${oldAnchor}"), no remap added`);
     }
   }
 
-  console.log(`[CLEAN-008] anchorRemap size: ${anchorRemap.size}`);
+  dbg(`[CLEAN-008] anchorRemap size: ${anchorRemap.size}`);
   if (anchorRemap.size > 0) {
-    console.log(`[CLEAN-008] anchorRemap entries:`, JSON.stringify([...anchorRemap.entries()]));
+    dbg(`[CLEAN-008] anchorRemap entries:`, JSON.stringify([...anchorRemap.entries()]));
   }
 
   // Rewrite internal hyperlinks whose w:anchor referenced a heading that had
@@ -833,7 +853,7 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
     for (const el of [...hyperlinksByNS, ...hyperlinksByTag]) {
       if (!seenH.has(el)) { seenH.add(el); allHyperlinks.push(el); }
     }
-    console.log(
+    dbg(
       `[CLEAN-008] Scanning ${allHyperlinks.length} w:hyperlink elements for anchor update` +
       ` (byNS=${hyperlinksByNS.length}, byTag=${hyperlinksByTag.length})`
     );
@@ -843,13 +863,13 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
       const anchorQual = link.getAttribute('w:anchor');
       const anchor = anchorNS ?? anchorPlain ?? anchorQual;
       const matched = anchor ? anchorRemap.has(anchor) : false;
-      console.log(
+      dbg(
         `[CLEAN-008]   hyperlink: getAttributeNS="${anchorNS}", plain="${anchorPlain}", qualified="${anchorQual}"` +
         `, combined="${anchor}", inRemap=${matched}`
       );
       if (anchor && matched) {
         const newVal = anchorRemap.get(anchor)!;
-        console.log(`[CLEAN-008]     → Updating anchor "${anchor}" to "${newVal}"`);
+        dbg(`[CLEAN-008]     → Updating anchor "${anchor}" to "${newVal}"`);
         // Remove any stale unprefixed, qualified-name, or namespace-aware
         // duplicates so the serialized XML carries exactly one anchor
         // attribute with the 'w:' prefix.
@@ -869,7 +889,7 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
     for (const el of [...bookmarksByNS, ...bookmarksByTag]) {
       if (!seenB.has(el)) { seenB.add(el); allBookmarks.push(el); }
     }
-    console.log(
+    dbg(
       `[CLEAN-008] Scanning ${allBookmarks.length} w:bookmarkStart elements for name update` +
       ` (byNS=${bookmarksByNS.length}, byTag=${bookmarksByTag.length})`
     );
@@ -879,15 +899,19 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
       const nameQual = bm.getAttribute('w:name');
       const name = nameNS ?? namePlain ?? nameQual;
       const matched = name ? anchorRemap.has(name) : false;
-      console.log(
+      dbg(
         `[CLEAN-008]   bookmark: getAttributeNS="${nameNS}", plain="${namePlain}", qualified="${nameQual}"` +
         `, combined="${name}", inRemap=${matched}`
       );
       if (name && matched) {
         const newVal = anchorRemap.get(name)!;
-        console.log(`[CLEAN-008]     → Updating bookmark name "${name}" to "${newVal}"`);
+        dbg(`[CLEAN-008]     → Updating bookmark name "${name}" to "${newVal}"`);
+        // Remove all stale variants first (plain, qualified, namespace-aware),
+        // then assert the canonical namespaced attribute once — mirrors the
+        // same pattern used for hyperlink anchor cleanup above.
         bm.removeAttribute('name');
         bm.removeAttribute('w:name');
+        bm.removeAttributeNS(W, 'name');
         bm.setAttributeNS(W, 'w:name', newVal);
       }
     }
@@ -896,10 +920,10 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
   if (changed) {
     const serializer = new XMLSerializer();
     const outXml = serializer.serializeToString(xmlDoc);
-    console.log('[CLEAN-008] Serialized output snippet (first 800 chars):', outXml.slice(0, 800));
+    dbg('[CLEAN-008] Serialized output snippet (first 800 chars):', outXml.slice(0, 800));
     zip.file('word/document.xml', outXml);
   } else {
-    console.log('[CLEAN-008] No heading text changes detected; file not rewritten');
+    dbg('[CLEAN-008] No heading text changes detected; file not rewritten');
   }
 }
 
