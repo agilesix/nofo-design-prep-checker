@@ -28,6 +28,8 @@ import CLEAN_011 from './universal/CLEAN-011';
 import CLEAN_012 from './universal/CLEAN-012';
 import CLEAN_013 from './universal/CLEAN-013';
 import HEAD_001 from './universal/HEAD-001';
+import HEAD_002 from './universal/HEAD-002';
+import HEAD_003 from './universal/HEAD-003';
 
 // OpDiv-specific rules
 import STRUCT_001 from './opdiv/STRUCT-001';
@@ -72,6 +74,8 @@ export const allRules: Rule[] = [
 
   // Heading rules
   HEAD_001,
+  HEAD_002,
+  HEAD_003,
 
   // Metadata rules
   META_001,
@@ -124,7 +128,7 @@ export const allRules: Rule[] = [
 ];
 
 export {
-  HEAD_001,
+  HEAD_001, HEAD_002, HEAD_003,
   META_001, META_002, META_003,
   LINK_001, LINK_002, LINK_003, LINK_004, LINK_006, LINK_007, LINK_008,
   TABLE_002, TABLE_003,

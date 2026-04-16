@@ -66,6 +66,9 @@ export async function buildDocx(
   const h2TitleCaseChanges = autoAppliedChanges.filter(
     c => c.targetField === 'heading.h2.titlecase' && c.value
   );
+  const headingLevelFixes = acceptedFixes.filter(
+    f => f.targetField?.startsWith('heading.level.H') && !!f.value
+  );
 
   // Apply metadata patches
   if (metaFixes.length > 0) {
@@ -118,6 +121,11 @@ export async function buildDocx(
   // text matches the HTML-derived keys stored in the change value)
   if (h2TitleCaseChanges.length > 0) {
     await applyH2TitleCaseFix(zip, h2TitleCaseChanges);
+  }
+
+  // Apply accepted heading level corrections (HEAD-003)
+  if (headingLevelFixes.length > 0) {
+    await applyHeadingLevelCorrections(zip, headingLevelFixes);
   }
 
   // Accept tracked changes and remove comments
@@ -958,6 +966,72 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
       }
       pos += text.length;
     }
+    changed = true;
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+// ─── HEAD-003: Heading level corrections ─────────────────────────────────────
+
+/**
+ * HEAD-003: Change the heading level (w:pStyle) of paragraphs accepted by the
+ * user.
+ *
+ * Each AcceptedFix carries:
+ *   targetField: "heading.level.H{fromLevel}::{headingText}"
+ *   value:       the confirmed target level as a string (e.g. "2")
+ *
+ * The patch replaces the trailing digit(s) of the existing w:pStyle w:val,
+ * preserving whether the original used "Heading1" or "Heading 1" format.
+ */
+async function applyHeadingLevelCorrections(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  interface LevelFix { from: number; to: number }
+  const fixMap = new Map<string, LevelFix>();
+
+  for (const fix of fixes) {
+    if (!fix.targetField || !fix.value) continue;
+    const encoded = fix.targetField.replace('heading.level.H', '');
+    const sepIdx = encoded.indexOf('::');
+    if (sepIdx === -1) continue;
+    const fromLevel = parseInt(encoded.slice(0, sepIdx), 10);
+    const headingText = encoded.slice(sepIdx + 2);
+    const toLevel = parseInt(fix.value, 10);
+    if (isNaN(fromLevel) || isNaN(toLevel) || toLevel < 1 || toLevel > 6) continue;
+    fixMap.set(headingText, { from: fromLevel, to: toLevel });
+  }
+
+  if (fixMap.size === 0) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  let changed = false;
+
+  for (const wP of paragraphs) {
+    const level = getHeadingLevel(wP);
+    if (level === 0) continue;
+
+    const text = getParaText(wP).trim();
+    const fix = fixMap.get(text);
+    if (!fix || fix.from !== level) continue;
+
+    const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
+    if (!pPr) continue;
+    const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+    if (!pStyle) continue;
+
+    const originalVal = pStyle.getAttribute('w:val') ?? '';
+    const newVal = originalVal.replace(/\d+$/, String(fix.to));
+    pStyle.setAttribute('w:val', newVal);
     changed = true;
   }
 
