@@ -6,13 +6,15 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ## 2026-04-16 — LINK-006: stop rewriting internal link anchors; surface instruction-only warnings instead
 
-**Decision:** LINK-006 no longer silently rewrites `w:anchor` values in the downloaded `.docx`, and no longer offers an "Accept" Review card for anchor retargeting. All broken or unmatched internal anchor cases now surface a single instruction-only warning: *"This internal link may be broken. To fix it, select the link text in Word, go to Insert → Link → This Document, and select the correct heading. Do not edit the link URL directly."*
+**Decision:** LINK-006 now uses a two-tier approach based on the source of the fuzzy match:
 
-Fuzzy matching (normalize-and-compare, numeric-suffix stripping, numeric extraction) is retained for one purpose only: identifying the probable target heading so a link-text improvement suggestion can be emitted when the link text doesn't already name the destination.
+1. **OOXML bookmark match → user-accepted fix.** When the broken anchor normalizes to exactly one existing `w:bookmarkStart w:name` in the document XML, a Review card is shown pre-filled with that exact bookmark name. Accepting rewrites `w:anchor` in the downloaded docx. Internal links in Word are purely `w:hyperlink w:anchor` → `w:bookmarkStart w:name` — no relationship entry, no other mechanism. Writing the exact existing bookmark name produces a working link.
 
-**Reason:** NOFO Builder resolves internal links by navigating to the heading that was selected at link-creation time using Word's native "Insert → Link → This Document" flow. It does not use the `w:anchor` attribute value at all — it relies on an internal relationship between the hyperlink element and the heading paragraph established by Word's UI. A tool-generated `w:anchor` rewrite (even to the "correct" bookmark name) is simply ignored by Builder. Users were accepting tool-suggested anchor fixes, downloading the corrected document, and then finding the links still broken in Builder.
+2. **All other fuzzy matches and no-match → instruction-only warning.** When we only have a Source 2 (HTML id) or Source 3 (heading text) match, we do not have the exact OOXML bookmark name, so we cannot safely write a correct anchor. The instruction directs the user to use Insert → Link → This Document in Word.
 
-**Alternative considered:** Keeping the auto-fix for cases where the only difference is capitalization or leading/trailing underscores (the previous "high-confidence" tier), on the grounds that these might work for non-Builder consumers of the document. Rejected because (a) the fix is invisible to the user in the auto-applied summary and can create false confidence, (b) the fix is ineffective for Builder regardless of confidence level, and (c) the instruction-only path is safer and more honest about what the user needs to do.
+**Reason (original decision to use instruction-only for everything):** The original thinking was that NOFO Builder had a proprietary linking mechanism. An earlier implementation failed — links were rewritten but still broken in Builder. Investigation revealed the actual causes: (a) `setAttributeNS` caused XMLSerializer to inject redundant `xmlns:w` declarations that corrupted the XML, and (b) our `slugifyHeading()` function was generating anchor values that didn't match the actual bookmark names (no leading underscore, special characters like colons and commas converted to underscores rather than preserved). Both issues have been fixed.
+
+**Reason (revised decision to use accept-to-fix for OOXML matches):** Examination of real NOFO documents confirmed the format — internal links are `w:anchor` matching `w:bookmarkStart w:name`, with no other mechanism. When we read the bookmark name directly from the XML, we have the exact correct value. With the namespace fix in place, writing it back produces a correctly-wired link.
 
 ---
 

@@ -346,6 +346,24 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
       }
     }
 
+    // LINK-006: retarget internal bookmark anchor
+    // targetField: "link.bookmark.{old_anchor}", value: "{new_anchor}"
+    if (fix.ruleId === 'LINK-006' && fix.targetField?.startsWith('link.bookmark.')) {
+      const oldAnchor = fix.targetField.replace('link.bookmark.', '');
+      const normalizedNewAnchor = (fix.value ?? '').trim().replace(/^#/, '');
+      if (normalizedNewAnchor) {
+        const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+        for (const el of hyperlinks) {
+          const elAnchor = el.getAttribute('w:anchor') ?? el.getAttributeNS(W, 'anchor');
+          if (elAnchor === oldAnchor) {
+            el.removeAttributeNS(W, 'anchor');
+            el.removeAttribute('anchor');
+            el.setAttribute('w:anchor', normalizedNewAnchor);
+          }
+        }
+      }
+    }
+
     // LINK-003: update link text
     if (fix.ruleId === 'LINK-003' && fix.targetField?.startsWith('link.')) {
       // Production implementation: match by relationship ID stored in the issue

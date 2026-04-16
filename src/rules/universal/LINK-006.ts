@@ -5,21 +5,20 @@ import { buildLocationLookup } from '../../utils/locationContext';
  * LINK-006: Internal bookmark links
  *
  * Resolution tiers:
- *  1. Exact match   — anchor ID exists in the HTML or as an OOXML bookmark → no issue
- *  2. Any non-match — instruction-only warning directing the user to recreate the
- *                     link in Word using Insert → Link → This Document.
- *
- * The tool does not attempt to programmatically rewrite w:anchor values for internal
- * links. NOFO Builder requires heading-based links created through Word's native
- * heading-link UI; tool-generated anchor values are not recognized by Builder.
- * All previously auto-fixed cases (capitalization, leading/trailing underscores,
- * missing word separators) and all fuzzy-match cases now surface the same
- * instruction-only warning.
+ *  1. Exact match — anchor ID exists in the HTML or as an OOXML bookmark → no issue
+ *  2. OOXML bookmark fuzzy match — anchor normalizes to exactly one existing bookmark
+ *     name → user-accepted fix. The `w:anchor` value is rewritten to the exact
+ *     bookmark name in the downloaded docx. Internal links in Word are purely
+ *     `w:hyperlink w:anchor` → `w:bookmarkStart w:name`; no relationship entry is
+ *     needed. Writing the exact existing bookmark name produces a working link.
+ *  3. Source 2/3 fuzzy match (HTML id or heading text only) — instruction-only warning
+ *     directing the user to use Insert → Link → This Document in Word. We do not have
+ *     the exact OOXML bookmark name in these cases.
+ *  4. Ambiguous or no match — instruction-only warning.
  *
  * Link text suggestions (separate from anchor handling):
- *  When the probable target heading is identified via fuzzy matching, a suggestion
- *  is still emitted if the link text does not reference that heading by name. The
- *  three-pass fuzzy matching strategy is retained solely to populate this suggestion.
+ *  When the probable target heading is identified via fuzzy text matching (Source 3),
+ *  a suggestion is emitted if the link text does not reference that heading by name.
  */
 
 type FuzzyMatchResult =
@@ -29,6 +28,10 @@ type FuzzyMatchResult =
       headingText?: string;
       hadNumericSuffix?: boolean;
       matchedByNumericExtraction?: boolean;
+      /** True when the match came from Source 1 (OOXML bookmarks). The anchor
+       *  value is the exact w:name from an existing w:bookmarkStart element, so
+       *  writing it back produces a correctly-wired internal link. */
+      matchedByOoxmlBookmark?: boolean;
     }
   | { kind: 'ambiguous' }
   | { kind: 'none' };
@@ -131,21 +134,50 @@ const LINK_006: Rule = {
         const headingText = fuzzyResult.headingText;
         const sectionId = findSectionForElement(link, doc);
 
-        results.push({
-          id: `LINK-006-${index}`,
-          ruleId: 'LINK-006',
-          title: 'Internal link may not work in NOFO Builder',
-          severity: 'warning',
-          sectionId,
-          nearestHeading: linkNearestHeading,
-          location: href,
-          description: `This internal link may be broken. To fix it, select the link text in Word, go to Insert → Link → This Document, and select the correct heading. Do not edit the link URL directly.`,
-          instructionOnly: true,
-        } as Issue);
+        if (fuzzyResult.matchedByOoxmlBookmark) {
+          // Source 1 match: we have the exact OOXML bookmark name. Offer a
+          // user-accepted fix — accept rewrites w:anchor to the correct value.
+          const fuzzy = fuzzyResult.anchor;
+          const numericSuffixNote = fuzzyResult.hadNumericSuffix
+            ? ' The trailing numeric suffix was stripped during matching — there may be multiple headings with this name. Verify you are targeting the correct one before accepting.'
+            : '';
+          results.push({
+            id: `LINK-006-${index}`,
+            ruleId: 'LINK-006',
+            title: 'Internal link anchor may need updating',
+            severity: 'warning',
+            sectionId,
+            nearestHeading: linkNearestHeading,
+            location: href,
+            description: `The anchor "#${anchor}" wasn't found. Based on the document's existing bookmarks, the likely target is "#${fuzzy}". Accept to update the link.`,
+            suggestedFix: `Retarget "#${anchor}" → "#${fuzzy}"`,
+            inputRequired: {
+              type: 'text',
+              label: 'Replacement anchor',
+              fieldDescription: `Current anchor: #${anchor}`,
+              prefill: fuzzy,
+              prefillNote: `Matched by normalizing the anchor against existing bookmarks in this document.${numericSuffixNote}`,
+              targetField: `link.bookmark.${anchor}`,
+            },
+          } as Issue);
+        } else {
+          // Source 2/3 match: derived from HTML id or heading text — we don't
+          // have the exact OOXML bookmark name, so instruct the user to fix manually.
+          results.push({
+            id: `LINK-006-${index}`,
+            ruleId: 'LINK-006',
+            title: 'Internal link may not work in NOFO Builder',
+            severity: 'warning',
+            sectionId,
+            nearestHeading: linkNearestHeading,
+            location: href,
+            description: `This internal link may be broken. To fix it, select the link text in Word, go to Insert → Link → This Document, and select the correct heading. Do not edit the link URL directly.`,
+            instructionOnly: true,
+          } as Issue);
+        }
 
-        // If the anchor resolved to a heading via fuzzy text matching, also
-        // surface a link-text suggestion when the link text doesn't already
-        // reference that heading by name.
+        // Link-text suggestion when heading text is known (Source 3 only) and
+        // the link text doesn't already reference the heading by name.
         if (headingText && !linkTextContainsHeading(linkText, headingText)) {
           const suppressSee = hasSeeBeforeLink(link as Element);
           results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
@@ -368,7 +400,7 @@ function matchByNormalizedValue(
   if (xmlDoc) {
     const names = getOoxmlBookmarkNames(xmlDoc);
     const matches = names.filter(n => normalizeAnchor(n) === normalizedAnchor);
-    if (matches.length === 1) return { kind: 'single', anchor: matches[0]! };
+    if (matches.length === 1) return { kind: 'single', anchor: matches[0]!, matchedByOoxmlBookmark: true };
     if (matches.length > 1) return { kind: 'ambiguous' };
   }
 
