@@ -1,6 +1,6 @@
 import type { Rule, Issue, ParsedDocument, RuleRunnerOptions, Section } from '../../types';
 import { buildLocationLookup } from '../../utils/locationContext';
-import { COMPONENT_LABEL_WORDS } from '../../constants';
+import { DESIGNATOR_RE, isComponentLabel } from '../../constants';
 
 /**
  * TABLE-002: Tables missing a caption
@@ -143,18 +143,6 @@ const TABLE_002: Rule = {
 
 // ─── Sentence case check ──────────────────────────────────────────────────────
 
-/**
- * Labeled component reference words: when one of these words is immediately
- * followed by a single uppercase letter (A–Z) or digit, the pair is treated as
- * a proper label (e.g. "Component A", "Appendix B", "Figure 3") and the label
- * word is not counted as title-case evidence.
- *
- * Derived from COMPONENT_LABEL_WORDS so it cannot diverge from HEAD-001's list.
- */
-const COMPONENT_LABEL_RE = new RegExp(
-  `^(${COMPONENT_LABEL_WORDS.join('|')})$`,
-  'i',
-);
 
 /**
  * Returns true when the caption text appears to use title case or all-caps rather
@@ -191,17 +179,29 @@ function looksLikeTitleOrAllCaps(text: string): boolean {
   const firstSubstantial = allWords.findIndex(w => w.length > 1);
   if (firstSubstantial === -1) return false;
 
+  // Words immediately following a ':'-terminated token are sentence restarts
+  // (e.g. "Appendix A: Eligibility requirements" — "Eligibility" is exempt
+  // because "A:" triggers a restart). Mirrors the colon-restart logic in
+  // HEAD-001's sentenceStartIndices.
+  const colonRestarts = new Set<number>();
+  for (let k = 0; k < allWords.length - 1; k++) {
+    if ((allWords[k] ?? '').endsWith(':')) colonRestarts.add(k + 1);
+  }
+
   for (let i = firstSubstantial + 1; i < allWords.length; i++) {
+    // Word after a colon — treated as a sentence start.
+    if (colonRestarts.has(i)) continue;
     const w = allWords[i] ?? '';
     // Single-letter words appear in both case styles — skip.
     if (w.length <= 1) continue;
     // Not a title-case word — skip.
     if (!/^[A-Z]/.test(w) || !/[a-z]/.test(w)) continue;
-    // Labeled component reference: exempt when followed by a single uppercase
-    // letter or digit (e.g. "Component A", "Appendix B", "Figure 3").
-    if (COMPONENT_LABEL_RE.test(w)) {
+    // Labeled component reference (singular or plural): exempt when followed by a
+    // designator — a single uppercase letter, Roman numeral, or Arabic number
+    // (e.g. "Component A", "Components A", "Phase II", "Figure 10", "Appendix B").
+    if (isComponentLabel(w)) {
       const nextBare = bare(allWords[i + 1] ?? '');
-      if (/^[A-Z0-9]$/.test(nextBare)) continue;
+      if (DESIGNATOR_RE.test(nextBare)) continue;
     }
     return true;
   }
