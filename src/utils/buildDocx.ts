@@ -427,7 +427,14 @@ async function applyAnchorFmtFixes(zip: JSZip, changes: AutoAppliedChange[]): Pr
   }
 
   const serializer = new XMLSerializer();
-  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  // Strip redundant xmlns:w re-declarations that XMLSerializer injects on any
+  // element where setAttributeNS was called. The w: namespace is already
+  // declared on the root element; re-declarations on child elements create a
+  // namespace scope change that breaks downstream OOXML consumers such as
+  // NOFO Builder, which fails to resolve w:anchor on the affected elements.
+  const outXml = serializer.serializeToString(xmlDoc)
+    .replace(/ xmlns:w="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main"/g, '');
+  zip.file('word/document.xml', outXml);
 }
 
 /**
@@ -920,7 +927,10 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
 
   if (changed) {
     const serializer = new XMLSerializer();
-    const outXml = serializer.serializeToString(xmlDoc);
+    // Strip redundant xmlns:w re-declarations injected by XMLSerializer on
+    // elements modified via setAttributeNS — same fix as applyAnchorFmtFixes.
+    const outXml = serializer.serializeToString(xmlDoc)
+      .replace(/ xmlns:w="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main"/g, '');
     dbg('[CLEAN-008] Serialized output snippet (first 800 chars):', outXml.slice(0, 800));
     zip.file('word/document.xml', outXml);
   } else {
