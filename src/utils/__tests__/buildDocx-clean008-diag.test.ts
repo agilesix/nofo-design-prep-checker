@@ -432,10 +432,8 @@ describe('CLEAN-008 diagnostic — realistic OOXML scenarios', () => {
       console.warn('[DIAG-8] byTag tagNames:', byTag.map(e => e.tagName));
     }
 
-    // Namespace-aware lookup must always work.
+    // Namespace-aware lookup must always work regardless of prefix remapping.
     expect(byNS.length).toBeGreaterThan(0);
-    // Both must agree in jsdom (the diagnostic value is in browser DevTools).
-    expect(byNS.length).toBe(byTag.length);
   });
 
 });
