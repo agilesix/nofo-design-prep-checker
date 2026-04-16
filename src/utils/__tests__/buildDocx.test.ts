@@ -2365,8 +2365,8 @@ describe('buildDocx — LINK-006 auto-applied bookmark retargets', () => {
 // ─── LINK-006 + CLEAN-008 interaction ────────────────────────────────────────
 //
 // These tests cover the two real-world failing cases the user reported:
-//   1. "#_Contacts_and_support" → "#_Contacts_and_Support" (capitalisation fix)
-//   2. "#_Responsiveness_criteria_1" → "#_Responsiveness_criteria" (suffix stripped)
+//   1. "#_Responsiveness_criteria_1" → "#_Responsiveness_criteria" (suffix stripped)
+//   2. "#_Contacts_and_support" → "#_Contacts_and_Support" (capitalisation fix)
 //
 // Both involve a heading with a leading space, so CLEAN-008 also runs and
 // renames the w:bookmarkStart w:name from _Foo → Foo (leading underscore removed).
