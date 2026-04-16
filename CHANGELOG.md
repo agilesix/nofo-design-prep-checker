@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.2.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.1.0...v1.2.0) (2026-04-16)
+
+
+### Features
+
+* add labeled component reference exceptions to HEAD-001 and TABLE-002 ([c6f95a8](https://github.com/agilesix/nofo-design-prep-checker/commit/c6f95a8e232ec34bb0433b999b46786870ad29da))
+* add labeled component reference exceptions to HEAD-001 and TABLE-002 ([43523dd](https://github.com/agilesix/nofo-design-prep-checker/commit/43523dd47104e08c3836091a99472a8b7b8bdaae))
+* exempt structured designator patterns from cap checks ([7d90465](https://github.com/agilesix/nofo-design-prep-checker/commit/7d90465d1e20d5fe90c4823bbb5335091d73d788))
+* exempt structured designator patterns from cap checks ([8150aca](https://github.com/agilesix/nofo-design-prep-checker/commit/8150aca02dc41a813fb94c66c38024b4c6c1b476))
+* **LINK-006:** auto-fix anchors missing word-separator underscores ([92ea9ef](https://github.com/agilesix/nofo-design-prep-checker/commit/92ea9efbc1fd71f463d7dc5cdc135140fc5ac9e4))
+* **LINK-006:** auto-fix OOXML bookmark anchor mismatches silently ([b96311d](https://github.com/agilesix/nofo-design-prep-checker/commit/b96311d6a5eea1d049e381065784911ee41c3798))
+* **LINK-006:** auto-fix OOXML bookmark anchor mismatches silently ([b53792e](https://github.com/agilesix/nofo-design-prep-checker/commit/b53792e6722f0728747dc168f1c4eba69ea5926a))
+* **LINK-006:** reinstate accept-to-fix for OOXML bookmark matches ([9e7c7da](https://github.com/agilesix/nofo-design-prep-checker/commit/9e7c7da64e0cbeffab7681b498f5e8b698d36934))
+* **LINK-006:** reinstate accept-to-fix for OOXML bookmark matches ([35cf890](https://github.com/agilesix/nofo-design-prep-checker/commit/35cf890d74423a53e6c7df3eba25455feef48f96))
+* **LINK-006:** replace anchor auto-fix with instruction-only warnings ([be16c5c](https://github.com/agilesix/nofo-design-prep-checker/commit/be16c5c99781159ecbf9b528a567ddb49efec67c))
+* **LINK-006:** replace anchor auto-fix with instruction-only warnings ([b426150](https://github.com/agilesix/nofo-design-prep-checker/commit/b426150e57884de9693abbd969395b3c5291f95c))
+* **review:** add bold category prefix to auto-applied changes list ([225a847](https://github.com/agilesix/nofo-design-prep-checker/commit/225a847b51c6113b1d1eb536cd889d90376b038e))
+* **review:** add bold category prefix to auto-applied changes list ([5e3b963](https://github.com/agilesix/nofo-design-prep-checker/commit/5e3b963cfea9e63e3fccfa8e1b91212167d3fb1e))
+* **rules:** add HEAD-002 (multiple H1s) and HEAD-003 (skipped heading levels) ([2a01880](https://github.com/agilesix/nofo-design-prep-checker/commit/2a01880d5f294bb0d0528165a2c115c43e162766))
+* **rules:** add HEAD-002 (multiple H1s) and HEAD-003 (skipped heading levels) ([ed0ad2d](https://github.com/agilesix/nofo-design-prep-checker/commit/ed0ad2d8956b82c31718d356d07982add9ab552b))
+
+
+### Bug Fixes
+
+* additional HEAD-001 and TABLE-002 updates ([18463b5](https://github.com/agilesix/nofo-design-prep-checker/commit/18463b595d5acaa0d34ca138a673e45e19fcb01b))
+* additional HEAD-001 and TABLE-002 updates ([128ebef](https://github.com/agilesix/nofo-design-prep-checker/commit/128ebef7cd786b2f7bdfb2ea7bfa3e6104deff3b))
+* additional HEAD-001 and TABLE-002 updates ([687309a](https://github.com/agilesix/nofo-design-prep-checker/commit/687309add64f9384b59b790978ed234436645b5b))
+* **buildDocx:** address Copilot review feedback on CLEAN-008 logging and NS lookups ([221d4a0](https://github.com/agilesix/nofo-design-prep-checker/commit/221d4a008a9bb8852b8079240b7c56029c0f7391))
+* **buildDocx:** correct bookmark cleanup order and harden DIAG-4 assertion ([15d00ba](https://github.com/agilesix/nofo-design-prep-checker/commit/15d00baccd4c0c6255bc32e8cec689cd963e6eae))
+* **buildDocx:** strip redundant xmlns:w from serialized hyperlinks ([24d2365](https://github.com/agilesix/nofo-design-prep-checker/commit/24d2365704a913b88d493af6c15bb5e789355a96))
+* **buildDocx:** strip redundant xmlns:w from serialized hyperlinks ([0583cb5](https://github.com/agilesix/nofo-design-prep-checker/commit/0583cb55b8287bc2d26900fbee42cbf817f3496b))
+* **buildDocx:** use setAttribute for anchor writes; drop xmlns strip ([50b320c](https://github.com/agilesix/nofo-design-prep-checker/commit/50b320c2aa686e593a64d463fc407f13c9be68a5))
+* **clean-008:** harden CLEAN-008 hyperlink/bookmark anchor update against browser DOM differences ([3c47ed5](https://github.com/agilesix/nofo-design-prep-checker/commit/3c47ed5d1f4284551fc6f27c7686d3d8bc53fb50))
+* download step and buildDocx updates ([0d2848c](https://github.com/agilesix/nofo-design-prep-checker/commit/0d2848c3d378cd4df68afa2daac715df24cf4c34))
+* download step and buildDocx updates ([ddf5fdb](https://github.com/agilesix/nofo-design-prep-checker/commit/ddf5fdb8be5901bb1eac4842d5d24e17aea9e721))
+* **HEAD-003:** disambiguate targetField by heading ordinal index ([28014ef](https://github.com/agilesix/nofo-design-prep-checker/commit/28014efba3db536365e3ef35027970b3f727dff1))
+* **HEAD-003:** disambiguate targetField by heading ordinal index ([80faecd](https://github.com/agilesix/nofo-design-prep-checker/commit/80faecdae456fce8dcd5a41b1082097a1f365413))
+* merge origin/main into branch ([ed6bd04](https://github.com/agilesix/nofo-design-prep-checker/commit/ed6bd04beafb645b0699cfee527c931974164e95))
+* remove unused warning constants from LINK-006 ([01d0e90](https://github.com/agilesix/nofo-design-prep-checker/commit/01d0e90f458d7f2b47dc22f5d25ed0e196bb024d))
+* resolve merge conflicts ([b32b840](https://github.com/agilesix/nofo-design-prep-checker/commit/b32b840dc0ff4ce2e1b1551a469ca1254dd83259))
+* **test:** remove process.env — not available without @types/node ([eccddb8](https://github.com/agilesix/nofo-design-prep-checker/commit/eccddb847422a03fdc4ca536b433d4f3f69f7d93))
+* **test:** remove process.env usage from buildDocx-clean008-diag.test.ts ([87bf9ef](https://github.com/agilesix/nofo-design-prep-checker/commit/87bf9ef3420c935f04bd72d1bbed603f5b8c2c24))
+
 ## [1.1.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.0.4...v1.1.0) (2026-04-15)
 
 
