@@ -52,15 +52,6 @@ export default function DownloadStep({
         {hasDownloaded ? 'Download complete' : 'Download your corrected document'}
       </h1>
 
-      <div className="usa-alert usa-alert--info usa-alert--slim margin-bottom-3">
-        <div className="usa-alert__body">
-          <p className="usa-alert__text">
-            <strong>This file is ready for design handoff.</strong>{' '}
-            Hand it off to your designer or import it directly into NOFO Builder to begin the design process.
-          </p>
-        </div>
-      </div>
-
       <div className="usa-alert usa-alert--info usa-alert--slim margin-bottom-4">
         <div className="usa-alert__body">
           <p className="usa-alert__text">
@@ -70,6 +61,15 @@ export default function DownloadStep({
           </p>
         </div>
       </div>
+
+      <p className="font-body-sm margin-bottom-1">
+        <strong>This file is ready for design handoff.</strong>{' '}
+        Hand it off to your designer or import it directly into NOFO Builder to begin the design process.
+      </p>
+
+      <p className="font-body-sm margin-bottom-4">
+        After downloading your corrected document, open the Navigation Pane in Word (View → Navigation Pane) to check that bold text hasn't been used in place of a heading style. NOFO Builder cannot convert bold text to headings.
+      </p>
 
       {!hasDownloaded ? (
         <>
