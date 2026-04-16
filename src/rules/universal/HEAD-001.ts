@@ -1,4 +1,5 @@
 import type { Rule, Issue, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from '../../types';
+import { COMPONENT_LABEL_WORDS } from '../../constants';
 
 /**
  * HEAD-001: Heading capitalization
@@ -383,6 +384,9 @@ function acronymPhraseExemptPositions(words: string[]): Set<number> {
   return exempt;
 }
 
+/** Module-level Set built once from the canonical COMPONENT_LABEL_WORDS list. */
+const COMPONENT_LABELS = new Set<string>(COMPONENT_LABEL_WORDS);
+
 /**
  * Returns the set of word-array indices that are labeled component references:
  * a recognized label word (Component, Table, Appendix, Figure, Exhibit, Part,
@@ -398,14 +402,9 @@ function labeledComponentExemptPositions(words: string[]): Set<number> {
   const bare = (w: string) =>
     w.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '');
 
-  const LABELS = new Set([
-    'Component', 'Table', 'Appendix', 'Figure', 'Exhibit',
-    'Part', 'Attachment', 'Section',
-  ]);
-
   for (let i = 0; i < words.length; i++) {
     const w = bare(words[i] ?? '');
-    if (!LABELS.has(w)) continue;
+    if (!COMPONENT_LABELS.has(w)) continue;
     const next = bare(words[i + 1] ?? '');
     if (/^[A-Z0-9]$/.test(next)) exempt.add(i);
   }

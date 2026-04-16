@@ -1,5 +1,6 @@
 import type { Rule, Issue, ParsedDocument, RuleRunnerOptions, Section } from '../../types';
 import { buildLocationLookup } from '../../utils/locationContext';
+import { COMPONENT_LABEL_WORDS } from '../../constants';
 
 /**
  * TABLE-002: Tables missing a caption
@@ -147,9 +148,13 @@ const TABLE_002: Rule = {
  * followed by a single uppercase letter (A–Z) or digit, the pair is treated as
  * a proper label (e.g. "Component A", "Appendix B", "Figure 3") and the label
  * word is not counted as title-case evidence.
+ *
+ * Derived from COMPONENT_LABEL_WORDS so it cannot diverge from HEAD-001's list.
  */
-const COMPONENT_LABEL_RE =
-  /^(component|table|appendix|figure|exhibit|part|attachment|section)$/i;
+const COMPONENT_LABEL_RE = new RegExp(
+  `^(${COMPONENT_LABEL_WORDS.join('|')})$`,
+  'i',
+);
 
 /**
  * Returns true when the caption text appears to use title case or all-caps rather
