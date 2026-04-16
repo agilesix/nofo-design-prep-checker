@@ -57,9 +57,6 @@ export async function buildDocx(
   const hasPdfLabelFix = autoAppliedChanges.some(
     c => c.targetField === 'link.pdf.label'
   );
-  const fmtAnchorChanges = autoAppliedChanges.filter(
-    c => c.targetField === 'link.anchor.fmt' && c.value
-  );
   const hasAsteriskedBoldFix = autoAppliedChanges.some(
     c => c.targetField === 'text.asterisked.bold'
   );
@@ -83,13 +80,6 @@ export async function buildDocx(
   // Apply auto-applied email mailto patches
   if (emailChanges.length > 0) {
     await applyEmailMailtoFixes(zip, emailChanges.map(c => c.value as string));
-  }
-
-  // Retarget internal bookmark anchors corrected for formatting (capitalization,
-  // leading/trailing underscores from heading whitespace artifacts, or missing
-  // word-separator underscores such as #AppendixA → #Appendix_A)
-  if (fmtAnchorChanges.length > 0) {
-    await applyAnchorFmtFixes(zip, fmtAnchorChanges);
   }
 
   // Apply double-space collapse
@@ -356,87 +346,9 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
       }
     }
 
-    // LINK-006: retarget internal bookmark anchor
-    // targetField: "link.bookmark.{old_anchor}", value: "{new_anchor}"
-    if (fix.ruleId === 'LINK-006' && fix.targetField?.startsWith('link.bookmark.')) {
-      const oldAnchor = fix.targetField.replace('link.bookmark.', '');
-      const newAnchor = fix.value;
-      const normalizedNewAnchor = newAnchor.trim().replace(/^#/, '');
-      if (!normalizedNewAnchor) {
-        continue;
-      }
-      const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
-      for (const el of hyperlinks) {
-        const elAnchor = el.getAttribute('w:anchor') ?? el.getAttributeNS(W, 'anchor');
-        if (elAnchor === oldAnchor) {
-          el.removeAttributeNS(W, 'anchor');
-          el.removeAttribute('anchor');
-          el.setAttribute('w:anchor', normalizedNewAnchor);
-        }
-      }
-    }
-
     // LINK-003: update link text
     if (fix.ruleId === 'LINK-003' && fix.targetField?.startsWith('link.')) {
       // Production implementation: match by relationship ID stored in the issue
-    }
-  }
-
-  const serializer = new XMLSerializer();
-  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
-}
-
-/**
- * LINK-006: Retarget internal bookmark anchors that differ from the correct
- * target only by capitalization and/or leading/trailing underscores
- * (e.g. #eligibility → #Eligibility, #_Key_facts → #Key_facts).
- * Each AutoAppliedChange carries a JSON-encoded array of {old, new} pairs in
- * its `value` field. All w:hyperlink elements whose w:anchor matches an old
- * anchor are rewritten to the corrected new anchor.
- */
-async function applyAnchorFmtFixes(zip: JSZip, changes: AutoAppliedChange[]): Promise<void> {
-  const docFile = zip.file('word/document.xml');
-  if (!docFile) return;
-
-  const xmlStr = await docFile.async('string');
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
-  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-  const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
-
-  for (const change of changes) {
-    let pairs: { old: string; new: string }[];
-    try {
-      const parsed = JSON.parse(change.value!);
-      if (!Array.isArray(parsed)) continue;
-      pairs = parsed.filter(
-        (p): p is { old: string; new: string } =>
-          p !== null &&
-          typeof p === 'object' &&
-          typeof p.old === 'string' &&
-          typeof p.new === 'string'
-      );
-    } catch {
-      // Malformed JSON — skip this entry so the rest of the download still succeeds
-      continue;
-    }
-    for (const pair of pairs) {
-      for (const el of hyperlinks) {
-        const currentAnchor =
-          el.getAttribute('w:anchor') ??
-          el.getAttributeNS(W, 'anchor') ??
-          el.getAttribute('anchor');
-        if (currentAnchor === pair.old) {
-          // Remove all existing anchor variants before setting the new value so
-          // the output carries exactly one anchor attribute.  setAttribute (not
-          // setAttributeNS) is used to avoid XMLSerializer injecting a redundant
-          // xmlns:w declaration on this element, which would shadow the root
-          // namespace declaration and break downstream OOXML consumers.
-          el.removeAttributeNS(W, 'anchor');
-          el.removeAttribute('anchor');
-          el.setAttribute('w:anchor', pair.new);
-        }
-      }
     }
   }
 
