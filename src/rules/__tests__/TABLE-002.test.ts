@@ -664,6 +664,37 @@ describe('TABLE-002 sentence case suggestion', () => {
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
 
+  it('does not surface a suggestion for "Table: Scoring criteria for Components A and B"', () => {
+    // "Components" is the plural of the label word "Component"; "A" and "B" are
+    // single-letter designators (both single-char and skipped by the length guard).
+    // "criteria" and "for" are lowercase. No title-case evidence remains.
+    const doc = makeDoc(
+      '<p>Table: Scoring criteria for Components A and B</p>' + SIMPLE_TABLE
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not surface a suggestion for "Appendix A: Eligibility requirements"', () => {
+    // "Appendix" is the first substantial word (sentence start). "A:" triggers
+    // a colon restart so "Eligibility" is treated as a sentence start. No
+    // title-case evidence remains.
+    const doc = makeDoc('<p>Appendix A: Eligibility requirements</p>' + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not surface a suggestion for "Phase II overview" (Roman numeral designator)', () => {
+    // "Phase" is a label word; "II" is a multi-char Roman numeral matched by
+    // DESIGNATOR_RE. "overview" is lowercase.
+    const doc = makeDoc('<p>Phase II overview</p>' + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not surface a suggestion for "Figure 10 results" (multi-digit designator)', () => {
+    // "Figure" is a label word; "10" is a two-digit number matched by DESIGNATOR_RE.
+    const doc = makeDoc('<p>Figure 10 results</p>' + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
   it('still flags a caption where the label word is not followed by a single letter or digit', () => {
     // "Component" is not followed by a label identifier here — it is a genuine
     // title-case word and the caption should still be flagged.

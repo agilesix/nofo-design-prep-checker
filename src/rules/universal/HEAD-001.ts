@@ -1,5 +1,5 @@
 import type { Rule, Issue, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from '../../types';
-import { COMPONENT_LABEL_WORDS } from '../../constants';
+import { DESIGNATOR_RE, isComponentLabel } from '../../constants';
 
 /**
  * HEAD-001: Heading capitalization
@@ -384,14 +384,13 @@ function acronymPhraseExemptPositions(words: string[]): Set<number> {
   return exempt;
 }
 
-/** Module-level Set built once from the canonical COMPONENT_LABEL_WORDS list. */
-const COMPONENT_LABELS = new Set<string>(COMPONENT_LABEL_WORDS);
-
 /**
  * Returns the set of word-array indices that are labeled component references:
  * a recognized label word (Component, Table, Appendix, Figure, Exhibit, Part,
- * Attachment, Section) immediately followed by a single uppercase letter (A–Z)
- * or digit — for example "Component A", "Appendix B", "Figure 3", "Table C".
+ * Attachment, Section, Phase, Objective — singular or plural) immediately
+ * followed by a designator: a single uppercase letter (A–Z), a Roman numeral
+ * (II, III, IV, …), or an Arabic number (1, 10, …). Examples: "Component A",
+ * "Phase II", "Figure 10", "Components A", "Appendix B".
  *
  * These are proper labels used in NOFO documents; their capitalization is
  * intentional and should not be treated as title-case evidence when checking
@@ -404,9 +403,9 @@ function labeledComponentExemptPositions(words: string[]): Set<number> {
 
   for (let i = 0; i < words.length; i++) {
     const w = bare(words[i] ?? '');
-    if (!COMPONENT_LABELS.has(w)) continue;
+    if (!isComponentLabel(w)) continue;
     const next = bare(words[i + 1] ?? '');
-    if (/^[A-Z0-9]$/.test(next)) exempt.add(i);
+    if (DESIGNATOR_RE.test(next)) exempt.add(i);
   }
 
   return exempt;
