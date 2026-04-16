@@ -2217,3 +2217,108 @@ describe('buildDocx — applyHeadingLevelCorrections (HEAD-003)', () => {
     expect(styles[1]).toMatchObject({ style: 'Heading3' });
   });
 });
+
+// ─── LINK-006 auto-applied bookmark retargets ─────────────────────────────────
+
+function makeSimpleHyperlinkDocXml(anchor: string): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:hyperlink w:anchor="${anchor}">
+        <w:r><w:t>Link text</w:t></w:r>
+      </w:hyperlink>
+    </w:p>
+    <w:sectPr/>
+  </w:body>
+</w:document>`;
+}
+
+describe('buildDocx — LINK-006 auto-applied bookmark retargets', () => {
+  it('retargets w:anchor from old to new value when acceptedFixes is empty', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSimpleHyperlinkDocXml('_Eligibility'));
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Retargeted internal link "#_Eligibility" → "#Eligibility"',
+      targetField: 'link.bookmark._Eligibility',
+      value: 'Eligibility',
+    };
+
+    const xml = await getOutputDocXml(zip, [], [change]);
+    expect(xml).toContain('w:anchor="Eligibility"');
+    expect(xml).not.toContain('w:anchor="_Eligibility"');
+  });
+
+  it('does not require any acceptedFixes to trigger the bookmark patch', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSimpleHyperlinkDocXml('_Grants_management'));
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Retargeted internal link "#_Grants_management" → "#Grants_management"',
+      targetField: 'link.bookmark._Grants_management',
+      value: 'Grants_management',
+    };
+
+    const xml = await getOutputDocXml(zip, [], [change]);
+    expect(xml).toContain('w:anchor="Grants_management"');
+  });
+
+  it('leaves a non-matching anchor untouched', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSimpleHyperlinkDocXml('_Eligibility'));
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Retargeted internal link "#_Other" → "#Other"',
+      targetField: 'link.bookmark._Other',
+      value: 'Other',
+    };
+
+    const xml = await getOutputDocXml(zip, [], [change]);
+    expect(xml).toContain('w:anchor="_Eligibility"');
+    expect(xml).not.toContain('w:anchor="Other"');
+  });
+
+  it('applies multiple bookmark retargets in one pass', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:hyperlink w:anchor="_Eligibility"><w:r><w:t>A</w:t></w:r></w:hyperlink>
+    </w:p>
+    <w:p>
+      <w:hyperlink w:anchor="_Program-specific_limitations_1"><w:r><w:t>B</w:t></w:r></w:hyperlink>
+    </w:p>
+    <w:sectPr/>
+  </w:body>
+</w:document>`
+    );
+
+    const changes: AutoAppliedChange[] = [
+      {
+        ruleId: 'LINK-006',
+        description: 'Retargeted "#_Eligibility" → "#Eligibility"',
+        targetField: 'link.bookmark._Eligibility',
+        value: 'Eligibility',
+      },
+      {
+        ruleId: 'LINK-006',
+        description: 'Retargeted "#_Program-specific_limitations_1" → "#_Program-specific_limitations"',
+        targetField: 'link.bookmark._Program-specific_limitations_1',
+        value: '_Program-specific_limitations',
+      },
+    ];
+
+    const xml = await getOutputDocXml(zip, [], changes);
+    expect(xml).toContain('w:anchor="Eligibility"');
+    expect(xml).toContain('w:anchor="_Program-specific_limitations"');
+    expect(xml).not.toContain('w:anchor="_Eligibility"');
+    expect(xml).not.toContain('w:anchor="_Program-specific_limitations_1"');
+  });
+});
