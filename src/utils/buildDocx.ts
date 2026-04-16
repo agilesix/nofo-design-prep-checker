@@ -906,9 +906,12 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
       if (name && matched) {
         const newVal = anchorRemap.get(name)!;
         dbg(`[CLEAN-008]     → Updating bookmark name "${name}" to "${newVal}"`);
-        bm.setAttributeNS(W, 'w:name', newVal);
+        // Remove all stale variants first (plain, qualified, namespace-aware),
+        // then assert the canonical namespaced attribute once — mirrors the
+        // same pattern used for hyperlink anchor cleanup above.
         bm.removeAttribute('name');
         bm.removeAttribute('w:name');
+        bm.removeAttributeNS(W, 'name');
         bm.setAttributeNS(W, 'w:name', newVal);
       }
     }
