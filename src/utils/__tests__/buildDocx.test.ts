@@ -2012,4 +2012,185 @@ describe('buildDocx — content control removal', () => {
     expect(outFootnotesXml).not.toContain('w:sdt');
     expect(outFootnotesXml).toContain('Footnote text');
   });
+
+});
+
+// ─── applyHeadingLevelCorrections (HEAD-003) ─────────────────────────────────
+
+/**
+ * Build a <w:p> XML string styled as a heading.
+ * Uses "Heading{level}" (no space) which is the standard Word format.
+ */
+function headingPara(level: number, text: string): string {
+  return (
+    `<w:p>` +
+    `<w:pPr><w:pStyle w:val="Heading${level}"/></w:pPr>` +
+    `<w:r><w:t>${text}</w:t></w:r>` +
+    `</w:p>`
+  );
+}
+
+/**
+ * Build a word/document.xml string from an array of already-serialized <w:p>
+ * strings (heading or body).
+ */
+function makeDocXmlFromParas(paraStrings: string[]): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+    `<w:body>${paraStrings.join('')}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+/**
+ * Parse heading styles from a serialized word/document.xml string.
+ * Returns [{style, text}] for every paragraph that has a pStyle matching /Heading/i.
+ */
+function extractHeadingStyles(xml: string): Array<{ style: string; text: string }> {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'application/xml');
+  const result: Array<{ style: string; text: string }> = [];
+  for (const wP of Array.from(doc.getElementsByTagName('w:p'))) {
+    const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
+    if (!pPr) continue;
+    const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+    if (!pStyle) continue;
+    const style = pStyle.getAttribute('w:val') ?? '';
+    if (!/heading/i.test(style)) continue;
+    const text = Array.from(wP.getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '')
+      .join('');
+    result.push({ style, text });
+  }
+  return result;
+}
+
+describe('buildDocx — applyHeadingLevelCorrections (HEAD-003)', () => {
+  it('changes the pStyle of the targeted heading to the accepted level', async () => {
+    // Headings: H1(index 0), H3(index 1) — user accepts H3→H2
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'NOFO Title'),
+      headingPara(3, 'Skipped Heading'),
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-003-1',
+      ruleId: 'HEAD-003',
+      targetField: 'heading.level.H3.1::Skipped Heading',
+      value: '2',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    expect(styles).toHaveLength(2);
+    expect(styles[0]).toMatchObject({ style: 'Heading1', text: 'NOFO Title' });
+    expect(styles[1]).toMatchObject({ style: 'Heading2', text: 'Skipped Heading' });
+  });
+
+  it('preserves "Heading 2" (space) format when present in the original', async () => {
+    const zip = new JSZip();
+    // Use "Heading 4" (with space) as the source format
+    zip.file('word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:body>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading 1"/></w:pPr><w:r><w:t>Title</w:t></w:r></w:p>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading 4"/></w:pPr><w:r><w:t>Deep</w:t></w:r></w:p>` +
+      `<w:sectPr/></w:body></w:document>`
+    );
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-003-1',
+      ruleId: 'HEAD-003',
+      targetField: 'heading.level.H4.1::Deep',
+      value: '2',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    expect(styles[1]).toMatchObject({ style: 'Heading 2', text: 'Deep' });
+  });
+
+  it('does not change a heading at a different ordinal position with the same text', async () => {
+    // Two H3 headings with identical text — fix targets index 1, not index 3
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'Title'),          // index 0
+      headingPara(2, 'Section A'),       // index 1
+      headingPara(3, 'Introduction'),    // index 2 — same text, NOT targeted
+      headingPara(2, 'Section B'),       // index 3
+      headingPara(3, 'Introduction'),    // index 4 — targeted (H3 at position 4)
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-003-4',
+      ruleId: 'HEAD-003',
+      targetField: 'heading.level.H3.4::Introduction',
+      value: '2',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    // index 2: H3 'Introduction' — must stay H3
+    expect(styles[2]).toMatchObject({ style: 'Heading3', text: 'Introduction' });
+    // index 4: H3 'Introduction' — must become H2
+    expect(styles[4]).toMatchObject({ style: 'Heading2', text: 'Introduction' });
+  });
+
+  it('does not change any heading when the from-level does not match', async () => {
+    // Fix says H4 at index 1, but that position is actually H3 — no change
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'Title'),
+      headingPara(3, 'Section'),
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-003-1',
+      ruleId: 'HEAD-003',
+      targetField: 'heading.level.H4.1::Section',
+      value: '2',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    // H3 must be unchanged because fix.from (4) !== actual level (3)
+    expect(styles[1]).toMatchObject({ style: 'Heading3', text: 'Section' });
+  });
+
+  it('applies multiple independent level corrections in one pass', async () => {
+    // H1(0), H3(1), H5(2) — fix both skipped headings
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'Title'),
+      headingPara(3, 'First Skip'),
+      headingPara(5, 'Second Skip'),
+    ]));
+
+    const fixes: AcceptedFix[] = [
+      { issueId: 'HEAD-003-1', ruleId: 'HEAD-003', targetField: 'heading.level.H3.1::First Skip', value: '2' },
+      { issueId: 'HEAD-003-2', ruleId: 'HEAD-003', targetField: 'heading.level.H5.2::Second Skip', value: '3' },
+    ];
+
+    const xml = await getOutputDocXml(zip, fixes);
+    const styles = extractHeadingStyles(xml);
+    expect(styles[0]).toMatchObject({ style: 'Heading1', text: 'Title' });
+    expect(styles[1]).toMatchObject({ style: 'Heading2', text: 'First Skip' });
+    expect(styles[2]).toMatchObject({ style: 'Heading3', text: 'Second Skip' });
+  });
+
+  it('leaves the document unchanged when no heading-level fixes are present', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'Title'),
+      headingPara(3, 'Skipped'),
+    ]));
+
+    const xml = await getOutputDocXml(zip, []);
+    const styles = extractHeadingStyles(xml);
+    expect(styles[0]).toMatchObject({ style: 'Heading1' });
+    expect(styles[1]).toMatchObject({ style: 'Heading3' });
+  });
 });

@@ -19,7 +19,11 @@ import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types
  * When a suggestion is determinable, an accept-to-fix input is offered so the
  * user can confirm or adjust the level before downloading.
  *
- * targetField format for accepted fixes: "heading.level.H{fromLevel}::{headingText}"
+ * targetField format for accepted fixes:
+ *   "heading.level.H{fromLevel}.{headingIndex}::{headingText}"
+ *   headingIndex is the 0-based ordinal position of the heading among all
+ *   headings in the document (as returned by querySelectorAll('h1,…,h6')).
+ *   This disambiguates headings with identical text.
  * value: the confirmed target level as a string (e.g. "2")
  */
 
@@ -114,7 +118,7 @@ const HEAD_003: Rule = {
             prefillNote:
               `Suggested based on surrounding heading structure: ` +
               `preceding H${precedingLevel}${nextInfo}.`,
-            targetField: `heading.level.H${curr.level}::${curr.text}`,
+            targetField: `heading.level.H${curr.level}.${i}::${curr.text}`,
             validationPattern: '^[1-6]$',
             validationMessage: 'Enter a heading level between 1 and 6.',
           },

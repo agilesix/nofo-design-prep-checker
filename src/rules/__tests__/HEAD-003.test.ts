@@ -81,12 +81,24 @@ describe('HEAD-003: Skipped heading — determinable fix (accept-to-fix)', () =>
     expect(issue.suggestedFix).toContain('H2');
   });
 
-  it('targetField encodes the from-level and heading text', () => {
+  it('targetField encodes the from-level, ordinal index, and heading text', () => {
+    // headingData[0]=H1, headingData[1]=H3 (flagged at i=1), headingData[2]=H3
     const doc = makeDoc(
       '<h1>Title</h1><h3>Skipped Heading</h3><h3>Next</h3>'
     );
     const issue = HEAD_003.check(doc, OPTIONS)[0] as Issue;
-    expect(issue.inputRequired!.targetField).toBe('heading.level.H3::Skipped Heading');
+    expect(issue.inputRequired!.targetField).toBe('heading.level.H3.1::Skipped Heading');
+  });
+
+  it('two skipped headings get distinct targetFields using their ordinal positions', () => {
+    // H1(0), H3(1, skipped), H5(2, skipped)
+    const doc = makeDoc('<h1>Title</h1><h3>First Skip</h3><h5>Second Skip</h5>');
+    const issues = HEAD_003.check(doc, OPTIONS) as Issue[];
+    // Both are ambiguous (no following after last), but first skip has next=H5
+    // H3 at index 1: next.level(5) >= curr.level(3) → determinable, suggest H2
+    // H5 at index 2: no following → ambiguous (instruction-only)
+    const fixableIssue = issues.find(r => !r.instructionOnly);
+    expect(fixableIssue?.inputRequired?.targetField).toBe('heading.level.H3.1::First Skip');
   });
 
   it('flags H2 → H4 when followed by H2 (same as preceding) and suggests H2', () => {
