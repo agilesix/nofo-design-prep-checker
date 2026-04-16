@@ -982,8 +982,12 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
  * user.
  *
  * Each AcceptedFix carries:
- *   targetField: "heading.level.H{fromLevel}::{headingText}"
+ *   targetField: "heading.level.H{fromLevel}.{headingIndex}::{headingText}"
  *   value:       the confirmed target level as a string (e.g. "2")
+ *
+ * headingIndex is the 0-based ordinal position of the paragraph among all
+ * heading paragraphs in document order — this uniquely identifies the target
+ * even when multiple headings share the same text.
  *
  * The patch replaces the trailing digit(s) of the existing w:pStyle w:val,
  * preserving whether the original used "Heading1" or "Heading 1" format.
@@ -992,36 +996,42 @@ async function applyHeadingLevelCorrections(zip: JSZip, fixes: AcceptedFix[]): P
   const docFile = zip.file('word/document.xml');
   if (!docFile) return;
 
-  interface LevelFix { from: number; to: number }
-  const fixMap = new Map<string, LevelFix>();
+  interface LevelFix { from: number; to: number; text: string }
+  const fixesByIndex = new Map<number, LevelFix>();
 
   for (const fix of fixes) {
     if (!fix.targetField || !fix.value) continue;
+    // Format: "heading.level.H{fromLevel}.{headingIndex}::{headingText}"
     const encoded = fix.targetField.replace('heading.level.H', '');
-    const sepIdx = encoded.indexOf('::');
+    const dotIdx = encoded.indexOf('.');
+    if (dotIdx === -1) continue;
+    const fromLevel = parseInt(encoded.slice(0, dotIdx), 10);
+    const rest = encoded.slice(dotIdx + 1);
+    const sepIdx = rest.indexOf('::');
     if (sepIdx === -1) continue;
-    const fromLevel = parseInt(encoded.slice(0, sepIdx), 10);
-    const headingText = encoded.slice(sepIdx + 2);
+    const headingIndex = parseInt(rest.slice(0, sepIdx), 10);
+    const headingText = rest.slice(sepIdx + 2);
     const toLevel = parseInt(fix.value, 10);
-    if (isNaN(fromLevel) || isNaN(toLevel) || toLevel < 1 || toLevel > 6) continue;
-    fixMap.set(headingText, { from: fromLevel, to: toLevel });
+    if (isNaN(fromLevel) || isNaN(headingIndex) || isNaN(toLevel) || toLevel < 1 || toLevel > 6) continue;
+    fixesByIndex.set(headingIndex, { from: fromLevel, to: toLevel, text: headingText });
   }
 
-  if (fixMap.size === 0) return;
+  if (fixesByIndex.size === 0) return;
 
   const xmlStr = await docFile.async('string');
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
 
   const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  let headingCount = 0;
   let changed = false;
 
   for (const wP of paragraphs) {
     const level = getHeadingLevel(wP);
     if (level === 0) continue;
 
-    const text = getParaText(wP).trim();
-    const fix = fixMap.get(text);
+    const currentIndex = headingCount++;
+    const fix = fixesByIndex.get(currentIndex);
     if (!fix || fix.from !== level) continue;
 
     const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');

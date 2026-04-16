@@ -64,11 +64,11 @@ export default function DownloadStep({
 
       <p className="font-body-sm margin-bottom-1">
         <strong>This file is ready for design handoff.</strong>{' '}
-        Hand it off to your designer or import it directly into NOFO Builder to begin the design process.
+        Once you download your corrected document, hand it off to your designer or import it directly into NOFO Builder to begin the design process.
       </p>
 
       <p className="font-body-sm margin-bottom-4">
-        After you download your corrected document, open the Navigation Pane in Word (View → Navigation Pane) to check that bold text hasn't been used in place of a heading style. NOFO Builder cannot convert bold text to headings.
+        NOFO Builder cannot convert bold text to headings. After you download your corrected document, open the Navigation Pane in Word (View → Navigation Pane) to check that bold text hasn't been used in place of a heading style.
       </p>
 
       {!hasDownloaded ? (
