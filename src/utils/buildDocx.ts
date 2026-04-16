@@ -85,6 +85,14 @@ export async function buildDocx(
     await applyEmailMailtoFixes(zip, emailChanges.map(c => c.value as string));
   }
 
+  // Apply accepted heading level corrections (HEAD-003) — must run before any
+  // transform that removes or reorders headings (applyRemoveDghtScaffolding,
+  // applyRemoveBeforeYouBeginHeading) so that ordinal-index-based targeting
+  // remains aligned with the heading structure check() observed.
+  if (headingLevelFixes.length > 0) {
+    await applyHeadingLevelCorrections(zip, headingLevelFixes);
+  }
+
   // Apply double-space collapse
   if (hasDoublespaceFix) {
     await applyDoublespaceFix(zip);
@@ -121,11 +129,6 @@ export async function buildDocx(
   // text matches the HTML-derived keys stored in the change value)
   if (h2TitleCaseChanges.length > 0) {
     await applyH2TitleCaseFix(zip, h2TitleCaseChanges);
-  }
-
-  // Apply accepted heading level corrections (HEAD-003)
-  if (headingLevelFixes.length > 0) {
-    await applyHeadingLevelCorrections(zip, headingLevelFixes);
   }
 
   // Accept tracked changes and remove comments
@@ -989,6 +992,11 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
  * heading paragraphs in document order — this uniquely identifies the target
  * even when multiple headings share the same text.
  *
+ * This function must be called before any transform that removes or reorders
+ * heading paragraphs so that headingCount stays aligned with the indices that
+ * check() encoded. As a secondary guard, the paragraph text is verified
+ * against the encoded headingText before the style change is applied.
+ *
  * The patch replaces the trailing digit(s) of the existing w:pStyle w:val,
  * preserving whether the original used "Heading1" or "Heading 1" format.
  */
@@ -1033,6 +1041,10 @@ async function applyHeadingLevelCorrections(zip: JSZip, fixes: AcceptedFix[]): P
     const currentIndex = headingCount++;
     const fix = fixesByIndex.get(currentIndex);
     if (!fix || fix.from !== level) continue;
+
+    // Text guard: skip if the paragraph at this index doesn't match what
+    // check() encoded — defence against index drift from unexpected transforms.
+    if (getParaText(wP).trim() !== fix.text) continue;
 
     const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
     if (!pPr) continue;

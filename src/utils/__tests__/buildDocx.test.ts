@@ -2181,6 +2181,29 @@ describe('buildDocx — applyHeadingLevelCorrections (HEAD-003)', () => {
     expect(styles[2]).toMatchObject({ style: 'Heading3', text: 'Second Skip' });
   });
 
+  it('skips the fix when ordinal index matches but heading text does not', async () => {
+    // Simulates index drift: a preceding heading was removed by an earlier
+    // transform, so a different heading now sits at the targeted index.
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'Title'),
+      headingPara(3, 'Different Text'),  // index 1 — text does not match fix
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-003-1',
+      ruleId: 'HEAD-003',
+      // from-level and index match, but headingText is stale
+      targetField: 'heading.level.H3.1::Skipped Heading',
+      value: '2',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    // H3 must stay H3 because the text guard rejected the fix
+    expect(styles[1]).toMatchObject({ style: 'Heading3', text: 'Different Text' });
+  });
+
   it('leaves the document unchanged when no heading-level fixes are present', async () => {
     const zip = new JSZip();
     zip.file('word/document.xml', makeDocXmlFromParas([
