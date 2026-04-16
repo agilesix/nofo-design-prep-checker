@@ -19,8 +19,9 @@ export const COMPONENT_LABEL_WORDS = [
 /**
  * Matches a designator identifier that may follow a COMPONENT_LABEL_WORDS word:
  *   - Single uppercase letter (A–Z): Component A, Appendix B
- *   - Roman numeral with 2+ chars (II, III, IV, VI, …): Phase II, Phase III
- *     Single-letter Roman numerals (I, V, X) are caught by the [A-Z] branch.
+ *   - Two or more uppercase I/V/X characters (II, III, IV, VI, …): Phase II, Phase III
+ *     This branch is intentionally permissive and does not validate strict Roman-numeral syntax.
+ *     Single-letter I, V, and X designators are caught by the [A-Z] branch.
  *   - Arabic number, one or more digits (1, 10, 100, …): Table 1, Figure 10
  */
 export const DESIGNATOR_RE = /^([A-Z]|[IVX]{2,}|[0-9]+)$/;
