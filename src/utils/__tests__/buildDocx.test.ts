@@ -2282,6 +2282,45 @@ describe('buildDocx — LINK-006 auto-applied bookmark retargets', () => {
     expect(xml).not.toContain('w:anchor="Other"');
   });
 
+  it('does not modify w:bookmarkStart w:name when only the hyperlink anchor changes', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:bookmarkStart w:id="1" w:name="_Contacts_and_Support"/>
+      <w:r><w:t>Contacts and Support</w:t></w:r>
+      <w:bookmarkEnd w:id="1"/>
+    </w:p>
+    <w:p>
+      <w:hyperlink w:anchor="_Contacts_and_support">
+        <w:r><w:t>Link</w:t></w:r>
+      </w:hyperlink>
+    </w:p>
+    <w:sectPr/>
+  </w:body>
+</w:document>`
+    );
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Retargeted "#_Contacts_and_support" → "#_Contacts_and_Support"',
+      targetField: 'link.bookmark._Contacts_and_support',
+      value: '_Contacts_and_Support',
+    };
+
+    const xml = await getOutputDocXml(zip, [], [change]);
+    // Hyperlink anchor updated
+    expect(xml).toContain('w:anchor="_Contacts_and_Support"');
+    expect(xml).not.toContain('w:anchor="_Contacts_and_support"');
+    // Bookmark name must be unchanged — LINK-006 only touches the hyperlink
+    expect(xml).toContain('w:name="_Contacts_and_Support"');
+    expect(xml).not.toContain('w:name="_Contacts_and_support"');
+  });
+
   it('applies multiple bookmark retargets in one pass', async () => {
     const zip = new JSZip();
     zip.file(
@@ -2320,5 +2359,150 @@ describe('buildDocx — LINK-006 auto-applied bookmark retargets', () => {
     expect(xml).toContain('w:anchor="_Program-specific_limitations"');
     expect(xml).not.toContain('w:anchor="_Eligibility"');
     expect(xml).not.toContain('w:anchor="_Program-specific_limitations_1"');
+  });
+});
+
+// ─── LINK-006 + CLEAN-008 interaction ────────────────────────────────────────
+//
+// These tests cover the two real-world failing cases the user reported:
+//   1. "#_Responsiveness_criteria_1" → "#_Responsiveness_criteria" (suffix stripped)
+//   2. "#_Contacts_and_support" → "#_Contacts_and_Support" (capitalisation fix)
+//
+// Both involve a heading with a leading space, so CLEAN-008 also runs and
+// renames the w:bookmarkStart w:name from _Foo → Foo (leading underscore removed).
+// The hyperlink must stay in sync: the final anchor and bookmark name must match.
+
+function makeHeadingBookmarkDocXml({
+  headingText,
+  bookmarkName,
+  hyperlinkAnchor,
+}: {
+  headingText: string;
+  bookmarkName: string;
+  hyperlinkAnchor: string;
+}): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:bookmarkStart w:id="1" w:name="${bookmarkName}"/>
+      <w:r><w:t xml:space="preserve">${headingText}</w:t></w:r>
+      <w:bookmarkEnd w:id="1"/>
+    </w:p>
+    <w:p>
+      <w:hyperlink w:anchor="${hyperlinkAnchor}">
+        <w:r><w:t>See section</w:t></w:r>
+      </w:hyperlink>
+    </w:p>
+    <w:sectPr/>
+  </w:body>
+</w:document>`;
+}
+
+describe('buildDocx — LINK-006 bookmark retarget + CLEAN-008 heading leading-space interaction', () => {
+  it('Case 2: capitalisation fix — final anchor and bookmark both become "Contacts_and_Support"', async () => {
+    // Heading " Contacts and Support" (leading space) → CLEAN-008 strips space and
+    // renames bookmark _Contacts_and_Support → Contacts_and_Support.
+    // LINK-006 first fixes the wrong-case anchor _Contacts_and_support →
+    // _Contacts_and_Support, then CLEAN-008 updates that anchor → Contacts_and_Support.
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingBookmarkDocXml({
+        headingText: ' Contacts and Support',
+        bookmarkName: '_Contacts_and_Support',
+        hyperlinkAnchor: '_Contacts_and_support',
+      })
+    );
+
+    const changes: AutoAppliedChange[] = [
+      {
+        ruleId: 'LINK-006',
+        description: 'Retargeted "#_Contacts_and_support" → "#_Contacts_and_Support"',
+        targetField: 'link.bookmark._Contacts_and_support',
+        value: '_Contacts_and_Support',
+      },
+      {
+        ruleId: 'CLEAN-008',
+        description: 'Removed leading spaces from headings',
+        targetField: 'heading.leadingspace',
+      },
+    ];
+
+    const xml = await getOutputDocXml(zip, [], changes);
+
+    // After LINK-006 then CLEAN-008, both should end up as "Contacts_and_Support"
+    expect(xml).toContain('w:anchor="Contacts_and_Support"');
+    expect(xml).toContain('w:name="Contacts_and_Support"');
+    // Neither should retain the leading-underscore form
+    expect(xml).not.toContain('w:anchor="_Contacts_and_Support"');
+    expect(xml).not.toContain('w:anchor="_Contacts_and_support"');
+    expect(xml).not.toContain('w:name="_Contacts_and_Support"');
+  });
+
+  it('Case 1: suffix-stripped fix — final anchor and bookmark both become "Responsiveness_criteria"', async () => {
+    // LINK-006 fixes _Responsiveness_criteria_1 → _Responsiveness_criteria (Pass 2).
+    // CLEAN-008 then renames the bookmark and updates the hyperlink so both become
+    // Responsiveness_criteria (leading underscore removed by space-strip).
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingBookmarkDocXml({
+        headingText: ' Responsiveness criteria',
+        bookmarkName: '_Responsiveness_criteria',
+        hyperlinkAnchor: '_Responsiveness_criteria_1',
+      })
+    );
+
+    const changes: AutoAppliedChange[] = [
+      {
+        ruleId: 'LINK-006',
+        description: 'Retargeted "#_Responsiveness_criteria_1" → "#_Responsiveness_criteria"',
+        targetField: 'link.bookmark._Responsiveness_criteria_1',
+        value: '_Responsiveness_criteria',
+      },
+      {
+        ruleId: 'CLEAN-008',
+        description: 'Removed leading spaces from headings',
+        targetField: 'heading.leadingspace',
+      },
+    ];
+
+    const xml = await getOutputDocXml(zip, [], changes);
+
+    expect(xml).toContain('w:anchor="Responsiveness_criteria"');
+    expect(xml).toContain('w:name="Responsiveness_criteria"');
+    expect(xml).not.toContain('w:anchor="_Responsiveness_criteria"');
+    expect(xml).not.toContain('w:anchor="_Responsiveness_criteria_1"');
+    expect(xml).not.toContain('w:name="_Responsiveness_criteria"');
+  });
+
+  it('LINK-006 without CLEAN-008 — anchor and bookmark both retain leading underscore', async () => {
+    // When CLEAN-008 is not active (heading has no leading space), the bookmark
+    // keeps its leading underscore and the LINK-006-fixed anchor must match it.
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingBookmarkDocXml({
+        headingText: 'Contacts and Support',
+        bookmarkName: '_Contacts_and_Support',
+        hyperlinkAnchor: '_Contacts_and_support',
+      })
+    );
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Retargeted "#_Contacts_and_support" → "#_Contacts_and_Support"',
+      targetField: 'link.bookmark._Contacts_and_support',
+      value: '_Contacts_and_Support',
+    };
+
+    const xml = await getOutputDocXml(zip, [], [change]);
+
+    // Anchor correctly updated to match the existing bookmark
+    expect(xml).toContain('w:anchor="_Contacts_and_Support"');
+    expect(xml).toContain('w:name="_Contacts_and_Support"');
+    expect(xml).not.toContain('w:anchor="_Contacts_and_support"');
   });
 });
