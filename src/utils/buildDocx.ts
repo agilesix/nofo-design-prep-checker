@@ -85,8 +85,9 @@ export async function buildDocx(
     await applyEmailMailtoFixes(zip, emailChanges.map(c => c.value as string));
   }
 
-  // Retarget internal bookmark anchors corrected for formatting (capitalization
-  // and/or leading/trailing underscores from heading whitespace artifacts)
+  // Retarget internal bookmark anchors corrected for formatting (capitalization,
+  // leading/trailing underscores from heading whitespace artifacts, or missing
+  // word-separator underscores such as #AppendixA → #Appendix_A)
   if (fmtAnchorChanges.length > 0) {
     await applyAnchorFmtFixes(zip, fmtAnchorChanges);
   }
