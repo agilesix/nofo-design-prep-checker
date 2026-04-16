@@ -135,31 +135,14 @@ const LINK_006: Rule = {
         const sectionId = findSectionForElement(link, doc);
 
         if (fuzzyResult.matchedByOoxmlBookmark) {
-          // Source 1 match: we have the exact OOXML bookmark name. Offer a
-          // user-accepted fix — accept rewrites w:anchor to the correct value.
-          const fuzzy = fuzzyResult.anchor;
-          const numericSuffixNote = fuzzyResult.hadNumericSuffix
-            ? ' The trailing numeric suffix was stripped during matching — there may be multiple headings with this name. Verify you are targeting the correct one before accepting.'
-            : '';
+          // Source 1 OOXML match: the exact bookmark name is known, so the
+          // anchor can be rewritten without user confirmation.
           results.push({
-            id: `LINK-006-${index}`,
             ruleId: 'LINK-006',
-            title: 'Internal link anchor may need updating',
-            severity: 'warning',
-            sectionId,
-            nearestHeading: linkNearestHeading,
-            location: href,
-            description: `The anchor "#${anchor}" wasn't found. Based on the document's existing bookmarks, the likely target is "#${fuzzy}". Accept to update the link.`,
-            suggestedFix: `Retarget "#${anchor}" → "#${fuzzy}"`,
-            inputRequired: {
-              type: 'text',
-              label: 'Replacement anchor',
-              fieldDescription: `Current anchor: #${anchor}`,
-              prefill: fuzzy,
-              prefillNote: `Matched by normalizing the anchor against existing bookmarks in this document.${numericSuffixNote}`,
-              targetField: `link.bookmark.${anchor}`,
-            },
-          } as Issue);
+            description: `Retargeted internal link "#${anchor}" → "#${fuzzyResult.anchor}"`,
+            targetField: `link.bookmark.${anchor}`,
+            value: fuzzyResult.anchor,
+          } as AutoAppliedChange);
         } else {
           // Source 2/3 match: derived from HTML id or heading text — we don't
           // have the exact OOXML bookmark name, so instruct the user to fix manually.

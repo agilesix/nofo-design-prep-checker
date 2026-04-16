@@ -69,15 +69,18 @@ export async function buildDocx(
   const headingLevelFixes = acceptedFixes.filter(
     f => f.targetField?.startsWith('heading.level.H') && !!f.value
   );
+  const autoLinkBookmarkChanges = autoAppliedChanges
+    .filter(c => c.ruleId === 'LINK-006' && c.targetField?.startsWith('link.bookmark.') && !!c.value)
+    .map(c => ({ issueId: '', ruleId: c.ruleId, targetField: c.targetField, value: c.value } as AcceptedFix));
 
   // Apply metadata patches
   if (metaFixes.length > 0) {
     await applyMetadataFixes(zip, metaFixes);
   }
 
-  // Apply body patches (links, format)
-  if (bodyFixes.length > 0 || imgFixes.length > 0) {
-    await applyDocumentBodyFixes(zip, [...bodyFixes, ...imgFixes]);
+  // Apply body patches (links, format) plus auto-applied bookmark retargets
+  if (bodyFixes.length > 0 || imgFixes.length > 0 || autoLinkBookmarkChanges.length > 0) {
+    await applyDocumentBodyFixes(zip, [...bodyFixes, ...imgFixes, ...autoLinkBookmarkChanges]);
   }
 
   // Apply auto-applied email mailto patches
