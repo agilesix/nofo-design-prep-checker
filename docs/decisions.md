@@ -4,6 +4,18 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
+## 2026-04-16 — LINK-006: stop rewriting internal link anchors; surface instruction-only warnings instead
+
+**Decision:** LINK-006 no longer silently rewrites `w:anchor` values in the downloaded `.docx`, and no longer offers an "Accept" Review card for anchor retargeting. All broken or unmatched internal anchor cases now surface a single instruction-only warning: *"This internal link may be broken. To fix it, select the link text in Word, go to Insert → Link → This Document, and select the correct heading. Do not edit the link URL directly."*
+
+Fuzzy matching (normalize-and-compare, numeric-suffix stripping, numeric extraction) is retained for one purpose only: identifying the probable target heading so a link-text improvement suggestion can be emitted when the link text doesn't already name the destination.
+
+**Reason:** NOFO Builder resolves internal links by navigating to the heading that was selected at link-creation time using Word's native "Insert → Link → This Document" flow. It does not use the `w:anchor` attribute value at all — it relies on an internal relationship between the hyperlink element and the heading paragraph established by Word's UI. A tool-generated `w:anchor` rewrite (even to the "correct" bookmark name) is simply ignored by Builder. Users were accepting tool-suggested anchor fixes, downloading the corrected document, and then finding the links still broken in Builder.
+
+**Alternative considered:** Keeping the auto-fix for cases where the only difference is capitalization or leading/trailing underscores (the previous "high-confidence" tier), on the grounds that these might work for non-Builder consumers of the document. Rejected because (a) the fix is invisible to the user in the auto-applied summary and can create false confidence, (b) the fix is ineffective for Builder regardless of confidence level, and (c) the instruction-only path is safer and more honest about what the user needs to do.
+
+---
+
 ## 2026-04-13 — Pre-NOFO document detection added
 
 **Decision:** Added a document-level validity check (`src/utils/detectPreNofo.ts`) that runs immediately after parsing — before any content rules execute — to detect whether the uploaded document is a pre-NOFO template rather than a content guide. If two or more signals are present, a blocking error alert is displayed at the top of the Review page, the issue list is visually muted and non-interactive, and the "Continue to summary" button is hidden.
