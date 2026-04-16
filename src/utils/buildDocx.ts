@@ -841,12 +841,14 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
       if (anchor && matched) {
         const newVal = anchorRemap.get(anchor)!;
         console.log(`[CLEAN-008]     → Updating anchor "${anchor}" to "${newVal}"`);
-        link.setAttributeNS(W, 'w:anchor', newVal);
-        // Remove any stale unprefixed or qualified-name duplicates so the
-        // serialized XML carries exactly one anchor attribute with the 'w:' prefix.
+        // Remove any stale unprefixed, qualified-name, or namespace-aware
+        // duplicates so the serialized XML carries exactly one anchor
+        // attribute with the 'w:' prefix.
         link.removeAttribute('anchor');
         link.removeAttribute('w:anchor');
-        // Re-assert the namespaced attribute so XMLSerializer emits 'w:anchor'.
+        link.removeAttributeNS(W, 'anchor');
+        // Assert the canonical namespaced attribute once so XMLSerializer
+        // emits 'w:anchor'.
         link.setAttributeNS(W, 'w:anchor', newVal);
       }
     }
