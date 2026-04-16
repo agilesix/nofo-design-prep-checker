@@ -3,6 +3,11 @@ import type { AcceptedFix, AutoAppliedChange } from '../types';
 import { DGHT_STEP1_ANCHOR } from '../rules/opdiv/CLEAN-007-constants';
 import { groupListParagraphs } from './listHelpers';
 
+const BUILD_DOCX_DEBUG =
+  (globalThis as typeof globalThis & {
+    process?: { env?: Record<string, string | undefined> };
+  }).process?.env?.DEBUG_BUILD_DOCX === 'true';
+
 export async function buildDocx(
   originalArchive: JSZip,
   acceptedFixes: AcceptedFix[],
@@ -512,9 +517,15 @@ function isExcludedParagraph(wP: Element): boolean {
  * Concatenate the text content of all <w:t> descendants of a <w:p> element.
  */
 function getParaText(para: Element): string {
-  return Array.from(para.getElementsByTagName('w:t'))
-    .map(t => t.textContent ?? '')
-    .join('');
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const byNS = Array.from(para.getElementsByTagNameNS(W, 't'));
+  const byTag = Array.from(para.getElementsByTagName('w:t'));
+  const seen = new Set<Element>();
+  const nodes: Element[] = [];
+  for (const el of [...byNS, ...byTag]) {
+    if (!seen.has(el)) { seen.add(el); nodes.push(el); }
+  }
+  return nodes.map(t => t.textContent ?? '').join('');
 }
 
 /**
@@ -714,11 +725,27 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
   if (!docFile) return;
 
   const xmlStr = await docFile.async('string');
+  if (BUILD_DOCX_DEBUG) {
+    console.log('[CLEAN-008] applyHeadingLeadingSpaceFix: starting');
+    console.log('[CLEAN-008] Raw XML snippet (first 500 chars):', xmlStr.slice(0, 500));
+  }
+
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
   const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
-  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  const dbg = (...args: Parameters<typeof console.log>) => {
+    if (BUILD_DOCX_DEBUG) console.log(...args);
+  };
+
+  const paragraphsByNS = Array.from(xmlDoc.getElementsByTagNameNS(W, 'p'));
+  const paragraphsByTag = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  const seenP = new Set<Element>();
+  const paragraphs: Element[] = [];
+  for (const el of [...paragraphsByNS, ...paragraphsByTag]) {
+    if (!seenP.has(el)) { seenP.add(el); paragraphs.push(el); }
+  }
+  dbg(`[CLEAN-008] Total w:p elements found: ${paragraphs.length}`);
   let changed = false;
   // Maps old anchor slug → new anchor slug for every heading whose leading
   // space was removed.  Anchor slugs are the heading text with spaces replaced
@@ -728,14 +755,22 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
   for (const wP of paragraphs) {
     if (!isHeadingParagraph(wP)) continue;
 
-    const allWTs = Array.from(wP.getElementsByTagName('w:t'));
+    const allWTsByNS = Array.from(wP.getElementsByTagNameNS(W, 't'));
+    const allWTsByTag = Array.from(wP.getElementsByTagName('w:t'));
+    const seenT = new Set<Element>();
+    const allWTs: Element[] = [];
+    for (const el of [...allWTsByNS, ...allWTsByTag]) {
+      if (!seenT.has(el)) { seenT.add(el); allWTs.push(el); }
+    }
     if (allWTs.length === 0) continue;
 
     // Only process paragraphs whose full text starts with a space
     const paraText = getParaText(wP);
     if (paraText.length === 0 || paraText[0] !== ' ') continue;
 
+    dbg(`[CLEAN-008] Found heading with leading space: "${paraText}"`);
     const oldAnchor = paraText.replace(/ /g, '_');
+    dbg(`[CLEAN-008]   oldAnchor = "${oldAnchor}"`);
 
     // Walk <w:t> nodes from the front, stripping leading spaces until we hit
     // content. This correctly handles leading spaces spread across multiple runs.
@@ -769,9 +804,18 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
 
     // Record the anchor remapping now that the paragraph text has been updated.
     const newAnchor = getParaText(wP).replace(/ /g, '_');
+    dbg(`[CLEAN-008]   newAnchor after fix = "${newAnchor}"`);
     if (newAnchor !== oldAnchor) {
       anchorRemap.set(oldAnchor, newAnchor);
+      dbg(`[CLEAN-008]   Remap added: "${oldAnchor}" → "${newAnchor}"`);
+    } else {
+      dbg(`[CLEAN-008]   WARNING: oldAnchor === newAnchor ("${oldAnchor}"), no remap added`);
     }
+  }
+
+  dbg(`[CLEAN-008] anchorRemap size: ${anchorRemap.size}`);
+  if (anchorRemap.size > 0) {
+    dbg(`[CLEAN-008] anchorRemap entries:`, JSON.stringify([...anchorRemap.entries()]));
   }
 
   // Rewrite internal hyperlinks whose w:anchor referenced a heading that had
@@ -784,36 +828,102 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
   //     Updating the hyperlink without also updating the bookmark leaves the link
   //     pointing to a non-existent target, so the link is broken in Word.
   //
-  // getAttributeNS is the canonical read for namespace-qualified attributes.
-  // We also fall back to getAttribute('anchor') / getAttribute('name') as a
-  // defence against prior XMLSerializer passes that may have emitted the
-  // attribute without the 'w:' prefix — in that case the re-parsed DOM holds a
-  // non-namespaced attribute that getAttributeNS cannot see.  (This is the same
-  // concern documented in applyDocumentBodyFixes for LINK-006.)
+  // Three-layer attribute read to handle all serialization states:
+  //  a. getAttributeNS(W, 'anchor') — namespace-aware read (primary, correct for
+  //     original OOXML where the attribute is namespace-qualified).
+  //  b. getAttribute('anchor') — unprefixed fallback: catches the state after a
+  //     prior XMLSerializer pass stripped the namespace prefix from the attribute.
+  //  c. getAttribute('w:anchor') — qualified-name fallback: catches the state in
+  //     some browser DOMParser implementations that store attributes under their
+  //     full qualified name rather than under a namespace URI.
+  //
+  // getElementsByTagNameNS is used instead of getElementsByTagName so element
+  // lookup succeeds even when a prior XMLSerializer pass remapped the 'w:' prefix
+  // to a different local alias (e.g. 'ns0:') — the namespace URI is stable even
+  // when the prefix is not.
   if (anchorRemap.size > 0) {
-    for (const link of Array.from(xmlDoc.getElementsByTagName('w:hyperlink'))) {
-      const anchor = link.getAttributeNS(W, 'anchor') ?? link.getAttribute('anchor');
-      if (anchor && anchorRemap.has(anchor)) {
-        link.setAttributeNS(W, 'w:anchor', anchorRemap.get(anchor)!);
-        // If the attribute was unprefixed (the serializer-stripping fallback path),
-        // setAttributeNS adds a new namespaced attribute but leaves the old
-        // unprefixed one in place.  Remove it so serialized XML never carries both.
+    // getElementsByTagNameNS is robust against prefix remapping by XMLSerializer;
+    // getElementsByTagName is kept as a fallback for environments that do not
+    // support the NS variant for non-HTML content types.
+    const hyperlinksByNS = Array.from(xmlDoc.getElementsByTagNameNS(W, 'hyperlink'));
+    const hyperlinksByTag = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    // Merge both results, deduplicated by identity, so no element is visited twice.
+    const seenH = new Set<Element>();
+    const allHyperlinks: Element[] = [];
+    for (const el of [...hyperlinksByNS, ...hyperlinksByTag]) {
+      if (!seenH.has(el)) { seenH.add(el); allHyperlinks.push(el); }
+    }
+    dbg(
+      `[CLEAN-008] Scanning ${allHyperlinks.length} w:hyperlink elements for anchor update` +
+      ` (byNS=${hyperlinksByNS.length}, byTag=${hyperlinksByTag.length})`
+    );
+    for (const link of allHyperlinks) {
+      const anchorNS = link.getAttributeNS(W, 'anchor');
+      const anchorPlain = link.getAttribute('anchor');
+      const anchorQual = link.getAttribute('w:anchor');
+      const anchor = anchorNS ?? anchorPlain ?? anchorQual;
+      const matched = anchor ? anchorRemap.has(anchor) : false;
+      dbg(
+        `[CLEAN-008]   hyperlink: getAttributeNS="${anchorNS}", plain="${anchorPlain}", qualified="${anchorQual}"` +
+        `, combined="${anchor}", inRemap=${matched}`
+      );
+      if (anchor && matched) {
+        const newVal = anchorRemap.get(anchor)!;
+        dbg(`[CLEAN-008]     → Updating anchor "${anchor}" to "${newVal}"`);
+        // Remove any stale unprefixed, qualified-name, or namespace-aware
+        // duplicates so the serialized XML carries exactly one anchor
+        // attribute with the 'w:' prefix.
         link.removeAttribute('anchor');
+        link.removeAttribute('w:anchor');
+        link.removeAttributeNS(W, 'anchor');
+        // Assert the canonical namespaced attribute once so XMLSerializer
+        // emits 'w:anchor'.
+        link.setAttributeNS(W, 'w:anchor', newVal);
       }
     }
-    for (const bm of Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))) {
-      const name = bm.getAttributeNS(W, 'name') ?? bm.getAttribute('name');
-      if (name && anchorRemap.has(name)) {
-        bm.setAttributeNS(W, 'w:name', anchorRemap.get(name)!);
-        // Same stale-attribute cleanup as above.
+
+    const bookmarksByNS = Array.from(xmlDoc.getElementsByTagNameNS(W, 'bookmarkStart'));
+    const bookmarksByTag = Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'));
+    const seenB = new Set<Element>();
+    const allBookmarks: Element[] = [];
+    for (const el of [...bookmarksByNS, ...bookmarksByTag]) {
+      if (!seenB.has(el)) { seenB.add(el); allBookmarks.push(el); }
+    }
+    dbg(
+      `[CLEAN-008] Scanning ${allBookmarks.length} w:bookmarkStart elements for name update` +
+      ` (byNS=${bookmarksByNS.length}, byTag=${bookmarksByTag.length})`
+    );
+    for (const bm of allBookmarks) {
+      const nameNS = bm.getAttributeNS(W, 'name');
+      const namePlain = bm.getAttribute('name');
+      const nameQual = bm.getAttribute('w:name');
+      const name = nameNS ?? namePlain ?? nameQual;
+      const matched = name ? anchorRemap.has(name) : false;
+      dbg(
+        `[CLEAN-008]   bookmark: getAttributeNS="${nameNS}", plain="${namePlain}", qualified="${nameQual}"` +
+        `, combined="${name}", inRemap=${matched}`
+      );
+      if (name && matched) {
+        const newVal = anchorRemap.get(name)!;
+        dbg(`[CLEAN-008]     → Updating bookmark name "${name}" to "${newVal}"`);
+        // Remove all stale variants first (plain, qualified, namespace-aware),
+        // then assert the canonical namespaced attribute once — mirrors the
+        // same pattern used for hyperlink anchor cleanup above.
         bm.removeAttribute('name');
+        bm.removeAttribute('w:name');
+        bm.removeAttributeNS(W, 'name');
+        bm.setAttributeNS(W, 'w:name', newVal);
       }
     }
   }
 
   if (changed) {
     const serializer = new XMLSerializer();
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+    const outXml = serializer.serializeToString(xmlDoc);
+    dbg('[CLEAN-008] Serialized output snippet (first 800 chars):', outXml.slice(0, 800));
+    zip.file('word/document.xml', outXml);
+  } else {
+    dbg('[CLEAN-008] No heading text changes detected; file not rewritten');
   }
 }
 
