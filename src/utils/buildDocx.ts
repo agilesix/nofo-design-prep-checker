@@ -71,7 +71,15 @@ export async function buildDocx(
   );
   const autoLinkBookmarkChanges = autoAppliedChanges
     .filter(c => c.ruleId === 'LINK-006' && c.targetField?.startsWith('link.bookmark.') && !!c.value)
-    .map(c => ({ issueId: '', ruleId: c.ruleId, targetField: c.targetField, value: c.value } as AcceptedFix));
+    .map(
+      c =>
+        ({
+          issueId: `auto:${c.ruleId}:${c.targetField}`,
+          ruleId: c.ruleId,
+          targetField: c.targetField,
+          value: c.value,
+        } as AcceptedFix)
+    );
 
   // Apply metadata patches
   if (metaFixes.length > 0) {
