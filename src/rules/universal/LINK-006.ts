@@ -21,9 +21,6 @@ import { buildLocationLookup } from '../../utils/locationContext';
  *  a suggestion is emitted if the link text does not reference that heading by name.
  */
 
-const INSTRUCTION_ONLY_WARNING_TITLE = 'Internal link may not work in NOFO Builder';
-const INSTRUCTION_ONLY_WARNING_DESCRIPTION = 'This internal link may be broken. To fix it, select the link text in Word, go to Insert → Link → This Document, and select the correct heading. Do not edit the link URL directly.';
-
 type FuzzyMatchResult =
   | {
       kind: 'single';
