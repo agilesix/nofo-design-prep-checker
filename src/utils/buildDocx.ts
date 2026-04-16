@@ -297,9 +297,13 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
       if (anchor && newText?.trim()) {
         const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
         for (const el of hyperlinks) {
-          // Use getAttributeNS so the namespace-qualified attribute is matched
-          // correctly regardless of how the XML was parsed or serialized.
-          if (el.getAttributeNS(W, 'anchor') !== anchor) continue;
+          // getAttribute('w:anchor') is the primary read path: jsdom (and some
+          // browsers) store namespace-prefixed attributes under their qualified
+          // name rather than as namespace-aware attributes, so getAttributeNS
+          // returns null.  getAttributeNS is kept as a fallback for environments
+          // that store attributes namespace-aware but not under the qualified name.
+          const elAnchor = el.getAttribute('w:anchor') ?? el.getAttributeNS(W, 'anchor');
+          if (elAnchor !== anchor) continue;
 
           // Collect only the direct-child <w:r> runs of this hyperlink (bookmarks
           // and other sibling nodes are left untouched).
@@ -339,16 +343,15 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
             el.removeChild(runs[i]!);
           }
 
-          // Explicitly re-assert the w:anchor attribute via setAttributeNS.
-          // XMLSerializer may drop or strip the namespace prefix when serializing
-          // attributes that were only read (never written) through the DOM API —
-          // emitting `anchor="…"` instead of `w:anchor="…"`.  Word's hyperlink
-          // resolver looks for the namespace-qualified `w:anchor` attribute; a
-          // non-prefixed `anchor` attribute is invisible to it and the link
-          // silently falls back to navigating to the top of the document.
-          // setAttributeNS guarantees the attribute is written with the correct
-          // namespace URI so XMLSerializer always emits the `w:` prefix.
-          el.setAttributeNS(W, 'w:anchor', anchor);
+          // Re-assert w:anchor after modifying the run text so XMLSerializer
+          // always emits the attribute with its qualified name.  setAttribute
+          // (not setAttributeNS) is used deliberately: setAttributeNS causes
+          // XMLSerializer to inject a redundant xmlns:w declaration on this
+          // child element; setAttribute stores the qualified name directly and
+          // produces clean output without extra namespace re-declarations.
+          el.removeAttributeNS(W, 'anchor');
+          el.removeAttribute('anchor');
+          el.setAttribute('w:anchor', anchor);
         }
       }
     }
@@ -364,11 +367,11 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
       }
       const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
       for (const el of hyperlinks) {
-        // Use namespace-aware accessors so the attribute is read and written with
-        // its correct OOXML namespace URI, preventing XMLSerializer from emitting
-        // a non-namespaced or differently-prefixed attribute that Word cannot read.
-        if (el.getAttributeNS(W, 'anchor') === oldAnchor) {
-          el.setAttributeNS(W, 'w:anchor', normalizedNewAnchor);
+        const elAnchor = el.getAttribute('w:anchor') ?? el.getAttributeNS(W, 'anchor');
+        if (elAnchor === oldAnchor) {
+          el.removeAttributeNS(W, 'anchor');
+          el.removeAttribute('anchor');
+          el.setAttribute('w:anchor', normalizedNewAnchor);
         }
       }
     }
@@ -419,22 +422,26 @@ async function applyAnchorFmtFixes(zip: JSZip, changes: AutoAppliedChange[]): Pr
     }
     for (const pair of pairs) {
       for (const el of hyperlinks) {
-        if (el.getAttributeNS(W, 'anchor') === pair.old) {
-          el.setAttributeNS(W, 'w:anchor', pair.new);
+        const currentAnchor =
+          el.getAttribute('w:anchor') ??
+          el.getAttributeNS(W, 'anchor') ??
+          el.getAttribute('anchor');
+        if (currentAnchor === pair.old) {
+          // Remove all existing anchor variants before setting the new value so
+          // the output carries exactly one anchor attribute.  setAttribute (not
+          // setAttributeNS) is used to avoid XMLSerializer injecting a redundant
+          // xmlns:w declaration on this element, which would shadow the root
+          // namespace declaration and break downstream OOXML consumers.
+          el.removeAttributeNS(W, 'anchor');
+          el.removeAttribute('anchor');
+          el.setAttribute('w:anchor', pair.new);
         }
       }
     }
   }
 
   const serializer = new XMLSerializer();
-  // Strip redundant xmlns:w re-declarations that XMLSerializer injects on any
-  // element where setAttributeNS was called. The w: namespace is already
-  // declared on the root element; re-declarations on child elements create a
-  // namespace scope change that breaks downstream OOXML consumers such as
-  // NOFO Builder, which fails to resolve w:anchor on the affected elements.
-  const outXml = serializer.serializeToString(xmlDoc)
-    .replace(/ xmlns:w="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main"/g, '');
-  zip.file('word/document.xml', outXml);
+  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
 }
 
 /**
@@ -837,100 +844,69 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
   //     pointing to a non-existent target, so the link is broken in Word.
   //
   // Three-layer attribute read to handle all serialization states:
-  //  a. getAttributeNS(W, 'anchor') — namespace-aware read (primary, correct for
-  //     original OOXML where the attribute is namespace-qualified).
-  //  b. getAttribute('anchor') — unprefixed fallback: catches the state after a
-  //     prior XMLSerializer pass stripped the namespace prefix from the attribute.
-  //  c. getAttribute('w:anchor') — qualified-name fallback: catches the state in
-  //     some browser DOMParser implementations that store attributes under their
-  //     full qualified name rather than under a namespace URI.
+  //  a. getAttribute('w:anchor') — primary: jsdom (and some browsers) store
+  //     namespace-prefixed attributes under their qualified name, so getAttributeNS
+  //     returns null even though the attribute is present.
+  //  b. getAttributeNS(W, 'anchor') — fallback for namespace-aware DOM environments
+  //     where the attribute is stored under the namespace URI, not the qualified name.
+  //  c. getAttribute('anchor') — last resort for the uncommon case where a prior
+  //     XMLSerializer pass stripped the namespace prefix from the attribute.
   //
-  // getElementsByTagNameNS is used instead of getElementsByTagName so element
-  // lookup succeeds even when a prior XMLSerializer pass remapped the 'w:' prefix
-  // to a different local alias (e.g. 'ns0:') — the namespace URI is stable even
-  // when the prefix is not.
+  // getElementsByTagName('w:hyperlink') is used rather than getElementsByTagNameNS
+  // because jsdom's XMLSerializer does not remap the 'w:' prefix, so the qualified
+  // tag name lookup is reliable and avoids the complexity of the NS variant.
   if (anchorRemap.size > 0) {
-    // getElementsByTagNameNS is robust against prefix remapping by XMLSerializer;
-    // getElementsByTagName is kept as a fallback for environments that do not
-    // support the NS variant for non-HTML content types.
-    const hyperlinksByNS = Array.from(xmlDoc.getElementsByTagNameNS(W, 'hyperlink'));
-    const hyperlinksByTag = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
-    // Merge both results, deduplicated by identity, so no element is visited twice.
-    const seenH = new Set<Element>();
-    const allHyperlinks: Element[] = [];
-    for (const el of [...hyperlinksByNS, ...hyperlinksByTag]) {
-      if (!seenH.has(el)) { seenH.add(el); allHyperlinks.push(el); }
-    }
-    dbg(
-      `[CLEAN-008] Scanning ${allHyperlinks.length} w:hyperlink elements for anchor update` +
-      ` (byNS=${hyperlinksByNS.length}, byTag=${hyperlinksByTag.length})`
-    );
+    const allHyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    dbg(`[CLEAN-008] Scanning ${allHyperlinks.length} w:hyperlink elements for anchor update`);
     for (const link of allHyperlinks) {
+      const anchorQual = link.getAttribute('w:anchor');
       const anchorNS = link.getAttributeNS(W, 'anchor');
       const anchorPlain = link.getAttribute('anchor');
-      const anchorQual = link.getAttribute('w:anchor');
-      const anchor = anchorNS ?? anchorPlain ?? anchorQual;
+      const anchor = anchorQual ?? anchorNS ?? anchorPlain;
       const matched = anchor ? anchorRemap.has(anchor) : false;
       dbg(
-        `[CLEAN-008]   hyperlink: getAttributeNS="${anchorNS}", plain="${anchorPlain}", qualified="${anchorQual}"` +
+        `[CLEAN-008]   hyperlink: qualified="${anchorQual}", getAttributeNS="${anchorNS}", plain="${anchorPlain}"` +
         `, combined="${anchor}", inRemap=${matched}`
       );
       if (anchor && matched) {
         const newVal = anchorRemap.get(anchor)!;
         dbg(`[CLEAN-008]     → Updating anchor "${anchor}" to "${newVal}"`);
-        // Remove any stale unprefixed, qualified-name, or namespace-aware
-        // duplicates so the serialized XML carries exactly one anchor
-        // attribute with the 'w:' prefix.
-        link.removeAttribute('anchor');
-        link.removeAttribute('w:anchor');
+        // Remove all stale variants so the output carries exactly one anchor
+        // attribute.  setAttribute (not setAttributeNS) is used so XMLSerializer
+        // does not inject a redundant xmlns:w declaration on this child element,
+        // which would shadow the root namespace declaration and break downstream
+        // OOXML consumers (including NOFO Builder).
         link.removeAttributeNS(W, 'anchor');
-        // Assert the canonical namespaced attribute once so XMLSerializer
-        // emits 'w:anchor'.
-        link.setAttributeNS(W, 'w:anchor', newVal);
+        link.removeAttribute('anchor');
+        link.setAttribute('w:anchor', newVal);
       }
     }
 
-    const bookmarksByNS = Array.from(xmlDoc.getElementsByTagNameNS(W, 'bookmarkStart'));
-    const bookmarksByTag = Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'));
-    const seenB = new Set<Element>();
-    const allBookmarks: Element[] = [];
-    for (const el of [...bookmarksByNS, ...bookmarksByTag]) {
-      if (!seenB.has(el)) { seenB.add(el); allBookmarks.push(el); }
-    }
-    dbg(
-      `[CLEAN-008] Scanning ${allBookmarks.length} w:bookmarkStart elements for name update` +
-      ` (byNS=${bookmarksByNS.length}, byTag=${bookmarksByTag.length})`
-    );
+    const allBookmarks = Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'));
+    dbg(`[CLEAN-008] Scanning ${allBookmarks.length} w:bookmarkStart elements for name update`);
     for (const bm of allBookmarks) {
+      const nameQual = bm.getAttribute('w:name');
       const nameNS = bm.getAttributeNS(W, 'name');
       const namePlain = bm.getAttribute('name');
-      const nameQual = bm.getAttribute('w:name');
-      const name = nameNS ?? namePlain ?? nameQual;
+      const name = nameQual ?? nameNS ?? namePlain;
       const matched = name ? anchorRemap.has(name) : false;
       dbg(
-        `[CLEAN-008]   bookmark: getAttributeNS="${nameNS}", plain="${namePlain}", qualified="${nameQual}"` +
+        `[CLEAN-008]   bookmark: qualified="${nameQual}", getAttributeNS="${nameNS}", plain="${namePlain}"` +
         `, combined="${name}", inRemap=${matched}`
       );
       if (name && matched) {
         const newVal = anchorRemap.get(name)!;
         dbg(`[CLEAN-008]     → Updating bookmark name "${name}" to "${newVal}"`);
-        // Remove all stale variants first (plain, qualified, namespace-aware),
-        // then assert the canonical namespaced attribute once — mirrors the
-        // same pattern used for hyperlink anchor cleanup above.
-        bm.removeAttribute('name');
-        bm.removeAttribute('w:name');
         bm.removeAttributeNS(W, 'name');
-        bm.setAttributeNS(W, 'w:name', newVal);
+        bm.removeAttribute('name');
+        bm.setAttribute('w:name', newVal);
       }
     }
   }
 
   if (changed) {
     const serializer = new XMLSerializer();
-    // Strip redundant xmlns:w re-declarations injected by XMLSerializer on
-    // elements modified via setAttributeNS — same fix as applyAnchorFmtFixes.
-    const outXml = serializer.serializeToString(xmlDoc)
-      .replace(/ xmlns:w="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main"/g, '');
+    const outXml = serializer.serializeToString(xmlDoc);
     dbg('[CLEAN-008] Serialized output snippet (first 800 chars):', outXml.slice(0, 800));
     zip.file('word/document.xml', outXml);
   } else {
