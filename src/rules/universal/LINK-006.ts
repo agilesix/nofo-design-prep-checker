@@ -70,6 +70,19 @@ function isHighConfidenceAutoFix(anchor: string, fuzzy: string): boolean {
   return cleanHeadingId(anchor).toLowerCase() === cleanHeadingId(fuzzy).toLowerCase();
 }
 
+/**
+ * Returns true when the anchor is the correct target with all underscore word
+ * separators removed — i.e. the only difference is missing underscores between
+ * words. Case-insensitive.
+ *
+ * Common Word pattern: manually typed anchors omit the underscores that
+ * NOFO Builder inserts between words when building bookmark slugs, for example
+ * "#AppendixA" instead of "#Appendix_A".
+ */
+function isWordSeparatorAutoFix(anchor: string, fuzzy: string): boolean {
+  return anchor.toLowerCase() === fuzzy.replace(/_/g, '').toLowerCase();
+}
+
 const LINK_006: Rule = {
   id: 'LINK-006',
   autoApply: false,
@@ -104,6 +117,12 @@ const LINK_006: Rule = {
     // anchor appears in multiple links.
     const fmtFixMap = new Map<string, string>();
     let fmtFixOccurrences = 0;
+
+    // De-duplicated map for word-separator-only fixes: the anchor equals the
+    // correct target with all underscores removed (e.g. #AppendixA → #Appendix_A).
+    // Tracked separately so the summary description names the fix type explicitly.
+    const wsFixMap = new Map<string, string>();
+    let wsFixOccurrences = 0;
 
     // Precompute clean heading slug → element map so Tier 1c can (a) validate
     // anchors that target headings with leading spaces (stripped by CLEAN-008)
@@ -183,6 +202,18 @@ const LINK_006: Rule = {
           fmtFixMap.set(anchor, fuzzy);
           fmtFixOccurrences++;
           // Still surface a link-text suggestion if the heading name isn't in the link text.
+          if (headingText && !linkTextContainsHeading(linkText, headingText)) {
+            const suppressSee = hasSeeBeforeLink(link as Element);
+            results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
+          }
+          return;
+        }
+
+        // Word-separator-only fix: the anchor is the correct target with all
+        // underscores removed (e.g. #AppendixA → #Appendix_A). Auto-fix silently.
+        if (isWordSeparatorAutoFix(anchor, fuzzy)) {
+          wsFixMap.set(anchor, fuzzy);
+          wsFixOccurrences++;
           if (headingText && !linkTextContainsHeading(linkText, headingText)) {
             const suppressSee = hasSeeBeforeLink(link as Element);
             results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
@@ -285,6 +316,16 @@ const LINK_006: Rule = {
         // represents a distinct broken anchor → correct anchor mapping; one entry
         // may cover many link elements that shared the same broken anchor.
         value: JSON.stringify(Array.from(fmtFixMap, ([old, newAnchor]) => ({ old, new: newAnchor }))),
+      } as AutoAppliedChange);
+    }
+
+    if (wsFixMap.size > 0) {
+      const count = wsFixOccurrences;
+      results.push({
+        ruleId: 'LINK-006',
+        description: `${count} internal link anchor${count === 1 ? '' : 's'} corrected for missing word separators.`,
+        targetField: 'link.anchor.fmt',
+        value: JSON.stringify(Array.from(wsFixMap, ([old, newAnchor]) => ({ old, new: newAnchor }))),
       } as AutoAppliedChange);
     }
 

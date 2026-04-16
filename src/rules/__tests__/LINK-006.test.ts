@@ -291,31 +291,36 @@ describe('LINK-006 fuzzy match — heading text', () => {
     expect(change).toBeDefined();
   });
 
-  it('matches CamelCase anchor #AppendixA to heading "Appendix A" via CamelCase splitting', () => {
-    // Without CamelCase splitting: normalizeAnchor("AppendixA") → "appendixa"
-    // normalizeAnchor("Appendix A") → "appendix a" — no containment match.
-    // With CamelCase splitting: "AppendixA" → "Appendix A" → "appendix a" — exact match.
+  it('auto-fixes CamelCase anchor #AppendixA → #Appendix_A via word-separator fix (no Issue surfaced)', () => {
+    // CamelCase splitting lets normalizeAnchor("AppendixA") → "appendix a" match the heading.
+    // The corrected anchor "Appendix_A" satisfies isWordSeparatorAutoFix
+    // (anchor without underscores == fuzzy without underscores) → silent auto-fix.
+    // Link text "See Appendix A" already references the heading → no link-text suggestion either.
     const doc = makeDoc(
       '<h2>Appendix A</h2>' +
       '<p><a href="#AppendixA">See Appendix A</a></p>'
     );
     const results = LINK_006.check(doc, OPTIONS);
-    // Link text "See Appendix A" contains heading name → no link-text suggestion, just the bookmark fix
     expect(results).toHaveLength(1);
-    const issue = results[0] as Issue;
-    expect(issue.title).toBe('Internal link anchor may need updating');
-    expect(issue.inputRequired?.prefill).toBe('Appendix_A');
-    expect(issue.description).toContain('Appendix A');
+    const change = results[0] as AutoAppliedChange;
+    expect('title' in change).toBe(false);  // not an Issue
+    expect(change.description).toContain('missing word separators');
+    const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
+    expect(pairs).toEqual([{ old: 'AppendixA', new: 'Appendix_A' }]);
   });
 
-  it('matches CamelCase anchor #AppendixB to heading "Appendix B"', () => {
+  it('auto-fixes CamelCase anchor #AppendixB → #Appendix_B via word-separator fix', () => {
     const doc = makeDoc(
       '<h2>Appendix B</h2>' +
       '<p><a href="#AppendixB">See Appendix B</a></p>'
     );
-    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
-    expect(issue.title).toBe('Internal link anchor may need updating');
-    expect(issue.inputRequired?.prefill).toBe('Appendix_B');
+    const results = LINK_006.check(doc, OPTIONS);
+    const change = results.find(
+      r => (r as AutoAppliedChange).description?.includes('missing word separators')
+    ) as AutoAppliedChange | undefined;
+    expect(change).toBeDefined();
+    const pairs = JSON.parse(change!.value!) as { old: string; new: string }[];
+    expect(pairs).toEqual([{ old: 'AppendixB', new: 'Appendix_B' }]);
   });
 });
 
@@ -1032,5 +1037,158 @@ describe('LINK-006 anchor formatting auto-fix', () => {
     expect(suggestion!.title).toBe('Consider adding destination heading name to link text');
     const fmtChange = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.fmt') as AutoAppliedChange | undefined;
     expect(fmtChange).toBeDefined();
+  });
+});
+
+// ─── Word-separator auto-fix (#AppendixA → #Appendix_A) ──────────────────────
+
+describe('LINK-006 word-separator auto-fix', () => {
+  it('auto-fixes #AppendixA → #Appendix_A silently (no warning Issue)', () => {
+    // The heading has id "Appendix_A"; the link uses "#AppendixA" (missing underscore).
+    // anchor.toLowerCase() === fuzzy.replace(/_/g,'').toLowerCase() → word-separator fix.
+    const doc = makeDoc(
+      '<h2 id="Appendix_A">Appendix A</h2>' +
+      '<p><a href="#AppendixA">link</a></p>'
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const wsChange = results.find(r => (r as AutoAppliedChange).targetField === 'link.anchor.fmt') as AutoAppliedChange | undefined;
+    expect(wsChange).toBeDefined();
+    expect('title' in wsChange!).toBe(false); // not an Issue
+    expect(wsChange!.ruleId).toBe('LINK-006');
+    const pairs = JSON.parse(wsChange!.value!) as { old: string; new: string }[];
+    expect(pairs).toEqual([{ old: 'AppendixA', new: 'Appendix_A' }]);
+    // No warning or error Issue surfaced
+    expect(results.find(r => (r as Issue).severity === 'warning')).toBeUndefined();
+  });
+
+  it('description uses the word-separator wording', () => {
+    const doc = makeDoc(
+      '<h2 id="Appendix_A">Appendix A</h2>' +
+      '<p><a href="#AppendixA">link</a></p>'
+    );
+    const wsChange = LINK_006.check(doc, OPTIONS).find(
+      r => (r as AutoAppliedChange).description?.includes('missing word separators')
+    ) as AutoAppliedChange | undefined;
+    expect(wsChange).toBeDefined();
+    expect(wsChange!.description).toBe('1 internal link anchor corrected for missing word separators.');
+  });
+
+  it('description uses plural form for multiple occurrences', () => {
+    const doc = makeDoc(
+      '<h2 id="Appendix_A">Appendix A</h2>' +
+      '<p><a href="#AppendixA">first link</a></p>' +
+      '<p><a href="#AppendixA">second link</a></p>'
+    );
+    const wsChange = LINK_006.check(doc, OPTIONS).find(
+      r => (r as AutoAppliedChange).description?.includes('missing word separators')
+    ) as AutoAppliedChange | undefined;
+    expect(wsChange).toBeDefined();
+    expect(wsChange!.description).toBe('2 internal link anchors corrected for missing word separators.');
+    // Value is de-duplicated: only one pair even though two links share the anchor
+    const pairs = JSON.parse(wsChange!.value!) as { old: string; new: string }[];
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0]).toEqual({ old: 'AppendixA', new: 'Appendix_A' });
+  });
+
+  it('auto-fixes mixed-case variant (#componentA → #Component_A)', () => {
+    // CamelCase split: "componentA" → "component a" → matches "Component_A" → "component a".
+    // isWordSeparatorAutoFix("componentA", "Component_A"): "componenta" === "componenta" → ✓
+    const doc = makeDoc(
+      '<h2 id="Component_A">Component A</h2>' +
+      '<p><a href="#componentA">link</a></p>'
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const wsChange = results.find(
+      r => (r as AutoAppliedChange).description?.includes('missing word separators')
+    ) as AutoAppliedChange | undefined;
+    expect(wsChange).toBeDefined();
+    const pairs = JSON.parse(wsChange!.value!) as { old: string; new: string }[];
+    expect(pairs).toEqual([{ old: 'componentA', new: 'Component_A' }]);
+    expect(results.find(r => (r as Issue).severity === 'warning')).toBeUndefined();
+  });
+
+  it('also works via OOXML bookmark (xmlWithBookmarks)', () => {
+    // The correct anchor is supplied as an OOXML bookmark rather than an HTML id.
+    const doc = makeDoc(
+      '<p><a href="#AppendixA">link</a></p>',
+      xmlWithBookmarks('Appendix_A')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const wsChange = results.find(
+      r => (r as AutoAppliedChange).description?.includes('missing word separators')
+    ) as AutoAppliedChange | undefined;
+    expect(wsChange).toBeDefined();
+    const pairs = JSON.parse(wsChange!.value!) as { old: string; new: string }[];
+    expect(pairs).toEqual([{ old: 'AppendixA', new: 'Appendix_A' }]);
+  });
+
+  it('does not surface a warning Issue for the word-separator fix', () => {
+    // The fix is silent — no "Internal link anchor may need updating" card shown.
+    const doc = makeDoc(
+      '<h2 id="Appendix_A">Appendix A</h2>' +
+      '<p><a href="#AppendixA">link</a></p>'
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const issue = results.find(r => 'title' in r) as Issue | undefined;
+    expect(issue).toBeUndefined();
+  });
+
+  it('still surfaces a link-text suggestion when the link text does not reference the heading', () => {
+    // Heading has no explicit id → match goes through Source 3 (heading text),
+    // which populates headingText. #AppendixA is auto-fixed as a ws fix AND
+    // a link-text suggestion is emitted because "click here" doesn't name the heading.
+    const doc = makeDoc(
+      '<h2>Appendix A</h2>' +
+      '<p><a href="#AppendixA">click here</a></p>'
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const suggestion = results.find(r => (r as Issue).severity === 'suggestion') as Issue | undefined;
+    expect(suggestion).toBeDefined();
+    expect(suggestion!.title).toBe('Consider adding destination heading name to link text');
+    const wsChange = results.find(
+      r => (r as AutoAppliedChange).description?.includes('missing word separators')
+    );
+    expect(wsChange).toBeDefined();
+  });
+
+  it('does not apply word-separator fix when the difference is more than missing underscores', () => {
+    // #AppendixABC vs #Appendix_A: "appendixabc" ≠ "appendixa" → not a ws fix.
+    // The anchor does fuzzy-match the heading via CamelCase split, but the match
+    // is lower-confidence and surfaces as a warning Issue.
+    const doc = makeDoc(
+      '<h2 id="Appendix_A">Appendix A</h2>' +
+      '<p><a href="#AppendixABC">link</a></p>'
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const wsChange = results.find(
+      r => (r as AutoAppliedChange).description?.includes('missing word separators')
+    );
+    expect(wsChange).toBeUndefined();
+  });
+
+  it('word-separator and fmt fixes appear as separate AutoAppliedChange entries when both types occur', () => {
+    // Two links: one with a capitalization-only mismatch (fmt fix) and one with a
+    // missing-underscore mismatch (ws fix). Both are auto-fixed; two separate change
+    // entries appear in the results with distinct descriptions.
+    const doc = makeDoc(
+      '<h2 id="Eligibility">Eligibility</h2>' +
+      '<h2 id="Appendix_A">Appendix A</h2>' +
+      '<p><a href="#eligibility">cap fix</a></p>' +
+      '<p><a href="#AppendixA">ws fix</a></p>'
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const fmtChange = results.find(
+      r => (r as AutoAppliedChange).description?.includes('capitalization or leading/trailing underscores')
+    ) as AutoAppliedChange | undefined;
+    const wsChange = results.find(
+      r => (r as AutoAppliedChange).description?.includes('missing word separators')
+    ) as AutoAppliedChange | undefined;
+    expect(fmtChange).toBeDefined();
+    expect(wsChange).toBeDefined();
+    // Each covers its own anchor
+    const fmtPairs = JSON.parse(fmtChange!.value!) as { old: string; new: string }[];
+    expect(fmtPairs).toContainEqual({ old: 'eligibility', new: 'Eligibility' });
+    const wsPairs = JSON.parse(wsChange!.value!) as { old: string; new: string }[];
+    expect(wsPairs).toContainEqual({ old: 'AppendixA', new: 'Appendix_A' });
   });
 });
