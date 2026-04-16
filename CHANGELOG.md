@@ -18,7 +18,7 @@
 * **LINK-006:** replace anchor auto-fix with instruction-only warnings ([b426150](https://github.com/agilesix/nofo-design-prep-checker/commit/b426150e57884de9693abbd969395b3c5291f95c))
 * **review:** add bold category prefix to auto-applied changes list ([225a847](https://github.com/agilesix/nofo-design-prep-checker/commit/225a847b51c6113b1d1eb536cd889d90376b038e))
 * **review:** add bold category prefix to auto-applied changes list ([5e3b963](https://github.com/agilesix/nofo-design-prep-checker/commit/5e3b963cfea9e63e3fccfa8e1b91212167d3fb1e))
-* **rules:** add HEAD-002 (multiple H1s) and HEAD-003 (skipped headin… ([2a01880](https://github.com/agilesix/nofo-design-prep-checker/commit/2a01880d5f294bb0d0528165a2c115c43e162766))
+* **rules:** add HEAD-002 (multiple H1s) and HEAD-003 (skipped heading levels) ([2a01880](https://github.com/agilesix/nofo-design-prep-checker/commit/2a01880d5f294bb0d0528165a2c115c43e162766))
 * **rules:** add HEAD-002 (multiple H1s) and HEAD-003 (skipped heading levels) ([ed0ad2d](https://github.com/agilesix/nofo-design-prep-checker/commit/ed0ad2d8956b82c31718d356d07982add9ab552b))
 
 
