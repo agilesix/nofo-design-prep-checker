@@ -74,7 +74,7 @@ describe('LINK-006 exact match', () => {
 // ─── Tier 2a: Fuzzy match via OOXML bookmarks (primary source) ───────────────
 
 describe('LINK-006 fuzzy match — OOXML bookmarks', () => {
-  it('surfaces an instruction-only warning for _Eligibility when bookmark is Eligibility', () => {
+  it('surfaces an accept-to-fix issue for _Eligibility when bookmark is Eligibility', () => {
     const doc = makeDoc(
       '<h2>Eligibility</h2>' +
       '<p><a href="#_Eligibility">See Eligibility</a></p>',
@@ -83,12 +83,13 @@ describe('LINK-006 fuzzy match — OOXML bookmarks', () => {
     const results = LINK_006.check(doc, OPTIONS);
     expect(results).toHaveLength(1);
     const issue = results[0] as Issue;
-    expect(issue.title).toBe(INSTRUCTION_TITLE);
-    expect(issue.instructionOnly).toBe(true);
-    expect(issue.inputRequired).toBeUndefined();
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.instructionOnly).toBeUndefined();
+    expect(issue.inputRequired?.prefill).toBe('Eligibility');
+    expect(issue.inputRequired?.targetField).toBe('link.bookmark._Eligibility');
   });
 
-  it('surfaces an instruction-only warning for _Maintenance_of_effort anchor mismatch', () => {
+  it('surfaces an accept-to-fix issue for _Maintenance_of_effort anchor mismatch', () => {
     const doc = makeDoc(
       '<h2>Maintenance of Effort</h2>' +
       '<p><a href="#_Maintenance_of_effort">See MOE</a></p>',
@@ -96,19 +97,19 @@ describe('LINK-006 fuzzy match — OOXML bookmarks', () => {
     );
     const issue = LINK_006.check(doc, OPTIONS).find(r => (r as Issue).severity === 'warning') as Issue | undefined;
     expect(issue).toBeDefined();
-    expect(issue!.title).toBe(INSTRUCTION_TITLE);
-    expect(issue!.instructionOnly).toBe(true);
+    expect(issue!.title).toBe('Internal link anchor may need updating');
+    expect(issue!.inputRequired?.prefill).toBe('Maintenance_of_effort');
+    expect(issue!.inputRequired?.targetField).toBe('link.bookmark._Maintenance_of_effort');
   });
 
-  it('surfaces an instruction-only warning for underscore-prefix anchor', () => {
+  it('inputRequired contains old and new anchor values', () => {
     const doc = makeDoc(
       '<p><a href="#_Eligibility">link</a></p>',
       xmlWithBookmarks('Eligibility')
     );
     const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
-    expect(issue.title).toBe(INSTRUCTION_TITLE);
-    expect(issue.instructionOnly).toBe(true);
-    expect(issue.inputRequired).toBeUndefined();
+    expect(issue.inputRequired?.prefill).toBe('Eligibility');
+    expect(issue.inputRequired?.targetField).toBe('link.bookmark._Eligibility');
   });
 
   it('ignores the _GoBack internal Word bookmark', () => {
@@ -251,7 +252,7 @@ describe('LINK-006 fuzzy match — heading text', () => {
     expect(warning!.instructionOnly).toBe(true);
   });
 
-  it('surfaces instruction-only warning for _Eligibility via OOXML (no AutoAppliedChange)', () => {
+  it('surfaces accept-to-fix issue for _Eligibility via OOXML (no AutoAppliedChange)', () => {
     const doc = makeDoc(
       '<p><a href="#_Eligibility">link</a></p>',
       xmlWithBookmarks('Eligibility')
@@ -259,11 +260,12 @@ describe('LINK-006 fuzzy match — heading text', () => {
     const results = LINK_006.check(doc, OPTIONS);
     const issue = results.find(r => 'title' in r) as Issue | undefined;
     expect(issue).toBeDefined();
-    expect(issue!.title).toBe(INSTRUCTION_TITLE);
-    expect(issue!.instructionOnly).toBe(true);
+    expect(issue!.title).toBe('Internal link anchor may need updating');
+    expect(issue!.inputRequired?.prefill).toBe('Eligibility');
   });
 
-  it('surfaces instruction-only warning for CamelCase anchor #AppendixA', () => {
+  it('surfaces instruction-only warning for CamelCase anchor #AppendixA (Source 3, no OOXML)', () => {
+    // No OOXML bookmarks — match is via Source 3 (heading text) → instruction-only
     const doc = makeDoc(
       '<h2>Appendix A</h2>' +
       '<p><a href="#AppendixA">See Appendix A</a></p>'
@@ -276,7 +278,7 @@ describe('LINK-006 fuzzy match — heading text', () => {
     expect(issue.inputRequired).toBeUndefined();
   });
 
-  it('surfaces instruction-only warning for CamelCase anchor #AppendixB', () => {
+  it('surfaces instruction-only warning for CamelCase anchor #AppendixB (Source 3, no OOXML)', () => {
     const doc = makeDoc(
       '<h2>Appendix B</h2>' +
       '<p><a href="#AppendixB">See Appendix B</a></p>'
@@ -291,7 +293,7 @@ describe('LINK-006 fuzzy match — heading text', () => {
 // ─── Numeric suffix stripping (Word duplicate-heading anchors) ────────────────
 
 describe('LINK-006 numeric suffix stripping', () => {
-  it('surfaces instruction-only warning for _Project_narrative_1 (stripped suffix match)', () => {
+  it('surfaces accept-to-fix issue for _Project_narrative_1 (stripped suffix, OOXML match)', () => {
     const doc = makeDoc(
       '<p><a href="#_Project_narrative_1">link</a></p>',
       xmlWithBookmarks('Project_narrative')
@@ -299,31 +301,42 @@ describe('LINK-006 numeric suffix stripping', () => {
     const results = LINK_006.check(doc, OPTIONS);
     expect(results).toHaveLength(1);
     const issue = results[0] as Issue;
-    expect(issue.title).toBe(INSTRUCTION_TITLE);
-    expect(issue.instructionOnly).toBe(true);
-    expect(issue.inputRequired).toBeUndefined();
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.instructionOnly).toBeUndefined();
+    expect(issue.inputRequired?.prefill).toBe('Project_narrative');
+    expect(issue.inputRequired?.targetField).toBe('link.bookmark._Project_narrative_1');
   });
 
-  it('surfaces instruction-only warning for _Project_narrative_2', () => {
+  it('prefillNote contains numeric suffix warning when suffix was stripped', () => {
+    const doc = makeDoc(
+      '<p><a href="#_Project_narrative_1">link</a></p>',
+      xmlWithBookmarks('Project_narrative')
+    );
+    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.inputRequired?.prefillNote).toContain('trailing numeric suffix');
+    expect(issue.inputRequired?.prefillNote).toContain('multiple headings');
+  });
+
+  it('surfaces accept-to-fix issue for _Project_narrative_2', () => {
     const doc = makeDoc(
       '<p><a href="#_Project_narrative_2">link</a></p>',
       xmlWithBookmarks('Project_narrative')
     );
     const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
-    expect(issue.title).toBe(INSTRUCTION_TITLE);
-    expect(issue.instructionOnly).toBe(true);
-    expect(issue.inputRequired).toBeUndefined();
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.inputRequired?.prefill).toBe('Project_narrative');
+    expect(issue.inputRequired?.targetField).toBe('link.bookmark._Project_narrative_2');
   });
 
-  it('surfaces instruction-only warning for _Step_3_1 (stripped suffix match)', () => {
+  it('surfaces accept-to-fix issue for _Step_3_1 (stripped suffix, OOXML match)', () => {
     const doc = makeDoc(
       '<p><a href="#_Step_3_1">link</a></p>',
       xmlWithBookmarks('Step_3')
     );
     const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
-    expect(issue.title).toBe(INSTRUCTION_TITLE);
-    expect(issue.instructionOnly).toBe(true);
-    expect(issue.inputRequired).toBeUndefined();
+    expect(issue.title).toBe('Internal link anchor may need updating');
+    expect(issue.inputRequired?.prefill).toBe('Step_3');
+    expect(issue.inputRequired?.targetField).toBe('link.bookmark._Step_3_1');
   });
 
   it('surfaces instruction-only warning when stripped anchor matches multiple OOXML bookmarks', () => {
@@ -819,7 +832,7 @@ describe('LINK-006 Source 3 and Pass 3 — heading id underscore stripping and b
 // ─── All non-Tier-1 cases: instruction-only, no AutoAppliedChange ─────────────
 
 describe('LINK-006 instruction-only behavior', () => {
-  it('emits instruction-only warning (not AutoAppliedChange) for capitalization-only mismatch', () => {
+  it('emits accept-to-fix issue (not AutoAppliedChange) for capitalization-only OOXML mismatch', () => {
     const doc = makeDoc(
       '<p><a href="#eligibility">link</a></p>',
       xmlWithBookmarks('Eligibility')
@@ -827,24 +840,26 @@ describe('LINK-006 instruction-only behavior', () => {
     const results = LINK_006.check(doc, OPTIONS);
     expect(results).toHaveLength(1);
     const issue = results[0] as Issue;
-    expect(issue.title).toBe(INSTRUCTION_TITLE);
+    expect(issue.title).toBe('Internal link anchor may need updating');
     expect(issue.severity).toBe('warning');
-    expect(issue.instructionOnly).toBe(true);
-    expect(issue.inputRequired).toBeUndefined();
+    expect(issue.instructionOnly).toBeUndefined();
+    expect(issue.inputRequired?.prefill).toBe('Eligibility');
+    expect(issue.inputRequired?.targetField).toBe('link.bookmark.eligibility');
   });
 
-  it('emits instruction-only warning for leading-underscore mismatch', () => {
+  it('emits accept-to-fix issue for leading-underscore OOXML mismatch', () => {
     const doc = makeDoc(
       '<p><a href="#_Eligibility">link</a></p>',
       xmlWithBookmarks('Eligibility')
     );
     const results = LINK_006.check(doc, OPTIONS);
     expect(results).toHaveLength(1);
-    expect((results[0] as Issue).instructionOnly).toBe(true);
-    expect((results[0] as Issue).severity).toBe('warning');
+    const issue = results[0] as Issue;
+    expect(issue.inputRequired?.prefill).toBe('Eligibility');
+    expect(issue.severity).toBe('warning');
   });
 
-  it('emits instruction-only warning for CamelCase (missing word separator) mismatch', () => {
+  it('emits instruction-only warning for CamelCase mismatch via HTML id only (no OOXML)', () => {
     const doc = makeDoc(
       '<h2 id="Appendix_A">Appendix A</h2>' +
       '<p><a href="#AppendixA">link</a></p>'
@@ -872,7 +887,7 @@ describe('LINK-006 instruction-only behavior', () => {
     expect(suggestion!.title).toBe('Consider adding destination heading name to link text');
   });
 
-  it('emits separate instruction-only warnings for each distinct broken anchor', () => {
+  it('emits accept-to-fix issues for OOXML matches, instruction-only for no-match', () => {
     const doc = makeDoc(
       '<p><a href="#eligibility">cap fix</a></p>' +
       '<p><a href="#AppendixA">ws fix</a></p>',
@@ -882,14 +897,13 @@ describe('LINK-006 instruction-only behavior', () => {
     const warnings = results.filter(r => (r as Issue).severity === 'warning');
     expect(warnings).toHaveLength(2);
     warnings.forEach(w => {
-      expect((w as Issue).title).toBe(INSTRUCTION_TITLE);
-      expect((w as Issue).instructionOnly).toBe(true);
+      expect((w as Issue).title).toBe('Internal link anchor may need updating');
+      expect((w as Issue).inputRequired).toBeDefined();
     });
   });
 
-  it('uses the standard instruction description for fuzzy-single, ambiguous, and no-match cases', () => {
+  it('uses the standard instruction description for ambiguous and no-match cases', () => {
     const cases = [
-      makeDoc('<h2>Eligibility</h2><p><a href="#_eligibility">link</a></p>'),
       makeDoc(
         '<h2 id="a-overview">Attachment 1: Overview</h2><h2 id="a-instructions">Attachment 1: Instructions</h2>' +
         '<p><a href="#Attachment_1">link</a></p>'
