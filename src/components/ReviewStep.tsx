@@ -220,9 +220,11 @@ export default function ReviewStep({
           <div className="usa-alert__body">
             <h2 className="usa-alert__heading">{content.review.autoApplied.heading}</h2>
             <p className="usa-alert__text">{content.review.autoApplied.intro}</p>
-            <ul className="usa-list">
+            <ul className="usa-list margin-top-2">
               {autoAppliedChanges.map((change, i) => (
-                <li key={i}>{change.description}</li>
+                <li key={i}>
+                  <strong>{getCategoryLabel(change.ruleId)}</strong> &mdash; {change.description}
+                </li>
               ))}
             </ul>
           </div>
