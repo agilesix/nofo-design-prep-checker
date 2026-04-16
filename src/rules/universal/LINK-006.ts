@@ -22,6 +22,9 @@ import { buildLocationLookup } from '../../utils/locationContext';
  *  three-pass fuzzy matching strategy is retained solely to populate this suggestion.
  */
 
+const INSTRUCTION_ONLY_WARNING_TITLE = 'Internal link may not work in NOFO Builder';
+const INSTRUCTION_ONLY_WARNING_DESCRIPTION = 'This internal link may be broken. To fix it, select the link text in Word, go to Insert → Link → This Document, and select the correct heading. Do not edit the link URL directly.';
+
 type FuzzyMatchResult =
   | {
       kind: 'single';
@@ -134,12 +137,12 @@ const LINK_006: Rule = {
         results.push({
           id: `LINK-006-${index}`,
           ruleId: 'LINK-006',
-          title: 'Internal link may not work in NOFO Builder',
+          title: INSTRUCTION_ONLY_WARNING_TITLE,
           severity: 'warning',
           sectionId,
           nearestHeading: linkNearestHeading,
           location: href,
-          description: `This internal link may be broken. To fix it, select the link text in Word, go to Insert → Link → This Document, and select the correct heading. Do not edit the link URL directly.`,
+          description: INSTRUCTION_ONLY_WARNING_DESCRIPTION,
           instructionOnly: true,
         } as Issue);
 
