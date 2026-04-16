@@ -628,4 +628,49 @@ describe('TABLE-002 sentence case suggestion', () => {
     const doc = makeDoc('<p>Program Timeline Overview</p>' + SIMPLE_TABLE, 'Application checklist');
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
+
+  // ── Labeled component reference exemption ─────────────────────────────────────
+
+  it('does not surface a sentence-case suggestion when the caption contains "Component A"', () => {
+    // "Component" is exempt because it is followed by the single-letter label "A".
+    // "requirements" is lowercase — no title-case evidence remains.
+    const doc = makeDoc('<p>Requirements for Component A</p>' + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not surface a sentence-case suggestion for a standalone "Component A" caption', () => {
+    // "A" is single-letter (already skipped); "Component" is exempt as a label.
+    const doc = makeDoc('<p>Component A</p>' + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not surface a sentence-case suggestion for "Appendix B overview"', () => {
+    const doc = makeDoc('<p>Appendix B overview</p>' + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not surface a sentence-case suggestion for a <caption> element containing "Component A"', () => {
+    const doc = makeDoc(
+      '<table>' +
+        '<caption>Requirements for Component A</caption>' +
+        '<tbody><tr><td>A</td><td>B</td></tr></tbody>' +
+      '</table>'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not surface a suggestion for "Figure 1 results" (digit identifier)', () => {
+    const doc = makeDoc('<p>Figure 1 results</p>' + SIMPLE_TABLE);
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('still flags a caption where the label word is not followed by a single letter or digit', () => {
+    // "Component" is not followed by a label identifier here — it is a genuine
+    // title-case word and the caption should still be flagged.
+    const doc = makeDoc('<p>Component Requirements</p>' + SIMPLE_TABLE);
+    const results = TABLE_002.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as Issue).severity).toBe('suggestion');
+    expect((results[0] as Issue).title).toBe('Table caption should use sentence case');
+  });
 });

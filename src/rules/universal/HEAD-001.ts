@@ -31,6 +31,10 @@ import type { Rule, Issue, AutoAppliedChange, ParsedDocument, RuleRunnerOptions 
  *     form names (SF-424), and other all-cap tokens are skipped entirely.
  *   • Words starting with a lowercase letter followed by uppercase (e.g. "eRA") are
  *     treated as intentional mixed-case proper nouns and skipped at the word level.
+ *   • Labeled component references — a label word (Component, Table, Appendix,
+ *     Figure, Exhibit, Part, Attachment, Section) immediately followed by a single
+ *     uppercase letter or digit (e.g. "Component A", "Appendix B", "Figure 3") —
+ *     are treated as proper labels and their capitalization is not flagged.
  *
  * Additional check — capitalized "Form" (H1–H6):
  *   If the word "Form" (capital F) appears in any non-first-word position, a
@@ -111,10 +115,12 @@ function looksLikeTitleCase(text: string): boolean {
   const starts = sentenceStartIndices(words);
   const indigenousExempt = indigenousExemptPositions(words);
   const acronymExempt = acronymPhraseExemptPositions(words);
+  const componentExempt = labeledComponentExemptPositions(words);
   for (let i = 0; i < words.length; i++) {
     if (starts.has(i)) continue;
     if (indigenousExempt.has(i)) continue;
     if (acronymExempt.has(i)) continue;
+    if (componentExempt.has(i)) continue;
     const clean = (words[i] ?? '').replace(/^[^a-zA-Z0-9]+/, '');
     if (!clean || isSkippable(clean)) continue;
     if (/^[A-Z]/.test(clean)) return true;
@@ -372,6 +378,36 @@ function acronymPhraseExemptPositions(words: string[]): Set<number> {
         break;
       }
     }
+  }
+
+  return exempt;
+}
+
+/**
+ * Returns the set of word-array indices that are labeled component references:
+ * a recognized label word (Component, Table, Appendix, Figure, Exhibit, Part,
+ * Attachment, Section) immediately followed by a single uppercase letter (A–Z)
+ * or digit — for example "Component A", "Appendix B", "Figure 3", "Table C".
+ *
+ * These are proper labels used in NOFO documents; their capitalization is
+ * intentional and should not be treated as title-case evidence when checking
+ * H3–H6 headings for sentence case.
+ */
+function labeledComponentExemptPositions(words: string[]): Set<number> {
+  const exempt = new Set<number>();
+  const bare = (w: string) =>
+    w.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '');
+
+  const LABELS = new Set([
+    'Component', 'Table', 'Appendix', 'Figure', 'Exhibit',
+    'Part', 'Attachment', 'Section',
+  ]);
+
+  for (let i = 0; i < words.length; i++) {
+    const w = bare(words[i] ?? '');
+    if (!LABELS.has(w)) continue;
+    const next = bare(words[i + 1] ?? '');
+    if (/^[A-Z0-9]$/.test(next)) exempt.add(i);
   }
 
   return exempt;
