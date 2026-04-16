@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
 import LINK_006 from '../universal/LINK-006';
-import type { ParsedDocument, Issue } from '../../types';
+import type { ParsedDocument, Issue, AutoAppliedChange } from '../../types';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -74,7 +74,7 @@ describe('LINK-006 exact match', () => {
 // ─── Tier 2a: Fuzzy match via OOXML bookmarks (primary source) ───────────────
 
 describe('LINK-006 fuzzy match — OOXML bookmarks', () => {
-  it('surfaces an accept-to-fix issue for _Eligibility when bookmark is Eligibility', () => {
+  it('auto-fixes silently when _Eligibility matches bookmark Eligibility', () => {
     const doc = makeDoc(
       '<h2>Eligibility</h2>' +
       '<p><a href="#_Eligibility">See Eligibility</a></p>',
@@ -82,34 +82,34 @@ describe('LINK-006 fuzzy match — OOXML bookmarks', () => {
     );
     const results = LINK_006.check(doc, OPTIONS);
     expect(results).toHaveLength(1);
-    const issue = results[0] as Issue;
-    expect(issue.title).toBe('Internal link anchor may need updating');
-    expect(issue.instructionOnly).toBeUndefined();
-    expect(issue.inputRequired?.prefill).toBe('Eligibility');
-    expect(issue.inputRequired?.targetField).toBe('link.bookmark._Eligibility');
+    const change = results[0] as AutoAppliedChange;
+    expect('severity' in change).toBe(false);
+    expect(change.ruleId).toBe('LINK-006');
+    expect(change.targetField).toBe('link.bookmark._Eligibility');
+    expect(change.value).toBe('Eligibility');
   });
 
-  it('surfaces an accept-to-fix issue for _Maintenance_of_effort anchor mismatch', () => {
+  it('auto-fixes silently for _Maintenance_of_effort when bookmark is Maintenance_of_effort', () => {
     const doc = makeDoc(
       '<h2>Maintenance of Effort</h2>' +
       '<p><a href="#_Maintenance_of_effort">See MOE</a></p>',
       xmlWithBookmarks('Maintenance_of_effort')
     );
-    const issue = LINK_006.check(doc, OPTIONS).find(r => (r as Issue).severity === 'warning') as Issue | undefined;
-    expect(issue).toBeDefined();
-    expect(issue!.title).toBe('Internal link anchor may need updating');
-    expect(issue!.inputRequired?.prefill).toBe('Maintenance_of_effort');
-    expect(issue!.inputRequired?.targetField).toBe('link.bookmark._Maintenance_of_effort');
+    const change = LINK_006.check(doc, OPTIONS).find(r => !('severity' in r)) as AutoAppliedChange | undefined;
+    expect(change).toBeDefined();
+    expect(change!.ruleId).toBe('LINK-006');
+    expect(change!.targetField).toBe('link.bookmark._Maintenance_of_effort');
+    expect(change!.value).toBe('Maintenance_of_effort');
   });
 
-  it('inputRequired contains old and new anchor values', () => {
+  it('AutoAppliedChange has correct targetField and value', () => {
     const doc = makeDoc(
       '<p><a href="#_Eligibility">link</a></p>',
       xmlWithBookmarks('Eligibility')
     );
-    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
-    expect(issue.inputRequired?.prefill).toBe('Eligibility');
-    expect(issue.inputRequired?.targetField).toBe('link.bookmark._Eligibility');
+    const change = LINK_006.check(doc, OPTIONS)[0] as AutoAppliedChange;
+    expect(change.targetField).toBe('link.bookmark._Eligibility');
+    expect(change.value).toBe('Eligibility');
   });
 
   it('ignores the _GoBack internal Word bookmark', () => {
@@ -252,16 +252,16 @@ describe('LINK-006 fuzzy match — heading text', () => {
     expect(warning!.instructionOnly).toBe(true);
   });
 
-  it('surfaces accept-to-fix issue for _Eligibility via OOXML (no AutoAppliedChange)', () => {
+  it('emits AutoAppliedChange for _Eligibility when OOXML bookmark Eligibility is present', () => {
     const doc = makeDoc(
       '<p><a href="#_Eligibility">link</a></p>',
       xmlWithBookmarks('Eligibility')
     );
     const results = LINK_006.check(doc, OPTIONS);
-    const issue = results.find(r => 'title' in r) as Issue | undefined;
-    expect(issue).toBeDefined();
-    expect(issue!.title).toBe('Internal link anchor may need updating');
-    expect(issue!.inputRequired?.prefill).toBe('Eligibility');
+    const change = results.find(r => !('severity' in r)) as AutoAppliedChange | undefined;
+    expect(change).toBeDefined();
+    expect(change!.ruleId).toBe('LINK-006');
+    expect(change!.value).toBe('Eligibility');
   });
 
   it('surfaces instruction-only warning for CamelCase anchor #AppendixA (Source 3, no OOXML)', () => {
@@ -293,50 +293,50 @@ describe('LINK-006 fuzzy match — heading text', () => {
 // ─── Numeric suffix stripping (Word duplicate-heading anchors) ────────────────
 
 describe('LINK-006 numeric suffix stripping', () => {
-  it('surfaces accept-to-fix issue for _Project_narrative_1 (stripped suffix, OOXML match)', () => {
+  it('auto-fixes silently for _Project_narrative_1 when bookmark is Project_narrative (stripped suffix)', () => {
     const doc = makeDoc(
       '<p><a href="#_Project_narrative_1">link</a></p>',
       xmlWithBookmarks('Project_narrative')
     );
     const results = LINK_006.check(doc, OPTIONS);
     expect(results).toHaveLength(1);
-    const issue = results[0] as Issue;
-    expect(issue.title).toBe('Internal link anchor may need updating');
-    expect(issue.instructionOnly).toBeUndefined();
-    expect(issue.inputRequired?.prefill).toBe('Project_narrative');
-    expect(issue.inputRequired?.targetField).toBe('link.bookmark._Project_narrative_1');
+    const change = results[0] as AutoAppliedChange;
+    expect('severity' in change).toBe(false);
+    expect(change.ruleId).toBe('LINK-006');
+    expect(change.targetField).toBe('link.bookmark._Project_narrative_1');
+    expect(change.value).toBe('Project_narrative');
   });
 
-  it('prefillNote contains numeric suffix warning when suffix was stripped', () => {
+  it('emits AutoAppliedChange (not Issue) even when numeric suffix was stripped', () => {
     const doc = makeDoc(
       '<p><a href="#_Project_narrative_1">link</a></p>',
       xmlWithBookmarks('Project_narrative')
     );
-    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
-    expect(issue.inputRequired?.prefillNote).toContain('trailing numeric suffix');
-    expect(issue.inputRequired?.prefillNote).toContain('multiple headings');
+    const change = LINK_006.check(doc, OPTIONS)[0] as AutoAppliedChange;
+    expect('severity' in change).toBe(false);
+    expect(change.value).toBe('Project_narrative');
   });
 
-  it('surfaces accept-to-fix issue for _Project_narrative_2', () => {
+  it('auto-fixes silently for _Project_narrative_2', () => {
     const doc = makeDoc(
       '<p><a href="#_Project_narrative_2">link</a></p>',
       xmlWithBookmarks('Project_narrative')
     );
-    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
-    expect(issue.title).toBe('Internal link anchor may need updating');
-    expect(issue.inputRequired?.prefill).toBe('Project_narrative');
-    expect(issue.inputRequired?.targetField).toBe('link.bookmark._Project_narrative_2');
+    const change = LINK_006.check(doc, OPTIONS)[0] as AutoAppliedChange;
+    expect(change.ruleId).toBe('LINK-006');
+    expect(change.value).toBe('Project_narrative');
+    expect(change.targetField).toBe('link.bookmark._Project_narrative_2');
   });
 
-  it('surfaces accept-to-fix issue for _Step_3_1 (stripped suffix, OOXML match)', () => {
+  it('auto-fixes silently for _Step_3_1 when bookmark is Step_3 (stripped suffix)', () => {
     const doc = makeDoc(
       '<p><a href="#_Step_3_1">link</a></p>',
       xmlWithBookmarks('Step_3')
     );
-    const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
-    expect(issue.title).toBe('Internal link anchor may need updating');
-    expect(issue.inputRequired?.prefill).toBe('Step_3');
-    expect(issue.inputRequired?.targetField).toBe('link.bookmark._Step_3_1');
+    const change = LINK_006.check(doc, OPTIONS)[0] as AutoAppliedChange;
+    expect(change.ruleId).toBe('LINK-006');
+    expect(change.value).toBe('Step_3');
+    expect(change.targetField).toBe('link.bookmark._Step_3_1');
   });
 
   it('surfaces instruction-only warning when stripped anchor matches multiple OOXML bookmarks', () => {
@@ -832,31 +832,30 @@ describe('LINK-006 Source 3 and Pass 3 — heading id underscore stripping and b
 // ─── All non-Tier-1 cases: instruction-only, no AutoAppliedChange ─────────────
 
 describe('LINK-006 instruction-only behavior', () => {
-  it('emits accept-to-fix issue (not AutoAppliedChange) for capitalization-only OOXML mismatch', () => {
+  it('auto-fixes silently for capitalization-only OOXML mismatch (#eligibility → Eligibility)', () => {
     const doc = makeDoc(
       '<p><a href="#eligibility">link</a></p>',
       xmlWithBookmarks('Eligibility')
     );
     const results = LINK_006.check(doc, OPTIONS);
     expect(results).toHaveLength(1);
-    const issue = results[0] as Issue;
-    expect(issue.title).toBe('Internal link anchor may need updating');
-    expect(issue.severity).toBe('warning');
-    expect(issue.instructionOnly).toBeUndefined();
-    expect(issue.inputRequired?.prefill).toBe('Eligibility');
-    expect(issue.inputRequired?.targetField).toBe('link.bookmark.eligibility');
+    const change = results[0] as AutoAppliedChange;
+    expect('severity' in change).toBe(false);
+    expect(change.ruleId).toBe('LINK-006');
+    expect(change.targetField).toBe('link.bookmark.eligibility');
+    expect(change.value).toBe('Eligibility');
   });
 
-  it('emits accept-to-fix issue for leading-underscore OOXML mismatch', () => {
+  it('auto-fixes silently for leading-underscore OOXML mismatch (#_Eligibility → Eligibility)', () => {
     const doc = makeDoc(
       '<p><a href="#_Eligibility">link</a></p>',
       xmlWithBookmarks('Eligibility')
     );
     const results = LINK_006.check(doc, OPTIONS);
     expect(results).toHaveLength(1);
-    const issue = results[0] as Issue;
-    expect(issue.inputRequired?.prefill).toBe('Eligibility');
-    expect(issue.severity).toBe('warning');
+    const change = results[0] as AutoAppliedChange;
+    expect('severity' in change).toBe(false);
+    expect(change.value).toBe('Eligibility');
   });
 
   it('emits instruction-only warning for CamelCase mismatch via HTML id only (no OOXML)', () => {
@@ -887,18 +886,18 @@ describe('LINK-006 instruction-only behavior', () => {
     expect(suggestion!.title).toBe('Consider adding destination heading name to link text');
   });
 
-  it('emits accept-to-fix issues for OOXML matches, instruction-only for no-match', () => {
+  it('emits AutoAppliedChanges for OOXML matches (not Issues)', () => {
     const doc = makeDoc(
       '<p><a href="#eligibility">cap fix</a></p>' +
       '<p><a href="#AppendixA">ws fix</a></p>',
       xmlWithBookmarks('Eligibility', 'Appendix_A')
     );
     const results = LINK_006.check(doc, OPTIONS);
-    const warnings = results.filter(r => (r as Issue).severity === 'warning');
-    expect(warnings).toHaveLength(2);
-    warnings.forEach(w => {
-      expect((w as Issue).title).toBe('Internal link anchor may need updating');
-      expect((w as Issue).inputRequired).toBeDefined();
+    const changes = results.filter(r => !('severity' in r)) as AutoAppliedChange[];
+    expect(changes).toHaveLength(2);
+    changes.forEach(c => {
+      expect(c.ruleId).toBe('LINK-006');
+      expect(c.value).toBeDefined();
     });
   });
 
@@ -914,5 +913,71 @@ describe('LINK-006 instruction-only behavior', () => {
       const issue = LINK_006.check(doc, OPTIONS)[0] as Issue;
       expect(issue.description).toBe(INSTRUCTION_DESC);
     }
+  });
+});
+
+// ─── LINK-006 leading-underscore bookmark auto-fix ────────────────────────────
+
+describe('LINK-006 leading-underscore bookmark auto-fix', () => {
+  it('produces no issue when #_Eligibility matches bookmark _Eligibility exactly (Tier 1b)', () => {
+    const doc = makeDoc(
+      '<p><a href="#_Eligibility">link</a></p>',
+      xmlWithBookmarks('_Eligibility')
+    );
+    expect(LINK_006.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('auto-fixes silently when #_Eligibility matches bookmark Eligibility (fuzzy OOXML)', () => {
+    const doc = makeDoc(
+      '<p><a href="#_Eligibility">link</a></p>',
+      xmlWithBookmarks('Eligibility')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const change = results[0] as AutoAppliedChange;
+    expect('severity' in change).toBe(false);
+    expect(change.ruleId).toBe('LINK-006');
+    expect(change.targetField).toBe('link.bookmark._Eligibility');
+    expect(change.value).toBe('Eligibility');
+  });
+
+  it('auto-fixes silently when #Eligibility matches bookmark _Eligibility (fuzzy OOXML)', () => {
+    const doc = makeDoc(
+      '<p><a href="#Eligibility">link</a></p>',
+      xmlWithBookmarks('_Eligibility')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const change = results[0] as AutoAppliedChange;
+    expect('severity' in change).toBe(false);
+    expect(change.ruleId).toBe('LINK-006');
+    expect(change.targetField).toBe('link.bookmark.Eligibility');
+    expect(change.value).toBe('_Eligibility');
+  });
+
+  it('auto-fixes silently when #_Program-specific_limitations_1 matches bookmark _Program-specific_limitations (stripped suffix)', () => {
+    const doc = makeDoc(
+      '<p><a href="#_Program-specific_limitations_1">link</a></p>',
+      xmlWithBookmarks('_Program-specific_limitations')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const change = results[0] as AutoAppliedChange;
+    expect('severity' in change).toBe(false);
+    expect(change.ruleId).toBe('LINK-006');
+    expect(change.value).toBe('_Program-specific_limitations');
+  });
+
+  it('emits instruction-only warning when anchor has no matching bookmark', () => {
+    const doc = makeDoc(
+      '<p><a href="#_Completely_Unrelated">link</a></p>',
+      xmlWithBookmarks('SomethingElse')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const issue = results[0] as Issue;
+    expect(issue.severity).toBe('warning');
+    expect(issue.instructionOnly).toBe(true);
+    expect(issue.inputRequired).toBeUndefined();
   });
 });
