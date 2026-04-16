@@ -30,14 +30,6 @@ import type { AutoAppliedChange } from '../../types';
 
 // ─── Shared constants ─────────────────────────────────────────────────────────
 
-const DIAG_LOGS_ENABLED = process.env.DOCX_DIAG_LOGS === '1';
-
-function diagLog(...args: Parameters<typeof console.log>) {
-  if (DIAG_LOGS_ENABLED) {
-    console.log(...args);
-  }
-}
-
 const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
 const CLEAN_008_CHANGE: AutoAppliedChange = {
@@ -208,16 +200,10 @@ describe('CLEAN-008 diagnostic — realistic OOXML scenarios', () => {
 
     const outXml = await getOutputDocXml(zip, [CLEAN_008_CHANGE]);
 
-    diagLog('[DIAG-1] Output XML snippet (hyperlink area):');
-    const hyperlinkIdx = outXml.indexOf('w:hyperlink');
-    diagLog('[DIAG-1]', outXml.slice(Math.max(0, hyperlinkIdx - 20), hyperlinkIdx + 200));
-
     const anchor = extractHyperlinkAnchor(outXml);
-    diagLog('[DIAG-1] Extracted hyperlink anchor:', anchor);
     expect(anchor).toBe('Contacts_and_Support');
 
     const headingText = extractParagraphText(outXml, 0);
-    diagLog('[DIAG-1] Extracted heading text:', headingText);
     expect(headingText).toBe('Contacts and Support');
 
     // Old slug must not remain
@@ -243,16 +229,10 @@ describe('CLEAN-008 diagnostic — realistic OOXML scenarios', () => {
 
     const outXml = await getOutputDocXml(zip, [CLEAN_004_CHANGE, CLEAN_008_CHANGE]);
 
-    diagLog('[DIAG-2] Output XML snippet (hyperlink area):');
-    const hyperlinkIdx = outXml.indexOf('hyperlink');
-    diagLog('[DIAG-2]', outXml.slice(Math.max(0, hyperlinkIdx - 50), hyperlinkIdx + 300));
-
     const anchor = extractHyperlinkAnchor(outXml);
-    diagLog('[DIAG-2] Extracted hyperlink anchor:', anchor);
     expect(anchor).toBe('Contacts_and_Support');
 
     const headingText = extractParagraphText(outXml, 0);
-    diagLog('[DIAG-2] Extracted heading text:', headingText);
     expect(headingText).toBe('Contacts and Support');
 
     expect(outXml).not.toMatch(/_Contacts_and_Support/);
