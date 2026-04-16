@@ -651,6 +651,71 @@ describe('HEAD-001: Native American and Indigenous proper noun terms are exempt 
   });
 });
 
+// ─── Labeled component reference exemption ───────────────────────────────────
+
+describe('HEAD-001: labeled component references are exempt from the title-case check', () => {
+  it('does not flag an H3 where the only mid-heading uppercase word is a component label followed by a single letter', () => {
+    // "Component" is exempt because it is immediately followed by the single-
+    // letter label "A". "for" is a minor word. No flaggable words remain.
+    const doc = makeDoc('<h3>Requirements for Component A</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "Appendix B"', () => {
+    const doc = makeDoc('<h3>Instructions for Appendix B</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing multiple labeled references (Table A and Table B)', () => {
+    const doc = makeDoc('<h3>Data from Table A and Table B</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "Figure 1" (digit identifier)', () => {
+    const doc = makeDoc('<h3>Results shown in Figure 1</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "Part A"', () => {
+    const doc = makeDoc('<h3>Eligibility criteria for Part A</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('still flags an H3 where the label word is not followed by a single letter or digit', () => {
+    // "Component" here is not a labeled reference — it has no single-letter
+    // identifier after it. It is a genuine title-case word and should be flagged.
+    const doc = makeDoc('<h3>Review of Component requirements</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(1);
+  });
+
+  it('still flags title-case words that appear after an exempt label reference', () => {
+    // "Component A" is exempt, but "Overview" is a genuine title-case word.
+    const doc = makeDoc('<h3>Component A Overview</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(1);
+  });
+});
+
 // ─── Proper noun + parenthetical acronym exemption ───────────────────────────
 
 describe('HEAD-001: proper noun phrases followed by a parenthetical acronym are exempt from the title-case check', () => {

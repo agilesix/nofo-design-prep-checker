@@ -143,20 +143,30 @@ const TABLE_002: Rule = {
 // ─── Sentence case check ──────────────────────────────────────────────────────
 
 /**
+ * Labeled component reference words: when one of these words is immediately
+ * followed by a single uppercase letter (A–Z) or digit, the pair is treated as
+ * a proper label (e.g. "Component A", "Appendix B", "Figure 3") and the label
+ * word is not counted as title-case evidence.
+ */
+const COMPONENT_LABEL_RE =
+  /^(component|table|appendix|figure|exhibit|part|attachment|section)$/i;
+
+/**
  * Returns true when the caption text appears to use title case or all-caps rather
  * than the sentence case recommended by the SimplerNOFOs style guide.
  *
  * Heuristic: after stripping an optional "Table:" prefix, first detect captions
  * that are entirely all-caps (including single-word captions such as "TIMELINE").
- * Otherwise, if any word after the first word (of length > 1) starts with an
+ * Otherwise, scan words after the first substantial word; if any starts with an
  * uppercase letter AND contains at least one lowercase letter, the text is likely
  * title case.
  *
- * All-caps words (PDF, CDC, HRSA) are treated as acronyms and skipped — they are
- * not evidence of title-case formatting.
- *
- * Single-letter words (e.g. "A", "I") are excluded from the title-case check
- * because they appear in both sentence case and title case.
+ * Exemptions (not counted as title-case evidence):
+ *   • All-caps words (PDF, CDC, HRSA) — treated as acronyms.
+ *   • Single-letter words (e.g. "A", "I") — appear in both case styles.
+ *   • Labeled component references: a label word (Component, Table, Appendix,
+ *     Figure, Exhibit, Part, Attachment, Section) immediately followed by a
+ *     single uppercase letter or digit — e.g. "Component A", "Appendix B".
  */
 function looksLikeTitleOrAllCaps(text: string): boolean {
   // Strip optional "Table:" prefix (e.g. "Table: Program Timeline" → "Program Timeline")
@@ -167,13 +177,31 @@ function looksLikeTitleOrAllCaps(text: string): boolean {
   // Require at least one letter so punctuation/numbers alone do not trigger.
   if (/[A-Z]/.test(body) && !/[a-z]/.test(body)) return true;
 
-  // Only consider words of length > 1 to skip single-letter words
-  const words = body.split(/\s+/).filter(w => w.length > 1);
-  if (words.length < 2) return false;
-  // Title case: any word after the first starts with an uppercase letter AND has
-  // at least one lowercase letter. All-caps words (PDF, CDC, HRSA) are acronyms
-  // and are not evidence of title-case formatting — skip them entirely.
-  return words.slice(1).some(w => /^[A-Z]/.test(w) && /[a-z]/.test(w));
+  const allWords = body.split(/\s+/);
+  const bare = (w: string) =>
+    w.replace(/^[^a-zA-Z0-9]+/, '').replace(/[^a-zA-Z0-9]+$/, '');
+
+  // Find the first substantial word (length > 1) — treated as the sentence start
+  // and skipped in the title-case check.
+  const firstSubstantial = allWords.findIndex(w => w.length > 1);
+  if (firstSubstantial === -1) return false;
+
+  for (let i = firstSubstantial + 1; i < allWords.length; i++) {
+    const w = allWords[i] ?? '';
+    // Single-letter words appear in both case styles — skip.
+    if (w.length <= 1) continue;
+    // Not a title-case word — skip.
+    if (!/^[A-Z]/.test(w) || !/[a-z]/.test(w)) continue;
+    // Labeled component reference: exempt when followed by a single uppercase
+    // letter or digit (e.g. "Component A", "Appendix B", "Figure 3").
+    if (COMPONENT_LABEL_RE.test(w)) {
+      const nextBare = bare(allWords[i + 1] ?? '');
+      if (/^[A-Z0-9]$/.test(nextBare)) continue;
+    }
+    return true;
+  }
+
+  return false;
 }
 
 /**
