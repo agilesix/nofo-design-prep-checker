@@ -417,6 +417,11 @@ function GuideSelectionStep({ doc, onConfirm }: GuideSelectionStepProps): React.
             </option>
           ))}
         </select>
+        {selectedId.startsWith('cdc') && (
+          <span className="usa-hint display-block font-body-xs margin-top-1">
+            {content.guideSelection.cdcHint}
+          </span>
+        )}
       </div>
 
       <div className="margin-top-4">
