@@ -19,7 +19,7 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
     /\bcdc\b/i.test(rawText);
 
   // Check for CDC DGHP first — signals are distinct from DGHT and mutually exclusive in practice.
-  // Requires any 2 of the 8 DGHP-specific signals.
+  // Requires a CDC identifier plus any 2 of the 8 DGHP-specific signals.
   const dghpSignalChecks = [
     { label: 'CDC/DGHP identifier detected',                             matched: /cdc\/dghp/i.test(rawText) },
     { label: 'Division of Global Health Protection detected',            matched: /division of global health protection/i.test(rawText) },
