@@ -1238,7 +1238,11 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
     // original text encoded in the targetField.
     if (getParaText(wP).trim() !== fix.originalText) continue;
 
-    const allWTs = Array.from(wP.getElementsByTagName('w:t'));
+    const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const allWTs = Array.from(wP.getElementsByTagNameNS(W_NS, 't'));
+    if (allWTs.length === 0) {
+      allWTs.push(...Array.from(wP.getElementsByTagName('w:t')));
+    }
     if (allWTs.length === 0) continue;
 
     allWTs[0]!.textContent = fix.newText;
