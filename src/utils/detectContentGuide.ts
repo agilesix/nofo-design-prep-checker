@@ -11,16 +11,16 @@ const MIN_GAP = 3;
 // Number of distinct signal categories that must have matched
 const MIN_SIGNAL_CATEGORIES = 2;
 
-const DEBUG = (() => {
+function isDebugEnabled(): boolean {
   try {
     return typeof localStorage !== 'undefined' && localStorage.getItem('DEBUG_DETECT_GUIDE') === '1';
   } catch {
     return false;
   }
-})();
+}
 
 function debugLog(msg: string, ...args: unknown[]): void {
-  if (DEBUG) console.log(`[detectContentGuide] ${msg}`, ...args);
+  if (isDebugEnabled()) console.log(`[detectContentGuide] ${msg}`, ...args);
 }
 
 export function detectContentGuide(rawText: string): ContentGuideDetectionResult {
