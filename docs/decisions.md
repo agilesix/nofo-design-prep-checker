@@ -18,6 +18,22 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
+## 2026-04-20 — Pre-NOFO detection expanded to cover CDC/DGHT SSJ templates
+
+**Decision:** Extended `detectPreNofo.ts` to catch CDC/DGHT Sole Source Justification (SSJ) pre-NOFO templates, which share some signals with the original DGHP/PEPFAR pre-NOFOs but use a different heading structure.
+
+Two new signals were added (bringing the total to seven):
+- Signal 3: An H1 heading containing "NOFO content" (case-insensitive) — SSJ pre-NOFOs use this as their top-level heading instead of the standard "Step 1: Review the Opportunity" structure
+- Signal 4: Document body text containing "Sole Source Justification" anywhere (case-insensitive)
+
+A Step 1 exclusion guard was also added: if any heading in the document contains "Step 1" (case-insensitive), detection is suppressed entirely and the document is treated as a content guide or NOFO. This prevents false positives on CDC/DGHT content guides (e.g., Haiti_JG-26-0141) that may contain "NOFO Content Guide" in an H1 heading or SSJ-like language in the body.
+
+**Reason:** SSJ pre-NOFOs (observed in South Africa and Ethiopia CDC/DGHT grants) use "NOFO content" as their H1 and include "Sole Source Justification" language in the body. Neither signal appeared in the original five. The Step 1 guard was needed because CDC/DGHT content guides use "NOFO Content Guide" as their H1, which would match the new Signal 3 without the guard. Content guides always have a Step 1 heading; pre-NOFOs never do.
+
+**Outcome:** SSJ pre-NOFOs are now correctly flagged. CDC/DGHT content guides with similar language are correctly excluded. All original DGHP/PEPFAR detection continues to work unchanged.
+
+---
+
 ## 2026-04-13 — Pre-NOFO document detection added
 
 **Decision:** Added a document-level validity check (`src/utils/detectPreNofo.ts`) that runs immediately after parsing — before any content rules execute — to detect whether the uploaded document is a pre-NOFO template rather than a content guide. If two or more signals are present, a blocking error alert is displayed at the top of the Review page, the issue list is visually muted and non-interactive, and the "Continue to summary" button is hidden.
