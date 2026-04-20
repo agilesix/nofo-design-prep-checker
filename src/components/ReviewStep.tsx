@@ -35,7 +35,10 @@ export default function ReviewStep({
   const [resolutions, setResolutions] = useState<Record<string, IssueResolution>>(
     reviewState.resolutions
   );
-  const [acceptedFixes, setAcceptedFixes] = useState<AcceptedFix[]>(initialAcceptedFixes);
+  const [acceptedFixes, setAcceptedFixes] = useState<AcceptedFix[]>(() => {
+    const validIssueIds = new Set(reviewState.issues.map((issue) => issue.id));
+    return initialAcceptedFixes.filter((fix) => validIssueIds.has(fix.issueId));
+  });
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
   const [dismissedCategories, setDismissedCategories] = useState<Set<string>>(new Set());
 
