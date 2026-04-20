@@ -102,11 +102,11 @@ These run for ACF, ACL, CDC (standard), CMS, and IHS content guides.
 | STRUCT-005 | Required "Review and Selection" or "Step 5" section | ACF, ACL, CDC, CMS, IHS |
 | STRUCT-006 | Required "Award Administration" or "Step 6" section | ACF, ACL, CDC, CMS, IHS |
 
-### CDC/DGHT and CDC DGHP auto-applied changes (CLEAN-007)
+### CDC auto-applied changes (CLEAN-007)
 
 | Rule ID | Title | Severity | Description |
 |---------|-------|----------|-------------|
-| CLEAN-007 | Remove CDC/DGHT editorial scaffolding (auto-apply) | — | Some CDC/DGHT and CDC DGHP content guide documents begin with editorial instructions (color-coding guide, template notes, reference table) that are not part of the NOFO content itself. When the document's first paragraph begins with "Here is the color coding for the doc:" and the document contains a "Step 1: Review the Opportunity" heading, everything before that heading is silently removed from the downloaded document. Scoped to `cdc-dght-ssj`, `cdc-dght-competitive`, and `cdc-dghp` content guides only. |
+| CLEAN-007 | Remove CDC preamble content (auto-apply) | — | CDC NOFO templates often begin with editorial instructions, content-guide reference tables, or other scaffolding that is not part of the NOFO itself. When any non-empty content appears before the heading "Step 1: Review the Opportunity" (any heading level, case-insensitive), everything before that heading is silently removed from the downloaded document. The heading itself and all content after it are preserved. CDC NOFO metadata (Author, Subject, Keywords, Tagline) lives inside the document body under Step 1, not before it, so this removal is safe. No entry appears in the auto-applied list when Step 1 is already the first body element. Applies to all CDC content guides: `cdc`, `cdc-research`, `cdc-dght-ssj`, `cdc-dght-competitive`, `cdc-dghp`. |
 
 ### Supported CDC content guides
 
