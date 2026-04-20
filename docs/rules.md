@@ -114,7 +114,7 @@ These run for ACF, ACL, CDC (standard), CMS, and IHS content guides.
 | `cdc-research` | CDC Research Content Guide | CDC identifier + ≥2 of: eRA Commons, PHS 398, principal investigator |
 | `cdc-dght-ssj` | CDC/DGHT SSJ Content Guide | CDC identifier + DGHT identifier + SSJ or "Prepare Your Application" signal |
 | `cdc-dght-competitive` | CDC/DGHT Competitive Content Guide | CDC identifier + DGHT identifier + competitive or "Build Your Application" signal |
-| `cdc-dghp` | CDC DGHP Competitive Content Guide | Any ≥2 of: "CDC/DGHP", "DGHP-SPECIFIC INSTRUCTIONS", "DGHP NOFO Tracker", "Global Health Security (GHS)", "DGHP Basic Information" |
+| `cdc-dghp` | CDC DGHP Competitive Content Guide | CDC identifier required + any ≥2 of: "CDC/DGHP", "Division of Global Health Protection", CDC-RFA-JG- opportunity number, "DGHP-SPECIFIC INSTRUCTIONS", "DGHP NOFO Tracker", "Global Health Security (GHS)", "Global Health Security Agenda (GHSA)", "We fund all Global Health Security (GHS) cooperative agreements" |
 
 ### HRSA auto-applied changes (CLEAN-006)
 

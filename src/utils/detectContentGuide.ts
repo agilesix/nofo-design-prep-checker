@@ -19,13 +19,16 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
     /\bcdc\b/i.test(rawText);
 
   // Check for CDC DGHP first — signals are distinct from DGHT and mutually exclusive in practice.
-  // Requires any 2 of the 5 DGHP-specific signals.
+  // Requires a CDC identifier plus any 2 of the 8 DGHP-specific signals.
   const dghpSignalChecks = [
-    { label: 'CDC/DGHP identifier detected',          matched: /cdc\/dghp/i.test(rawText) },
-    { label: 'DGHP-SPECIFIC INSTRUCTIONS detected',   matched: /dghp-specific instructions/i.test(rawText) },
-    { label: 'DGHP NOFO Tracker detected',            matched: /dghp nofo tracker/i.test(rawText) },
-    { label: 'Global Health Security (GHS) detected', matched: /global health security \(ghs\)/i.test(rawText) },
-    { label: 'DGHP Basic Information detected',       matched: /dghp basic information/i.test(rawText) },
+    { label: 'CDC/DGHP identifier detected',                             matched: /cdc\/dghp/i.test(rawText) },
+    { label: 'Division of Global Health Protection detected',            matched: /division of global health protection/i.test(rawText) },
+    { label: 'CDC-RFA-JG- opportunity number detected',                  matched: /cdc-rfa-jg-/i.test(rawText) },
+    { label: 'DGHP-SPECIFIC INSTRUCTIONS detected',                      matched: /dghp-specific instructions/i.test(rawText) },
+    { label: 'DGHP NOFO Tracker detected',                               matched: /dghp nofo tracker/i.test(rawText) },
+    { label: 'Global Health Security (GHS) detected',                    matched: /global health security \(ghs\)/i.test(rawText) },
+    { label: 'Global Health Security Agenda (GHSA) detected',            matched: /global health security agenda \(ghsa\)/i.test(rawText) },
+    { label: 'GHS cooperative agreements boilerplate detected',          matched: /we fund all global health security \(ghs\) cooperative agreements/i.test(rawText) },
   ];
   const dghpMatched = dghpSignalChecks.filter(s => s.matched);
   if (hasCdcIdentifier && dghpMatched.length >= 2) {
@@ -91,7 +94,7 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
     if (guide.id === 'cdc-research') continue;
     if (guide.id === 'cdc-dght-ssj') continue;
     if (guide.id === 'cdc-dght-competitive') continue;
-    // cdc-dghp is detected exclusively via the fast-path above (2-of-5 DGHP signals +
+    // cdc-dghp is detected exclusively via the fast-path above (2-of-8 DGHP signals +
     // hasCdcIdentifier). Its detectionSignals entries (abbreviations: ['CDC', 'DGHP'],
     // uniqueSections: ['DGHP Basic Information', 'Global Health Security']) would score
     // against every CDC document if included here, inflating CDC scores and causing
