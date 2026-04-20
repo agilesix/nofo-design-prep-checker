@@ -216,9 +216,9 @@ describe('getCategoryLabel utility', () => {
 });
 
 describe('contentGuides data', () => {
-  it('exports all 13 content guides', async () => {
+  it('exports all 14 content guides', async () => {
     const { contentGuides } = await import('../../data/contentGuides');
-    expect(contentGuides).toHaveLength(13);
+    expect(contentGuides).toHaveLength(14);
   });
 
   it('all content guides have required fields', async () => {
