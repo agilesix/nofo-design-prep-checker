@@ -35,7 +35,7 @@ export function detectPreNofo(html: string, filename: string): PreNofoDetectionR
   const bodyText = htmlDoc.body?.textContent ?? '';
 
   // Exclusion guard: documents with a "Step 1" heading are content guides, not pre-NOFOs
-  if (headingTexts.some(t => /step 1/i.test(t))) {
+  if (headingTexts.some(t => /\bstep\s*1(?=\b|:)/i.test(t))) {
     return { detected: false, signals: [] };
   }
 
