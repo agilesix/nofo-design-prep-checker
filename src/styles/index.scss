@@ -416,16 +416,28 @@ $app-green-dark: #1a4f3a;
 }
 
 
+// Primary button — brand colors matching simpler.grants.gov
+.usa-button:not(.usa-button--unstyled):not(.usa-button--secondary):not(.usa-button--outline):not(.usa-button--base):not(.usa-button--inverse) {
+  background-color: #2e8367;
+  color: #ffffff;
+  border-bottom: 5px solid #00a398;
+
+  &:hover,
+  &:active {
+    background-color: #1f6b54;
+    color: #ffffff;
+  }
+}
+
 // Prevent :hover state from persisting on touch devices after a tap.
 // On iOS/Android, :hover sticks until another element is tapped, leaving the
-// default filled button in the darker hover state (#2e8367, white text)
-// instead of returning to its default (#5abf95, dark text). Restrict this
-// reset to the base .usa-button so outline/unstyled variants keep their own
-// non-hover styling on touch devices.
+// button in the darker hover state instead of returning to its default.
+// Restrict this reset to the base .usa-button so outline/unstyled variants
+// keep their own non-hover styling on touch devices.
 @media (hover: none) {
   .usa-button:not(.usa-button--outline):not(.usa-button--unstyled):not([disabled]):not([aria-disabled="true"]):hover {
-    background-color: #5abf95; // mint-30 = $theme-color-primary
-    color: #171716;            // dark ink = default .usa-button text color
+    background-color: #2e8367;
+    color: #ffffff;
   }
 }
 
