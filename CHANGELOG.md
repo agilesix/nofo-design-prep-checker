@@ -5,22 +5,14 @@
 
 ### Features
 
-* add CDC DGHP competitive content guide ([24ceaf7](https://github.com/agilesix/nofo-design-prep-checker/commit/24ceaf796ed0167fe6c0996f56aea3358851652f))
-* add CDC DGHP competitive content guide ([71e5bc2](https://github.com/agilesix/nofo-design-prep-checker/commit/71e5bc23cb15af6b9a090a2a46c20b45a285dcea))
-* **clean-014:** strip wrapping quotes from tagline value ([3e301c0](https://github.com/agilesix/nofo-design-prep-checker/commit/3e301c035eb378b28086c53582b559f8eed031ce))
-* **clean-014:** strip wrapping quotes from tagline value ([93e6ecc](https://github.com/agilesix/nofo-design-prep-checker/commit/93e6eccb388445b6eefba1ad487f86478a563600))
-* **detect:** expand CDC DGHP detection signals to 8 ([2892899](https://github.com/agilesix/nofo-design-prep-checker/commit/2892899e5b772415ebe06b56154fb87d664eb695))
-* **detect:** expand CDC DGHP detection signals to 8 ([1b6bf57](https://github.com/agilesix/nofo-design-prep-checker/commit/1b6bf57a3d46eae5a11596e2e4b4c00821f6ec5e))
-* **detectPreNofo:** add CDC/DGHT SSJ pre-NOFO detection signals ([6f3940e](https://github.com/agilesix/nofo-design-prep-checker/commit/6f3940eeecf439389a3dfa93f2e7be49889ed6e7))
-* **detectPreNofo:** add CDC/DGHT SSJ pre-NOFO detection signals ([ed884e2](https://github.com/agilesix/nofo-design-prep-checker/commit/ed884e26b1d30f9382c0138e5d643ebc0cb9a53d))
-* **download:** reorder page content and apply brand button colors ([1143e0d](https://github.com/agilesix/nofo-design-prep-checker/commit/1143e0d8f8b7ca91b87b128a52b5f289e856112d))
-* **download:** reorder page content and apply brand button colors ([9065b6c](https://github.com/agilesix/nofo-design-prep-checker/commit/9065b6c7596fea4e4dfac20119ee4a5f313367ad))
-* **guide-selection:** add CDC NOFO ID helper text below dropdown ([17258ff](https://github.com/agilesix/nofo-design-prep-checker/commit/17258ff9ee8bb9574d2b2c86b10186a4a7d7a18b))
-* **guide-selection:** add CDC NOFO ID helper text below dropdown ([94cbdba](https://github.com/agilesix/nofo-design-prep-checker/commit/94cbdbac9f7f0f61ac497b46f6be88a82c2bb9ce))
-* **head-004:** flag headings that may be too long ([144edcf](https://github.com/agilesix/nofo-design-prep-checker/commit/144edcfce5cee71522cd244eefb1ff44692d5bb9))
-* **head-004:** flag headings that may be too long ([10312fc](https://github.com/agilesix/nofo-design-prep-checker/commit/10312fcb298cf8f23c75914996650c9e047642f3))
-* **rules:** add CLEAN-015 to remove bold from list bullet characters ([8aeadc7](https://github.com/agilesix/nofo-design-prep-checker/commit/8aeadc798cdd13f9c073a578dda56e3b3e27ce69))
-* **rules:** add CLEAN-015 to remove bold from list bullet characters ([6b6eaa0](https://github.com/agilesix/nofo-design-prep-checker/commit/6b6eaa02bf9f1193d40aa8c7d3a110abb34d76d3))
+* add CDC DGHP competitive content guide ([24ceaf7](https://github.com/agilesix/nofo-design-prep-checker/commit/24ceaf796ed0167fe6c0996f56aea3358851652f)), ([71e5bc2](https://github.com/agilesix/nofo-design-prep-checker/commit/71e5bc23cb15af6b9a090a2a46c20b45a285dcea))
+* **clean-014:** strip wrapping quotes from tagline value ([3e301c0](https://github.com/agilesix/nofo-design-prep-checker/commit/3e301c035eb378b28086c53582b559f8eed031ce)), ([93e6ecc](https://github.com/agilesix/nofo-design-prep-checker/commit/93e6eccb388445b6eefba1ad487f86478a563600))
+* **detect:** expand CDC DGHP detection signals to 8 ([2892899](https://github.com/agilesix/nofo-design-prep-checker/commit/2892899e5b772415ebe06b56154fb87d664eb695)), ([1b6bf57](https://github.com/agilesix/nofo-design-prep-checker/commit/1b6bf57a3d46eae5a11596e2e4b4c00821f6ec5e))
+* **detectPreNofo:** add CDC/DGHT SSJ pre-NOFO detection signals ([6f3940e](https://github.com/agilesix/nofo-design-prep-checker/commit/6f3940eeecf439389a3dfa93f2e7be49889ed6e7)), ([ed884e2](https://github.com/agilesix/nofo-design-prep-checker/commit/ed884e26b1d30f9382c0138e5d643ebc0cb9a53d))
+* **download:** reorder page content and apply brand button colors ([1143e0d](https://github.com/agilesix/nofo-design-prep-checker/commit/1143e0d8f8b7ca91b87b128a52b5f289e856112d)), ([9065b6c](https://github.com/agilesix/nofo-design-prep-checker/commit/9065b6c7596fea4e4dfac20119ee4a5f313367ad))
+* **guide-selection:** add CDC NOFO ID helper text below dropdown ([17258ff](https://github.com/agilesix/nofo-design-prep-checker/commit/17258ff9ee8bb9574d2b2c86b10186a4a7d7a18b)), ([94cbdba](https://github.com/agilesix/nofo-design-prep-checker/commit/94cbdbac9f7f0f61ac497b46f6be88a82c2bb9ce))
+* **head-004:** flag headings that may be too long ([144edcf](https://github.com/agilesix/nofo-design-prep-checker/commit/144edcfce5cee71522cd244eefb1ff44692d5bb9)), ([10312fc](https://github.com/agilesix/nofo-design-prep-checker/commit/10312fcb298cf8f23c75914996650c9e047642f3))
+* **rules:** add CLEAN-015 to remove bold from list bullet characters ([8aeadc7](https://github.com/agilesix/nofo-design-prep-checker/commit/8aeadc798cdd13f9c073a578dda56e3b3e27ce69)), ([6b6eaa0](https://github.com/agilesix/nofo-design-prep-checker/commit/6b6eaa02bf9f1193d40aa8c7d3a110abb34d76d3))
 
 
 ### Bug Fixes
