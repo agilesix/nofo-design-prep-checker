@@ -618,17 +618,42 @@ async function applyTaglineUnquote(zip: JSZip): Promise<void> {
 
   const quotePairs: Record<string, string> = {
     '"': '"',
-    "'": "'",
-    '“': '”',
-    '‘': '’',
-  };
-  const firstChar = value.charAt(0);
-  const lastChar = value.charAt(value.length - 1);
-  if (value.length < 2 || quotePairs[firstChar] !== lastChar) return;
-  // Strip the outer quote pair (straight or smart)
-  const unquoted = value.slice(1, value.length - 1);
-  const newText = `${prefix} ${unquoted}`;
+  const fullText = getParaText(taglinePara);
+  const colonIdx = fullText.indexOf(':');
+  if (colonIdx === -1) return;
 
+  let openingQuoteIdx = colonIdx + 1;
+  while (
+    openingQuoteIdx < fullText.length &&
+    /\s/.test(fullText.charAt(openingQuoteIdx))
+  ) {
+    openingQuoteIdx++;
+  }
+
+  let closingQuoteIdx = fullText.length - 1;
+  while (
+    closingQuoteIdx > openingQuoteIdx &&
+    /\s/.test(fullText.charAt(closingQuoteIdx))
+  ) {
+    closingQuoteIdx--;
+  }
+
+  if (openingQuoteIdx >= closingQuoteIdx) return;
+
+  const openingQuote = fullText.charAt(openingQuoteIdx);
+  const closingQuote = fullText.charAt(closingQuoteIdx);
+  const isOuterQuotePair =
+    (openingQuote === '"' && closingQuote === '"') ||
+    (openingQuote === '\'' && closingQuote === '\'') ||
+    (openingQuote === '“' && closingQuote === '”') ||
+    (openingQuote === '‘' && closingQuote === '’');
+  if (!isOuterQuotePair) return;
+
+  // Strip only the outer quote pair (straight or smart), preserving all other spacing.
+  const newText =
+    fullText.slice(0, openingQuoteIdx) +
+    fullText.slice(openingQuoteIdx + 1, closingQuoteIdx) +
+    fullText.slice(closingQuoteIdx + 1);
   const allWTs = Array.from(taglinePara.getElementsByTagName('w:t'));
   if (allWTs.length === 0) return;
 
