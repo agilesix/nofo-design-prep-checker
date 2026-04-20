@@ -302,4 +302,14 @@ describe('CDC DGHP detection', () => {
     const result = detectContentGuide(text);
     expect(result.detectedId).not.toBe('cdc-dghp');
   });
+
+  it('detects cdc-dghp before DGHT fast-path when DGHP signals are present', () => {
+    const text = makeText(
+      'CDC/DGHP competitive award',
+      'DGHP NOFO Tracker',
+      'DGHT program reference',
+    );
+    const result = detectContentGuide(text);
+    expect(result.detectedId).toBe('cdc-dghp');
+  });
 });
