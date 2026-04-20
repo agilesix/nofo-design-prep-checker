@@ -2660,6 +2660,169 @@ describe('buildDocx — LINK-006 bookmark retarget + CLEAN-008 heading leading-s
   });
 });
 
+// ─── applyRemoveDghtScaffolding (CLEAN-007) ──────────────────────────────────
+
+const W_NS_PREAMBLE = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+/** Build a paragraph with an optional heading style and text. */
+function makeParaXml(text: string, headingStyle?: string): string {
+  const pPr = headingStyle
+    ? `<w:pPr><w:pStyle w:val="${headingStyle}"/></w:pPr>`
+    : '';
+  return `<w:p>${pPr}<w:r><w:t>${text}</w:t></w:r></w:p>`;
+}
+
+/** Build a minimal table with one cell containing the given text. */
+function makeTableXml(text: string): string {
+  return (
+    `<w:tbl>` +
+    `<w:tr><w:tc><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc></w:tr>` +
+    `</w:tbl>`
+  );
+}
+
+/**
+ * Build a document.xml with optional preamble elements, the Step 1 anchor
+ * heading, and optional following content.
+ */
+function makePreambleDocXml(parts: {
+  preamble?: string[];
+  preambleTables?: string[];
+  step1Style?: string;
+  after?: string[];
+}): string {
+  const { preamble = [], preambleTables = [], step1Style = 'Heading2', after = [] } = parts;
+  const preParas = preamble.map(t => makeParaXml(t)).join('');
+  const preTables = preambleTables.map(t => makeTableXml(t)).join('');
+  const step1 = makeParaXml('Step 1: Review the Opportunity', step1Style);
+  const afterParas = after.map(t => makeParaXml(t)).join('');
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_PREAMBLE}">` +
+    `<w:body>${preParas}${preTables}${step1}${afterParas}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+const PREAMBLE_REMOVAL_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-007',
+  description: 'CDC preamble removed from beginning of document.',
+  targetField: 'struct.dght.removescaffolding',
+};
+
+describe('buildDocx — CLEAN-007: CDC preamble removal', () => {
+  it('removes paragraphs before the Step 1 heading and preserves the heading', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePreambleDocXml({
+        preamble: ['Here is the color coding for the doc: green = required', 'Editorial notes'],
+        after: ['NOFO content paragraph'],
+      })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PREAMBLE_REMOVAL_CHANGE]);
+    expect(outXml).not.toContain('color coding');
+    expect(outXml).not.toContain('Editorial notes');
+    expect(outXml).toContain('Step 1: Review the Opportunity');
+    expect(outXml).toContain('NOFO content paragraph');
+  });
+
+  it('removes a table that precedes the Step 1 heading', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePreambleDocXml({
+        preambleTables: ['CDC/DGHT Content Guide reference table'],
+        after: ['Body content'],
+      })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PREAMBLE_REMOVAL_CHANGE]);
+    expect(outXml).not.toContain('reference table');
+    expect(outXml).toContain('Step 1: Review the Opportunity');
+  });
+
+  it('removes mixed paragraphs and tables before Step 1', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePreambleDocXml({
+        preamble: ['Preamble paragraph'],
+        preambleTables: ['Preamble table'],
+        after: ['Post-Step1 content'],
+      })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PREAMBLE_REMOVAL_CHANGE]);
+    expect(outXml).not.toContain('Preamble paragraph');
+    expect(outXml).not.toContain('Preamble table');
+    expect(outXml).toContain('Step 1: Review the Opportunity');
+    expect(outXml).toContain('Post-Step1 content');
+  });
+
+  it('Step 1 heading is the first body paragraph in the output', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePreambleDocXml({
+        preamble: ['Preamble A', 'Preamble B'],
+        after: ['Body content'],
+      })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PREAMBLE_REMOVAL_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+    const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p')).filter(
+      p => Array.from(p.getElementsByTagName('w:t')).some(t => (t.textContent ?? '').trim())
+    );
+    expect(paragraphs[0]?.textContent?.trim()).toBe('Step 1: Review the Opportunity');
+  });
+
+  it('detection is case-insensitive — removes preamble when Step 1 heading text is upper-cased', async () => {
+    const zip = new JSZip();
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_PREAMBLE}"><w:body>` +
+      makeParaXml('Preamble content') +
+      makeParaXml('STEP 1: REVIEW THE OPPORTUNITY', 'Heading2') +
+      makeParaXml('Body content') +
+      `<w:sectPr/></w:body></w:document>`;
+    zip.file('word/document.xml', xml);
+
+    const outXml = await getOutputDocXml(zip, [], [PREAMBLE_REMOVAL_CHANGE]);
+    expect(outXml).not.toContain('Preamble content');
+    expect(outXml).toContain('STEP 1: REVIEW THE OPPORTUNITY');
+  });
+
+  it('preserves all content when Step 1 heading is not present (safety guard)', async () => {
+    const zip = new JSZip();
+    // Deliberately no Step 1 heading — use raw XML to avoid the helper auto-inserting it
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_PREAMBLE}"><w:body>` +
+      makeParaXml('Content without any Step 1 heading') +
+      `<w:sectPr/></w:body></w:document>`
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PREAMBLE_REMOVAL_CHANGE]);
+    expect(outXml).toContain('Content without any Step 1 heading');
+  });
+
+  it('does not modify the document when targetField is absent from autoAppliedChanges', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePreambleDocXml({ preamble: ['Should survive'], after: ['Body'] })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    expect(outXml).toContain('Should survive');
+  });
+});
+
 // ─── applyBoldBulletFix (CLEAN-015) ──────────────────────────────────────────
 
 const W_NS_BULLET = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
