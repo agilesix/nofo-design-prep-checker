@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.4.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.3.0...v1.4.0) (2026-04-20)
+
+
+### Features
+
+* **CLEAN-007:** extend preamble removal to all CDC content guides ([5a1e8f9](https://github.com/agilesix/nofo-design-prep-checker/commit/5a1e8f9d9aa305f28b98984fa62b8a188c9540fe))
+* **CLEAN-007:** extend preamble removal to all CDC content guides ([6422158](https://github.com/agilesix/nofo-design-prep-checker/commit/64221585414dc68078c7a0474b435d8d4fd84d49))
+
+
+### Bug Fixes
+
+* **App:** clear acceptedFixes when starting a new review run ([a4d1b7a](https://github.com/agilesix/nofo-design-prep-checker/commit/a4d1b7a90beac3f1d0f6efd24d1b17867c5ec0ac))
+* **App:** persist accepted fix values across review page navigation ([25305af](https://github.com/agilesix/nofo-design-prep-checker/commit/25305af8297bd15509ba5f7f8a5df934b7a1427e))
+* **App:** persist accepted fix values across review page navigation ([59f7cb3](https://github.com/agilesix/nofo-design-prep-checker/commit/59f7cb3e596f709ee5d92caa245bb55362141949))
+* **buildDocx:** apply HEAD-004 text fix even when HEAD-003 changed ([5f4c443](https://github.com/agilesix/nofo-design-prep-checker/commit/5f4c4432883c962fccab659d2773eda39a0237fd))
+* **buildDocx:** apply HEAD-004 text fix even when HEAD-003 changed the level first ([166639b](https://github.com/agilesix/nofo-design-prep-checker/commit/166639bb1e6d0cb6f15726f3d9ed7ca8531b6e49))
+
 ## [1.3.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.2.0...v1.3.0) (2026-04-20)
 
 
