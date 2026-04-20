@@ -616,6 +616,15 @@ async function applyTaglineUnquote(zip: JSZip): Promise<void> {
   const prefix = fullText.slice(0, colonIdx + 1);
   const value = fullText.slice(colonIdx + 1).trim();
 
+  const quotePairs: Record<string, string> = {
+    '"': '"',
+    "'": "'",
+    '“': '”',
+    '‘': '’',
+  };
+  const firstChar = value.charAt(0);
+  const lastChar = value.charAt(value.length - 1);
+  if (value.length < 2 || quotePairs[firstChar] !== lastChar) return;
   // Strip the outer quote pair (straight or smart)
   const unquoted = value.slice(1, value.length - 1);
   const newText = `${prefix} ${unquoted}`;
