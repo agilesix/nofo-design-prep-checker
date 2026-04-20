@@ -44,6 +44,7 @@ export default function App(): React.ReactElement {
   const handleFileSelected = useCallback(async (file: File) => {
     setUploadedFile(file);
     setParseError(null);
+    setAcceptedFixes([]);
     setIsProcessing(true);
     setReviewBannerDismissed(false);
     setStep('parsing');
@@ -133,6 +134,7 @@ export default function App(): React.ReactElement {
       resolutions[issue.id] = 'unreviewed';
     }
 
+    setAcceptedFixes([]);
     setReviewState({
       issues: result.issues,
       autoAppliedChanges: result.autoAppliedChanges,
