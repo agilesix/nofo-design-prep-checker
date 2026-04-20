@@ -52,7 +52,7 @@ export default function DownloadStep({
         {hasDownloaded ? 'Download complete' : 'Download your corrected document'}
       </h1>
 
-      <div className="usa-alert usa-alert--info usa-alert--slim margin-bottom-4">
+      <div className="usa-alert usa-alert--info usa-alert--slim margin-bottom-3">
         <div className="usa-alert__body">
           <p className="usa-alert__text">
             <strong>Your original Word document remains your source of truth.</strong>{' '}
@@ -62,50 +62,8 @@ export default function DownloadStep({
         </div>
       </div>
 
-      <p className="font-body-sm margin-bottom-1">
-        <strong>This file is ready for design handoff.</strong>{' '}
-        Once you download your corrected document, hand it off to your designer or import it directly into NOFO Builder to begin the design process.
-      </p>
-
-      <p className="font-body-sm margin-bottom-4">
-        NOFO Builder cannot convert bold text to headings. After you download your corrected document, open the Navigation Pane in Word (View → Navigation Pane) to check that bold text hasn't been used in place of a heading style.
-      </p>
-
       {!hasDownloaded ? (
         <>
-          {/* File card */}
-          <div
-            className="radius-md padding-3 margin-bottom-3 bg-white border-1px border-base-light"
-          >
-            {/* Original file row */}
-            <div
-              className="padding-bottom-2 margin-bottom-2 border-bottom-1px border-base-lighter"
-            >
-              <div className="display-flex flex-align-center">
-                <span className="margin-right-1" aria-hidden="true">📄</span>
-                <span
-                  className="font-body-3xs text-uppercase text-base-dark letter-spacing-2"
-                  style={{ fontSize: '0.7rem' }}
-                >
-                  Original file
-                </span>
-              </div>
-              <p className="margin-0 margin-top-05 font-body-sm text-bold">{fileName}</p>
-            </div>
-
-            {/* Output filename row */}
-            <div
-              className="radius-sm padding-105"
-              style={{ background: '#e8f5fb' }}
-            >
-              <span className="font-body-sm text-base-dark">
-                <strong>Download as:</strong> {downloadName}
-              </span>
-            </div>
-          </div>
-
-          <p className="font-body-sm text-base-dark margin-bottom-3">{fixCountLabel}</p>
-
           <button
             type="button"
             className="usa-button usa-button--big margin-bottom-2"
@@ -119,10 +77,18 @@ export default function DownloadStep({
               : `↓ Download ${downloadName}`}
           </button>
 
-          <p
-            className="font-body-xs margin-top-1 margin-bottom-4 maxw-tablet text-base"
-          >
+          <p className="font-body-sm text-base-dark margin-bottom-3">{fixCountLabel}</p>
 
+          <p className="font-body-sm margin-bottom-1">
+            <strong>This file is ready for design handoff.</strong>{' '}
+            Once you download your corrected document, hand it off to your designer or import it directly into NOFO Builder to begin the design process.
+          </p>
+
+          <p className="font-body-sm margin-bottom-4">
+            NOFO Builder cannot convert bold text to headings. After you download your corrected document, open the Navigation Pane in Word (View → Navigation Pane) to check that bold text hasn't been used in place of a heading style.
+          </p>
+
+          <p className="font-body-xs margin-top-1 margin-bottom-4 maxw-tablet text-base">
             Word content controls from your original document are not preserved in the downloaded file.
             This is expected and consistent with how files behave throughout the design process.
             Your original NOFO Word document retains all content controls.
