@@ -21,8 +21,11 @@ const OPTIONS = { contentGuideId: null } as const;
 // ─── Threshold detection ──────────────────────────────────────────────────────
 
 describe('HEAD-004: flags headings that exceed word or character limits', () => {
-  it('flags an H3 with more than 10 words', () => {
+  it('flags an H3 with more than 10 words and describes it in words', () => {
+    // 11 words, under 80 chars — only the word threshold fires
     const text = 'This heading has eleven words so it should be flagged here';
+    expect(text.split(/\s+/).length).toBe(11);
+    expect(text.length).toBeLessThanOrEqual(80);
     const doc = makeDoc(`<h3>${text}</h3>`);
     const results = HEAD_004.check(doc, OPTIONS);
     expect(results).toHaveLength(1);
@@ -31,17 +34,33 @@ describe('HEAD-004: flags headings that exceed word or character limits', () => 
     expect(issue.severity).toBe('suggestion');
     expect(issue.title).toBe('Heading may be too long');
     expect(issue.description).toContain(text);
-    expect(issue.description).toContain('11 words');
+    expect(issue.description).toContain('11 words long');
+    expect(issue.description).not.toContain('characters');
     expect(issue.description).toContain('WCAG 2.0 G130');
   });
 
-  it('flags an H3 over 80 characters even when word count is ≤ 10', () => {
-    // 7 words, 81+ characters
+  it('flags an H3 over 80 characters (≤ 10 words) and describes it in characters', () => {
+    // 7 words, 81+ characters — only the character threshold fires
     const text = 'Eligibility requirements for supplemental emergency preparedness funding applicants';
     expect(text.length).toBeGreaterThan(80);
     expect(text.split(/\s+/).length).toBeLessThanOrEqual(10);
     const doc = makeDoc(`<h3>${text}</h3>`);
-    expect(HEAD_004.check(doc, OPTIONS)).toHaveLength(1);
+    const results = HEAD_004.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const issue = results[0] as Issue;
+    expect(issue.description).toContain(`${text.length} characters long`);
+    expect(issue.description).not.toContain('words long');
+  });
+
+  it('flags an H3 over both thresholds and includes both counts in the description', () => {
+    // 12 words, 93+ characters — both thresholds fire
+    const text = 'Eligibility requirements for supplemental emergency preparedness funding applicants in your state';
+    expect(text.split(/\s+/).length).toBeGreaterThan(10);
+    expect(text.length).toBeGreaterThan(80);
+    const doc = makeDoc(`<h3>${text}</h3>`);
+    const issue = HEAD_004.check(doc, OPTIONS)[0] as Issue;
+    expect(issue.description).toContain('words');
+    expect(issue.description).toContain('characters');
   });
 
   it('does not flag an H3 under both thresholds', () => {

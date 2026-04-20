@@ -82,11 +82,24 @@ const HEAD_004: Rule = {
         severity: 'suggestion',
         sectionId,
         nearestHeading: text,
-        description:
-          `The heading \u201c${text}\u201d is ${wordCount} word${wordCount === 1 ? '' : 's'} long. ` +
-          `Per WCAG 2.0 G130, headings should be concise and descriptive. ` +
-          `Consider shortening it to help users navigate and orient themselves within the document. ` +
-          `Screen readers and assistive technology read the full heading text aloud.`,
+        description: (() => {
+          const overWords = wordCount > WORD_LIMIT;
+          const overChars = charCount > CHAR_LIMIT;
+          let lengthSummary: string;
+          if (overWords && overChars) {
+            lengthSummary = `${wordCount} word${wordCount === 1 ? '' : 's'} and ${charCount} characters long`;
+          } else if (overWords) {
+            lengthSummary = `${wordCount} word${wordCount === 1 ? '' : 's'} long`;
+          } else {
+            lengthSummary = `${charCount} characters long`;
+          }
+          return (
+            `The heading \u201c${text}\u201d is ${lengthSummary}. ` +
+            `Per WCAG 2.0 G130, headings should be concise and descriptive. ` +
+            `Consider shortening it to help users navigate and orient themselves within the document. ` +
+            `Screen readers and assistive technology read the full heading text aloud.`
+          );
+        })(),
         inputRequired: {
           type: 'text',
           label: 'Revised heading',
