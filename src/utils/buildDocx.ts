@@ -33,6 +33,9 @@ export async function buildDocx(
   const hasTaglineRelocate = autoAppliedChanges.some(
     c => c.targetField === 'struct.tagline.relocate'
   );
+  const hasTaglineUnquote = autoAppliedChanges.some(
+    c => c.targetField === 'text.tagline.unquote'
+  );
   const hasRemoveBybHeading = autoAppliedChanges.some(
     c => c.targetField === 'struct.byb.removeheading'
   );
@@ -119,6 +122,12 @@ export async function buildDocx(
   // Apply tagline relocation
   if (hasTaglineRelocate) {
     await applyTaglineRelocation(zip);
+  }
+
+  // Strip wrapping quotes from the tagline value (runs after relocation so
+  // the tagline is in its final position before its content is modified)
+  if (hasTaglineUnquote) {
+    await applyTaglineUnquote(zip);
   }
 
   // Apply "Before You Begin" heading removal
@@ -568,6 +577,85 @@ async function applyTaglineRelocation(zip: JSZip): Promise<void> {
     body.insertBefore(primary, nextSibling);
   } else {
     body.appendChild(primary);
+  }
+
+  const serializer = new XMLSerializer();
+  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+}
+
+// ─── CLEAN-014: Strip wrapping quotes from tagline value ─────────────────────
+
+/**
+ * Find the tagline paragraph and strip wrapping straight or smart double
+ * quotes from its value. Leaves the "Tagline:" prefix and spacing intact.
+ * Re-verifies that wrapping quotes are present before modifying so the
+ * function is safe to call even if the autoApplied trigger fired spuriously.
+ */
+async function applyTaglineUnquote(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  const paragraphs = Array.from(body.childNodes).filter(
+    n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'p'
+  ) as Element[];
+
+  const taglinePara = paragraphs.find(el => /^tagline\s*:/i.test(getParaText(el).trim()));
+  if (!taglinePara) return;
+
+  const fullText = getParaText(taglinePara).trim();
+  const colonIdx = fullText.indexOf(':');
+  if (colonIdx === -1) return;
+
+  let openingQuoteIdx = colonIdx + 1;
+  while (
+    openingQuoteIdx < fullText.length &&
+    /\s/.test(fullText.charAt(openingQuoteIdx))
+  ) {
+    openingQuoteIdx++;
+  }
+
+  let closingQuoteIdx = fullText.length - 1;
+  while (
+    closingQuoteIdx > openingQuoteIdx &&
+    /\s/.test(fullText.charAt(closingQuoteIdx))
+  ) {
+    closingQuoteIdx--;
+  }
+
+  if (openingQuoteIdx >= closingQuoteIdx) return;
+
+  const openingQuote = fullText.charAt(openingQuoteIdx);
+  const closingQuote = fullText.charAt(closingQuoteIdx);
+  const isOuterQuotePair =
+    (openingQuote === '"' && closingQuote === '"') ||
+    (openingQuote === '\'' && closingQuote === '\'') ||
+    (openingQuote === '“' && closingQuote === '”') ||
+    (openingQuote === '‘' && closingQuote === '’');
+  if (!isOuterQuotePair) return;
+
+  // Strip only the outer quote pair (straight or smart), preserving all other spacing.
+  const newText =
+    fullText.slice(0, openingQuoteIdx) +
+    fullText.slice(openingQuoteIdx + 1, closingQuoteIdx) +
+    fullText.slice(closingQuoteIdx + 1);
+  const allWTs = Array.from(taglinePara.getElementsByTagName('w:t'));
+  if (allWTs.length === 0) return;
+
+  allWTs[0]!.textContent = newText;
+  if (newText !== newText.trim()) {
+    allWTs[0]!.setAttribute('xml:space', 'preserve');
+  } else {
+    allWTs[0]!.removeAttribute('xml:space');
+  }
+  for (let i = 1; i < allWTs.length; i++) {
+    allWTs[i]!.textContent = '';
   }
 
   const serializer = new XMLSerializer();
