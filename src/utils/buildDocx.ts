@@ -33,6 +33,9 @@ export async function buildDocx(
   const hasTaglineRelocate = autoAppliedChanges.some(
     c => c.targetField === 'struct.tagline.relocate'
   );
+  const hasTaglineUnquote = autoAppliedChanges.some(
+    c => c.targetField === 'text.tagline.unquote'
+  );
   const hasRemoveBybHeading = autoAppliedChanges.some(
     c => c.targetField === 'struct.byb.removeheading'
   );
@@ -119,6 +122,12 @@ export async function buildDocx(
   // Apply tagline relocation
   if (hasTaglineRelocate) {
     await applyTaglineRelocation(zip);
+  }
+
+  // Strip wrapping quotes from the tagline value (runs after relocation so
+  // the tagline is in its final position before its content is modified)
+  if (hasTaglineUnquote) {
+    await applyTaglineUnquote(zip);
   }
 
   // Apply "Before You Begin" heading removal
@@ -568,6 +577,60 @@ async function applyTaglineRelocation(zip: JSZip): Promise<void> {
     body.insertBefore(primary, nextSibling);
   } else {
     body.appendChild(primary);
+  }
+
+  const serializer = new XMLSerializer();
+  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+}
+
+// ─── CLEAN-014: Strip wrapping quotes from tagline value ─────────────────────
+
+/**
+ * Find the tagline paragraph and strip wrapping straight or smart double
+ * quotes from its value. Leaves the "Tagline:" prefix and spacing intact.
+ * Only fires when the rule has already confirmed both sides have a matching
+ * quote, so no re-check is needed here.
+ */
+async function applyTaglineUnquote(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  const paragraphs = Array.from(body.childNodes).filter(
+    n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'p'
+  ) as Element[];
+
+  const taglinePara = paragraphs.find(el => /^tagline\s*:/i.test(getParaText(el).trim()));
+  if (!taglinePara) return;
+
+  const fullText = getParaText(taglinePara).trim();
+  const colonIdx = fullText.indexOf(':');
+  if (colonIdx === -1) return;
+
+  const prefix = fullText.slice(0, colonIdx + 1);
+  const value = fullText.slice(colonIdx + 1).trim();
+
+  // Strip the outer quote pair (straight or smart)
+  const unquoted = value.slice(1, value.length - 1);
+  const newText = `${prefix} ${unquoted}`;
+
+  const allWTs = Array.from(taglinePara.getElementsByTagName('w:t'));
+  if (allWTs.length === 0) return;
+
+  allWTs[0]!.textContent = newText;
+  if (newText !== newText.trim()) {
+    allWTs[0]!.setAttribute('xml:space', 'preserve');
+  } else {
+    allWTs[0]!.removeAttribute('xml:space');
+  }
+  for (let i = 1; i < allWTs.length; i++) {
+    allWTs[i]!.textContent = '';
   }
 
   const serializer = new XMLSerializer();
