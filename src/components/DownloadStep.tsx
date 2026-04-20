@@ -85,7 +85,8 @@ export default function DownloadStep({
           </p>
 
           <p className="font-body-sm margin-bottom-4">
-            NOFO Builder cannot convert bold text to headings. After you download your corrected document, open the Navigation Pane in Word (View → Navigation Pane) to check that bold text hasn't been used in place of a heading style.
+            <strong>NOFO Design Prep Checker and NOFO Builder will not know if bold text needs to be a heading.</strong>{' '}
+            After you download your corrected document, open the Navigation Pane in Word (View → Navigation Pane) to check that bold text hasn't been used in place of a heading style.
           </p>
 
           <p className="font-body-xs margin-top-1 margin-bottom-4 maxw-tablet text-base">
