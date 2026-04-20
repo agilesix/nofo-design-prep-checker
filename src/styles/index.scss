@@ -432,10 +432,11 @@ $app-green-dark: #1a4f3a;
 // Prevent :hover state from persisting on touch devices after a tap.
 // On iOS/Android, :hover sticks until another element is tapped, leaving the
 // button in the darker hover state instead of returning to its default.
-// Restrict this reset to the base .usa-button so outline/unstyled variants
-// keep their own non-hover styling on touch devices.
+// Restrict this reset to the same primary .usa-button variant so outline,
+// unstyled, secondary, base, and inverse variants keep their own non-hover
+// styling on touch devices.
 @media (hover: none) {
-  .usa-button:not(.usa-button--outline):not(.usa-button--unstyled):not([disabled]):not([aria-disabled="true"]):hover {
+  .usa-button:not(.usa-button--unstyled):not(.usa-button--secondary):not(.usa-button--outline):not(.usa-button--base):not(.usa-button--inverse):not([disabled]):not([aria-disabled="true"]):hover {
     background-color: #2e8367;
     color: #ffffff;
   }
