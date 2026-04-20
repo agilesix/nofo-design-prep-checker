@@ -1231,6 +1231,9 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
     const fix = fixesByIndex.get(currentIndex);
     if (!fix) continue;
 
+    // Heading-level guard: skip if the paragraph at this index is no longer
+    // the same heading level encoded in the targetField.
+    if (fix.level !== level) continue;
     // Text guard: skip if the paragraph at this index doesn't match the
     // original text encoded in the targetField.
     if (getParaText(wP).trim() !== fix.originalText) continue;
