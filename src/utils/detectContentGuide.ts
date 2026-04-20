@@ -26,7 +26,11 @@ function debugLog(msg: string, ...args: unknown[]): void {
 export function detectContentGuide(rawText: string): ContentGuideDetectionResult {
   const text = rawText.toLowerCase();
 
-  debugLog('rawText length=%d, preview=%s', rawText.length, rawText.slice(0, 200).replace(/\n/g, '↵'));
+  debugLog(
+    'rawText metadata: length=%d, lines=%d',
+    rawText.length,
+    rawText === '' ? 0 : rawText.split(/\r?\n/).length,
+  );
 
   const hasCdcIdentifier =
     text.includes('centers for disease control') ||
