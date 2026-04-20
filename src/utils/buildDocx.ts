@@ -66,6 +66,9 @@ export async function buildDocx(
   const hasTimeCorrection = autoAppliedChanges.some(
     c => c.targetField === 'format.time.correct'
   );
+  const hasBoldBulletFix = autoAppliedChanges.some(
+    c => c.targetField === 'list.bullet.unbold'
+  );
   const h2TitleCaseChanges = autoAppliedChanges.filter(
     c => c.targetField === 'heading.h2.titlecase' && c.value
   );
@@ -187,6 +190,11 @@ export async function buildDocx(
   // Apply time format corrections
   if (hasTimeCorrection) {
     await applyTimeFormatCorrections(zip);
+  }
+
+  // Remove bold from list item bullet/number characters
+  if (hasBoldBulletFix) {
+    await applyBoldBulletFix(zip);
   }
 
   // Strip content controls — unconditional, silent (documented on the Download
@@ -2281,6 +2289,61 @@ async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
     const serializer = new XMLSerializer();
     zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
   }
+}
+
+// ─── CLEAN-015: Remove bold from list item bullet characters ─────────────────
+
+/**
+ * Removes w:b and w:bCs from the paragraph-level w:rPr (inside w:pPr) of every
+ * list paragraph (any w:p with w:numPr in its w:pPr). Only the paragraph-level
+ * run properties are modified; w:rPr elements on individual w:r text runs are
+ * left untouched.
+ */
+async function applyBoldBulletFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  if (!xmlStr.includes('w:numPr')) return;
+
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  let changed = false;
+  for (const wP of Array.from(xmlDoc.getElementsByTagName('w:p'))) {
+    const pPr = directChildEl(wP, 'w:pPr');
+    if (!pPr) continue;
+    if (!directChildEl(pPr, 'w:numPr')) continue;
+
+    const pRpr = directChildEl(pPr, 'w:rPr');
+    if (!pRpr) continue;
+
+    const boldNodes = Array.from(pRpr.childNodes).filter(
+      (node): node is Element =>
+        node.nodeType === Node.ELEMENT_NODE &&
+        ((node as Element).tagName === 'w:b' || (node as Element).tagName === 'w:bCs')
+    );
+
+    for (const boldNode of boldNodes) {
+      pRpr.removeChild(boldNode);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+/** Returns the first direct child element of `parent` with the given tag name. */
+function directChildEl(parent: Element, tagName: string): Element | null {
+  for (const node of Array.from(parent.childNodes)) {
+    if (node.nodeType === 1 && (node as Element).tagName === tagName) {
+      return node as Element;
+    }
+  }
+  return null;
 }
 
 /**
