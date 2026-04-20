@@ -72,15 +72,9 @@ export default function ReviewStep({
 
   // Keep App's acceptedFixes in sync with local state so that navigating away
   // (e.g. to the About page) and back does not lose in-progress accepted values.
-  // A separate mount guard is needed because isInitialMount is consumed by the
-  // guide-change effect above and will already be false by the time this effect
-  // runs on the first render.
-  const hasSyncedOnce = useRef(false);
+  // Sync on mount as well so the first user change cannot be dropped before the
+  // effect's initial execution.
   useEffect(() => {
-    if (!hasSyncedOnce.current) {
-      hasSyncedOnce.current = true;
-      return;
-    }
     onLiveFixesChange?.(acceptedFixes);
   }, [acceptedFixes, onLiveFixesChange]);
 
