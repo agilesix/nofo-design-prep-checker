@@ -72,6 +72,9 @@ export async function buildDocx(
   const headingLevelFixes = acceptedFixes.filter(
     f => f.targetField?.startsWith('heading.level.H') && !!f.value
   );
+  const headingTextFixes = acceptedFixes.filter(
+    f => f.targetField?.startsWith('heading.text.H') && !!f.value
+  );
   const autoLinkBookmarkChanges = autoAppliedChanges
     .filter(c => c.ruleId === 'LINK-006' && c.targetField?.startsWith('link.bookmark.') && !!c.value)
     .map(
@@ -105,6 +108,11 @@ export async function buildDocx(
   // remains aligned with the heading structure check() observed.
   if (headingLevelFixes.length > 0) {
     await applyHeadingLevelCorrections(zip, headingLevelFixes);
+  }
+
+  // Apply accepted heading text corrections (HEAD-004)
+  if (headingTextFixes.length > 0) {
+    await applyHeadingTextCorrections(zip, headingTextFixes);
   }
 
   // Apply double-space collapse
@@ -1153,6 +1161,92 @@ async function applyHeadingLevelCorrections(zip: JSZip, fixes: AcceptedFix[]): P
     const originalVal = pStyle.getAttribute('w:val') ?? '';
     const newVal = originalVal.replace(/\d+$/, String(fix.to));
     pStyle.setAttribute('w:val', newVal);
+    changed = true;
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+// ─── HEAD-004: Update heading text while preserving level ────────────────────
+
+/**
+ * HEAD-004: Replace the text of a heading paragraph with a user-supplied
+ * shorter version while leaving the paragraph style (Heading3, Heading4, …)
+ * and all run formatting intact.
+ *
+ * Each AcceptedFix carries:
+ *   targetField: "heading.text.H{level}.{headingIndex}::{originalText}"
+ *   value:       the replacement heading text entered by the user
+ *
+ * headingIndex is the 0-based ordinal among ALL heading paragraphs in document
+ * order (same convention as HEAD-003). Fixes whose value is identical to the
+ * original text are skipped — no-op if the user accepted without editing.
+ *
+ * Only w:t text content is updated. w:pStyle, w:rPr, and all other formatting
+ * elements are not touched.
+ */
+async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
+  interface TextFix { level: number; originalText: string; newText: string }
+  const fixesByIndex = new Map<number, TextFix>();
+
+  for (const fix of fixes) {
+    if (!fix.targetField || !fix.value) continue;
+    // Format: "heading.text.H{level}.{headingIndex}::{originalText}"
+    const encoded = fix.targetField.replace('heading.text.H', '');
+    const dotIdx = encoded.indexOf('.');
+    if (dotIdx === -1) continue;
+    const level = parseInt(encoded.slice(0, dotIdx), 10);
+    const rest = encoded.slice(dotIdx + 1);
+    const sepIdx = rest.indexOf('::');
+    if (sepIdx === -1) continue;
+    const headingIndex = parseInt(rest.slice(0, sepIdx), 10);
+    const originalText = rest.slice(sepIdx + 2);
+    if (isNaN(level) || isNaN(headingIndex)) continue;
+    // Skip if value is unchanged — user accepted without editing
+    if (fix.value.trim() === originalText.trim()) continue;
+    fixesByIndex.set(headingIndex, { level, originalText, newText: fix.value.trim() });
+  }
+
+  if (fixesByIndex.size === 0) return;
+
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  let headingCount = 0;
+  let changed = false;
+
+  for (const wP of paragraphs) {
+    const level = getHeadingLevel(wP);
+    if (level === 0) continue;
+
+    const currentIndex = headingCount++;
+    const fix = fixesByIndex.get(currentIndex);
+    if (!fix) continue;
+
+    // Text guard: skip if the paragraph at this index doesn't match the
+    // original text encoded in the targetField.
+    if (getParaText(wP).trim() !== fix.originalText) continue;
+
+    const allWTs = Array.from(wP.getElementsByTagName('w:t'));
+    if (allWTs.length === 0) continue;
+
+    allWTs[0]!.textContent = fix.newText;
+    if (fix.newText !== fix.newText.trim()) {
+      allWTs[0]!.setAttribute('xml:space', 'preserve');
+    } else {
+      allWTs[0]!.removeAttribute('xml:space');
+    }
+    for (let i = 1; i < allWTs.length; i++) {
+      allWTs[i]!.textContent = '';
+    }
     changed = true;
   }
 
