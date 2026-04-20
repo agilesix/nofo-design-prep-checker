@@ -417,7 +417,7 @@ $app-green-dark: #1a4f3a;
 
 
 // Primary button — brand colors matching simpler.grants.gov
-.usa-button:not(.usa-button--unstyled):not(.usa-button--secondary):not(.usa-button--outline):not(.usa-button--base):not(.usa-button--inverse) {
+.usa-button:not(.usa-button--unstyled):not(.usa-button--secondary):not(.usa-button--outline):not(.usa-button--base):not(.usa-button--inverse):not([disabled]):not([aria-disabled="true"]) {
   background-color: #2e8367;
   color: #ffffff;
   border-bottom: 5px solid #00a398;
