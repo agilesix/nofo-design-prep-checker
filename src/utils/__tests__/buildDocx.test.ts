@@ -2659,3 +2659,173 @@ describe('buildDocx — LINK-006 bookmark retarget + CLEAN-008 heading leading-s
     expect(xml).not.toContain('w:anchor="_Contacts_and_support"');
   });
 });
+
+// ─── applyBoldBulletFix (CLEAN-015) ──────────────────────────────────────────
+
+const W_NS_BULLET = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+/**
+ * Build a minimal document.xml containing a list paragraph whose paragraph-level
+ * w:pPr/w:rPr has the given bold elements, plus an optional text-run w:rPr with
+ * its own bold element (to verify run-level bold is never touched).
+ */
+function makeBoldBulletDocXml({
+  paraRprContent = '',
+  runRprContent = '',
+  numId = '1',
+  nonListPara = '',
+}: {
+  paraRprContent?: string;
+  runRprContent?: string;
+  numId?: string;
+  nonListPara?: string;
+}): string {
+  const paraRpr = paraRprContent ? `<w:rPr>${paraRprContent}</w:rPr>` : '';
+  const runRpr = runRprContent ? `<w:rPr>${runRprContent}</w:rPr>` : '';
+  const listPara =
+    `<w:p>` +
+    `<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="${numId}"/></w:numPr>${paraRpr}</w:pPr>` +
+    `<w:r>${runRpr}<w:t>List item text</w:t></w:r>` +
+    `</w:p>`;
+  const extra = nonListPara
+    ? `<w:p><w:r><w:rPr>${nonListPara}</w:rPr><w:t>Body text</w:t></w:r></w:p>`
+    : '';
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_BULLET}">` +
+    `<w:body>${listPara}${extra}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+const BOLD_BULLET_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-015',
+  description: 'Bold removed from 1 list item bullet.',
+  targetField: 'list.bullet.unbold',
+};
+
+describe('buildDocx — CLEAN-015: bold bullet removal', () => {
+  it('removes w:b from paragraph-level w:pPr/w:rPr of a list paragraph', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeBoldBulletDocXml({ paraRprContent: '<w:b/>' }));
+
+    const outXml = await getOutputDocXml(zip, [], [BOLD_BULLET_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const pPr = Array.from(wP!.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:pPr'
+    ) as Element | undefined;
+    const pRpr = pPr
+      ? (Array.from(pPr.childNodes).find(
+          n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+        ) as Element | undefined)
+      : undefined;
+
+    expect(pRpr?.getElementsByTagName('w:b').length ?? 0).toBe(0);
+  });
+
+  it('removes w:bCs from paragraph-level w:pPr/w:rPr of a list paragraph', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeBoldBulletDocXml({ paraRprContent: '<w:bCs/>' }));
+
+    const outXml = await getOutputDocXml(zip, [], [BOLD_BULLET_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const pPr = Array.from(wP!.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:pPr'
+    ) as Element | undefined;
+    const pRpr = pPr
+      ? (Array.from(pPr.childNodes).find(
+          n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+        ) as Element | undefined)
+      : undefined;
+
+    expect(pRpr?.getElementsByTagName('w:bCs').length ?? 0).toBe(0);
+  });
+
+  it('removes both w:b and w:bCs together when both are present', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeBoldBulletDocXml({ paraRprContent: '<w:b/><w:bCs/>' })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [BOLD_BULLET_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const pPr = Array.from(wP!.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:pPr'
+    ) as Element | undefined;
+    const pRpr = pPr
+      ? (Array.from(pPr.childNodes).find(
+          n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+        ) as Element | undefined)
+      : undefined;
+
+    expect(pRpr?.getElementsByTagName('w:b').length ?? 0).toBe(0);
+    expect(pRpr?.getElementsByTagName('w:bCs').length ?? 0).toBe(0);
+  });
+
+  it('preserves w:b on the text run w:rPr when paragraph-level bold is removed', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeBoldBulletDocXml({ paraRprContent: '<w:b/>', runRprContent: '<w:b/>' })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [BOLD_BULLET_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const wR = Array.from(wP!.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element | undefined;
+    const runRpr = wR
+      ? (Array.from(wR.childNodes).find(
+          n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+        ) as Element | undefined)
+      : undefined;
+
+    expect(runRpr?.getElementsByTagName('w:b').length ?? 0).toBe(1);
+  });
+
+  it('does not modify a non-list paragraph with bold text when the change is present', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeBoldBulletDocXml({ paraRprContent: '', nonListPara: '<w:b/>' })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [BOLD_BULLET_CHANGE]);
+    expect(outXml).toContain('<w:b/>');
+  });
+
+  it('does not modify document.xml when the targetField is absent from autoAppliedChanges', async () => {
+    const zip = new JSZip();
+    const originalXml = makeBoldBulletDocXml({ paraRprContent: '<w:b/><w:bCs/>' });
+    zip.file('word/document.xml', originalXml);
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    // Bold elements survive because the fix was not triggered
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const pPr = Array.from(wP!.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:pPr'
+    ) as Element | undefined;
+    const pRpr = pPr
+      ? (Array.from(pPr.childNodes).find(
+          n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+        ) as Element | undefined)
+      : undefined;
+
+    expect(pRpr?.getElementsByTagName('w:b').length ?? 0).toBe(1);
+  });
+});
