@@ -39,6 +39,10 @@ export default function ReviewStep({
     const validIssueIds = new Set(reviewState.issues.map((issue) => issue.id));
     return initialAcceptedFixes.filter((fix) => validIssueIds.has(fix.issueId));
   });
+  const acceptedFixMap = useMemo(
+    () => new Map(acceptedFixes.map(f => [f.issueId, f.value])),
+    [acceptedFixes]
+  );
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
   const [dismissedCategories, setDismissedCategories] = useState<Set<string>>(new Set());
 
@@ -351,7 +355,7 @@ export default function ReviewStep({
                       key={issue.id}
                       issue={issue}
                       resolution={resolutions[issue.id] ?? 'unreviewed'}
-                      acceptedValue={acceptedFixes.find(f => f.issueId === issue.id)?.value}
+                      acceptedValue={acceptedFixMap.get(issue.id)}
                       onAccept={handleAccept}
                       onSkip={() => handleSkip(issue.id)}
                       onKeepAsBold={
