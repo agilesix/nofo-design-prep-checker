@@ -18,7 +18,25 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
     text.includes('centers for disease control') ||
     /\bcdc\b/i.test(rawText);
 
-  // Check for CDC/DGHT variants first (more specific than CDC standard or Research).
+  // Check for CDC DGHP first — signals are distinct from DGHT and mutually exclusive in practice.
+  // Requires any 2 of the 5 DGHP-specific signals.
+  const dghpSignalChecks = [
+    { label: 'CDC/DGHP identifier detected',          matched: /cdc\/dghp/i.test(rawText) },
+    { label: 'DGHP-SPECIFIC INSTRUCTIONS detected',   matched: /dghp-specific instructions/i.test(rawText) },
+    { label: 'DGHP NOFO Tracker detected',            matched: /dghp nofo tracker/i.test(rawText) },
+    { label: 'Global Health Security (GHS) detected', matched: /global health security \(ghs\)/i.test(rawText) },
+    { label: 'DGHP Basic Information detected',       matched: /dghp basic information/i.test(rawText) },
+  ];
+  const dghpMatched = dghpSignalChecks.filter(s => s.matched);
+  if (hasCdcIdentifier && dghpMatched.length >= 2) {
+    return {
+      detectedId: 'cdc-dghp',
+      confidence: 'high',
+      signals: dghpMatched.map(s => s.label),
+    };
+  }
+
+  // Check for CDC/DGHT variants (more specific than CDC standard or Research).
   // Prefer cdc-dght-competitive when both competitive and SSJ signals are present.
   const hasDght = /\bdght\b/i.test(rawText);
 
@@ -73,6 +91,12 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
     if (guide.id === 'cdc-research') continue;
     if (guide.id === 'cdc-dght-ssj') continue;
     if (guide.id === 'cdc-dght-competitive') continue;
+    // cdc-dghp is detected exclusively via the fast-path above (2-of-5 DGHP signals +
+    // hasCdcIdentifier). Its detectionSignals entries (abbreviations: ['CDC', 'DGHP'],
+    // uniqueSections: ['DGHP Basic Information', 'Global Health Security']) would score
+    // against every CDC document if included here, inflating CDC scores and causing
+    // incorrect low-confidence results for standard CDC NOFOs.
+    if (guide.id === 'cdc-dghp') continue;
 
     const guideSignals: string[] = [];
     let score = 0;

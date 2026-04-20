@@ -8,6 +8,7 @@ export type ContentGuideId =
   | 'cdc-research'
   | 'cdc-dght-ssj'
   | 'cdc-dght-competitive'
+  | 'cdc-dghp'
   | 'cms'
   | 'ihs'
   | 'hrsa-bhw'

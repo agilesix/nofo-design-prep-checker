@@ -120,10 +120,10 @@ describe('CLEAN-007 content guide scope', () => {
     expect(results).toHaveLength(1);
   });
 
-  it('contentGuideIds is restricted to the two CDC/DGHT guides', () => {
+  it('contentGuideIds is restricted to CDC/DGHT and CDC DGHP guides', () => {
     expect(CLEAN_007.contentGuideIds).toEqual(
-      expect.arrayContaining(['cdc-dght-ssj', 'cdc-dght-competitive'])
+      expect.arrayContaining(['cdc-dght-ssj', 'cdc-dght-competitive', 'cdc-dghp'])
     );
-    expect(CLEAN_007.contentGuideIds).toHaveLength(2);
+    expect(CLEAN_007.contentGuideIds).toHaveLength(3);
   });
 });
