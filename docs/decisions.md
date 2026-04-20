@@ -4,6 +4,18 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
+## 2026-04-20 — Accepted text input values lifted to App state to survive back-navigation
+
+**Decision:** Accepted text input values (metadata subject, metadata keywords, revised heading text, etc.) are stored in App-level `acceptedFixes` state rather than in local `ReviewStep` state. `App.tsx` passes `acceptedFixes` down to `ReviewStep` as `initialAcceptedFixes`, and `ReviewStep` initializes its local copy from that prop on mount. `IssueCard` receives the previously-accepted value via `acceptedValue` prop and uses it (over the rule's original prefill) when initializing `inputValue` state.
+
+**Reason:** `ReviewStep` unmounts and remounts when the user navigates forward to the Summary page and then back. Without this fix, accepted text input values were lost on remount because (a) `ReviewStep`'s local `acceptedFixes` state always initialized to `[]`, and (b) each `IssueCard`'s `inputValue` always initialized from `issue.inputRequired.prefill`. The "Value recorded" success state disappeared and the entered text was gone.
+
+**Implementation note:** The guide-change reset logic in `ReviewStep` uses a `useRef(true)` initial-mount guard so that the `useEffect` that resets `acceptedFixes` to `[]` only fires on real guide changes (component already mounted) and not on the initial mount after back-navigation. Without this guard, the effect would fire on mount and immediately wipe the restored values.
+
+**Scope:** `resolutions` (accepted/skipped/dismissed decisions) were already persisted correctly — `App.tsx` saves them via `setReviewState({ ...reviewState, resolutions })` in `handleReviewComplete`, and `ReviewStep` initializes from `reviewState.resolutions`. Only text input values were missing. Summary page stat counts derive from `reviewState.resolutions` (App state) and are unaffected by this change.
+
+---
+
 ## 2026-04-16 — LINK-006: stop rewriting internal link anchors; surface instruction-only warnings instead
 
 **Decision:** LINK-006 now uses a two-tier approach based on the source of the fuzzy match:

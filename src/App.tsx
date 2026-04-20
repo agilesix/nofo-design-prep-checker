@@ -249,6 +249,7 @@ export default function App(): React.ReactElement {
           <ReviewStep
             doc={parsedDoc}
             reviewState={reviewState}
+            initialAcceptedFixes={acceptedFixes}
             onComplete={handleReviewComplete}
             onGuideChange={handleGuideChangeFromReview}
             onStartOver={handleStartOver}
