@@ -1242,11 +1242,7 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
     if (allWTs.length === 0) continue;
 
     allWTs[0]!.textContent = fix.newText;
-    if (fix.newText !== fix.newText.trim()) {
-      allWTs[0]!.setAttribute('xml:space', 'preserve');
-    } else {
-      allWTs[0]!.removeAttribute('xml:space');
-    }
+    allWTs[0]!.removeAttribute('xml:space');
     for (let i = 1; i < allWTs.length; i++) {
       allWTs[i]!.textContent = '';
     }
