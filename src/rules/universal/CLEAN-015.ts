@@ -36,10 +36,7 @@ const CLEAN_015: Rule = {
       const pRpr = directChild(pPr, 'w:rPr');
       if (!pRpr) continue;
 
-      if (
-        pRpr.getElementsByTagName('w:b').length > 0 ||
-        pRpr.getElementsByTagName('w:bCs').length > 0
-      ) {
+      if (directChild(pRpr, 'w:b') || directChild(pRpr, 'w:bCs')) {
         count++;
       }
     }
