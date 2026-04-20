@@ -99,6 +99,22 @@ These run for ACF, ACL, CDC (standard), CMS, and IHS content guides.
 | STRUCT-005 | Required "Review and Selection" or "Step 5" section | ACF, ACL, CDC, CMS, IHS |
 | STRUCT-006 | Required "Award Administration" or "Step 6" section | ACF, ACL, CDC, CMS, IHS |
 
+### CDC/DGHT and CDC DGHP auto-applied changes (CLEAN-007)
+
+| Rule ID | Title | Severity | Description |
+|---------|-------|----------|-------------|
+| CLEAN-007 | Remove CDC/DGHT editorial scaffolding (auto-apply) | — | Some CDC/DGHT and CDC DGHP content guide documents begin with editorial instructions (color-coding guide, template notes, reference table) that are not part of the NOFO content itself. When the document's first paragraph begins with "Here is the color coding for the doc:" and the document contains a "Step 1: Review the Opportunity" heading, everything before that heading is silently removed from the downloaded document. Scoped to `cdc-dght-ssj`, `cdc-dght-competitive`, and `cdc-dghp` content guides only. |
+
+### Supported CDC content guides
+
+| Content Guide ID | Display name | Detection signals |
+|-----------------|--------------|-------------------|
+| `cdc` | CDC Content Guide | CDC full name, "CDC" abbreviation, CDC Office of Grants Services |
+| `cdc-research` | CDC Research Content Guide | CDC identifier + ≥2 of: eRA Commons, PHS 398, principal investigator |
+| `cdc-dght-ssj` | CDC/DGHT SSJ Content Guide | CDC identifier + DGHT identifier + SSJ or "Prepare Your Application" signal |
+| `cdc-dght-competitive` | CDC/DGHT Competitive Content Guide | CDC identifier + DGHT identifier + competitive or "Build Your Application" signal |
+| `cdc-dghp` | CDC DGHP Competitive Content Guide | Any ≥2 of: "CDC/DGHP", "DGHP-SPECIFIC INSTRUCTIONS", "DGHP NOFO Tracker", "Global Health Security (GHS)", "DGHP Basic Information" |
+
 ### HRSA auto-applied changes (CLEAN-006)
 
 | Rule ID | Title | Severity | Description |

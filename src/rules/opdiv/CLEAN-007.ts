@@ -13,12 +13,12 @@ import { DGHT_STEP1_ANCHOR } from './CLEAN-007-constants';
  * heading whose text is exactly "Step 1: Review the Opportunity" (any heading
  * level, case-insensitive).
  *
- * Scoped to CDC/DGHT content guides only (cdc-dght-ssj, cdc-dght-competitive).
+ * Scoped to CDC/DGHT and CDC DGHP content guides (cdc-dght-ssj, cdc-dght-competitive, cdc-dghp).
  */
 const CLEAN_007: Rule = {
   id: 'CLEAN-007',
   autoApply: true,
-  contentGuideIds: ['cdc-dght-ssj', 'cdc-dght-competitive'],
+  contentGuideIds: ['cdc-dght-ssj', 'cdc-dght-competitive', 'cdc-dghp'],
   check(doc: ParsedDocument, _options: RuleRunnerOptions): AutoAppliedChange[] {
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');

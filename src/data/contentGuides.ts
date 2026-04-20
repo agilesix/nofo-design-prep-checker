@@ -81,6 +81,19 @@ export const contentGuides: ContentGuideEntry[] = [
     },
   },
   {
+    id: 'cdc-dghp',
+    displayName: 'CDC DGHP Competitive Content Guide',
+    opDiv: 'CDC',
+    subType: 'DGHP Competitive',
+    version: 'FY26',
+    updatedAt: '2026-01-01',
+    detectionSignals: {
+      names: ['Centers for Disease Control and Prevention'],
+      abbreviations: ['CDC', 'DGHP'],
+      uniqueSections: ['DGHP Basic Information', 'Global Health Security'],
+    },
+  },
+  {
     id: 'cms',
     displayName: 'CMS Content Guide',
     opDiv: 'CMS',
