@@ -2297,6 +2297,80 @@ describe('buildDocx — applyHeadingLevelCorrections (HEAD-003)', () => {
   });
 });
 
+// ─── applyHeadingTextCorrections (HEAD-004) ──────────────────────────────────
+
+describe('buildDocx — applyHeadingTextCorrections (HEAD-004)', () => {
+  it('replaces the heading text and preserves the heading style', async () => {
+    // H1(0), H3(1) — user shortens the H3
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'NOFO Title'),
+      headingPara(3, 'This heading has eleven words so it should be flagged here'),
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-004-1',
+      ruleId: 'HEAD-004',
+      targetField: 'heading.text.H3.1::This heading has eleven words so it should be flagged here',
+      value: 'Flagged heading',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    expect(styles).toHaveLength(2);
+    // Style unchanged
+    expect(styles[1]).toMatchObject({ style: 'Heading3', text: 'Flagged heading' });
+    // H1 untouched
+    expect(styles[0]).toMatchObject({ style: 'Heading1', text: 'NOFO Title' });
+  });
+
+  it('does not apply the fix when value is identical to the original text', async () => {
+    const originalText = 'This heading has eleven words so it should be flagged here';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'Title'),
+      headingPara(3, originalText),
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-004-1',
+      ruleId: 'HEAD-004',
+      targetField: `heading.text.H3.1::${originalText}`,
+      value: originalText,
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    // Text unchanged — fix was a no-op
+    expect(styles[1]).toMatchObject({ style: 'Heading3', text: originalText });
+  });
+
+  it('targets by ordinal index — does not affect a heading at a different position', async () => {
+    const longText = 'This heading has eleven words so it should be flagged here';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'Title'),           // index 0
+      headingPara(3, longText),          // index 1 — NOT targeted
+      headingPara(2, 'Section'),         // index 2
+      headingPara(3, longText),          // index 3 — targeted
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-004-3',
+      ruleId: 'HEAD-004',
+      targetField: `heading.text.H3.3::${longText}`,
+      value: 'Short heading',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    // Index 1 (second element in styles) unchanged
+    expect(styles[1]).toMatchObject({ style: 'Heading3', text: longText });
+    // Index 3 (fourth element in styles) updated
+    expect(styles[3]).toMatchObject({ style: 'Heading3', text: 'Short heading' });
+  });
+});
+
 // ─── LINK-006 auto-applied bookmark retargets ─────────────────────────────────
 
 function makeSimpleHyperlinkDocXml(anchor: string): string {
