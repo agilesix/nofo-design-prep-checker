@@ -86,6 +86,7 @@ export const content = {
     selectPlaceholder: '— Select a content guide —',
     continueButton: 'Continue with this guide',
     selectRequired: 'Select a content guide to continue. A content guide is required to run OpDiv-specific checks.',
+    cdcHint: 'Not sure which CDC content guide applies? Check the opportunity number. If it ends in 4 digits (e.g. CDC-RFA-DD-26-0222), this is a non-research NOFO — select the CDC Content Guide. If it ends in 3 digits (e.g. CDC-RFA-IP-26-097), this is a research NOFO — select the CDC Research Content Guide.',
     signals: {
       heading: 'Detection signals',
       intro: 'The following signals were used to identify the content guide:',

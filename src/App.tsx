@@ -409,6 +409,7 @@ function GuideSelectionStep({ doc, onConfirm }: GuideSelectionStepProps): React.
           id="content-guide-select"
           value={selectedId}
           onChange={e => setSelectedId(e.target.value as ContentGuideId | '')}
+          aria-describedby={selectedId.startsWith('cdc') ? 'content-guide-cdc-hint' : undefined}
         >
           <option value="">{content.guideSelection.selectPlaceholder}</option>
           {contentGuides.map(guide => (
@@ -417,6 +418,11 @@ function GuideSelectionStep({ doc, onConfirm }: GuideSelectionStepProps): React.
             </option>
           ))}
         </select>
+        {selectedId.startsWith('cdc') && (
+          <span id="content-guide-cdc-hint" className="usa-hint display-block font-body-xs margin-top-1">
+            {content.guideSelection.cdcHint}
+          </span>
+        )}
       </div>
 
       <div className="margin-top-4">
