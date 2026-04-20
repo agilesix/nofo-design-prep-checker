@@ -447,6 +447,85 @@ describe('buildDocx — tagline relocation', () => {
   });
 });
 
+// ─── applyTaglineUnquote (CLEAN-014) ─────────────────────────────────────────
+
+const TAGLINE_UNQUOTE_AUTO_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-014',
+  description: 'Quotation marks removed from tagline.',
+  targetField: 'text.tagline.unquote',
+};
+
+describe('buildDocx — tagline unquote', () => {
+  it('removes straight double quotes wrapping the tagline value and preserves the "Tagline:" label', async () => {
+    const zip = await makeZip([
+      'Metadata keywords: health, CDC',
+      'Tagline: "Improving health outcomes"',
+      'Step 1: Review the Opportunity',
+    ]);
+
+    const xml = await getOutputDocXml(zip, [], [TAGLINE_UNQUOTE_AUTO_CHANGE]);
+    const paragraphs = extractParagraphTexts(xml);
+    const taglinePara = paragraphs.find(t => /^tagline\s*:/i.test(t));
+
+    expect(taglinePara).toBeDefined();
+    expect(taglinePara).toContain('Tagline:');
+    expect(taglinePara).toBe('Tagline: Improving health outcomes');
+  });
+
+  it('removes smart/curly double quotes wrapping the tagline value', async () => {
+    const zip = await makeZip([
+      'Metadata keywords: health, CDC',
+      'Tagline: \u201CImproving health outcomes\u201D',
+    ]);
+
+    const xml = await getOutputDocXml(zip, [], [TAGLINE_UNQUOTE_AUTO_CHANGE]);
+    const paragraphs = extractParagraphTexts(xml);
+    const taglinePara = paragraphs.find(t => /^tagline\s*:/i.test(t));
+
+    expect(taglinePara).toBeDefined();
+    expect(taglinePara).toContain('Tagline:');
+    expect(taglinePara).toBe('Tagline: Improving health outcomes');
+  });
+
+  it('composes correctly with struct.tagline.relocate — relocates then strips quotes', async () => {
+    const zip = await makeZip([
+      'Tagline: "Improving health outcomes"',
+      'Metadata author: Jane Smith',
+      'Metadata keywords: health, CDC',
+      'Step 1: Review the Opportunity',
+    ]);
+
+    const xml = await getOutputDocXml(zip, [], [
+      TAGLINE_AUTO_CHANGE,
+      TAGLINE_UNQUOTE_AUTO_CHANGE,
+    ]);
+    const paragraphs = extractParagraphTexts(xml);
+
+    const keywordsIdx = paragraphs.findIndex(t => t.startsWith('Metadata keywords:'));
+    const taglineIdx = paragraphs.findIndex(t => /^tagline\s*:/i.test(t));
+
+    // Tagline was relocated to follow keywords
+    expect(keywordsIdx).toBeGreaterThanOrEqual(0);
+    expect(taglineIdx).toBe(keywordsIdx + 1);
+
+    // Quotes were stripped and label preserved
+    expect(paragraphs[taglineIdx]).toBe('Tagline: Improving health outcomes');
+  });
+
+  it('leaves the tagline unchanged when there are no wrapping quotes', async () => {
+    const zip = await makeZip([
+      'Metadata keywords: health, CDC',
+      'Tagline: Improving health outcomes',
+    ]);
+
+    const xml = await getOutputDocXml(zip, [], [TAGLINE_UNQUOTE_AUTO_CHANGE]);
+    const paragraphs = extractParagraphTexts(xml);
+    const taglinePara = paragraphs.find(t => /^tagline\s*:/i.test(t));
+
+    expect(taglinePara).toBe('Tagline: Improving health outcomes');
+  });
+});
+
 // ─── applyHeadingLeadingSpaceFix (CLEAN-008) ─────────────────────────────────
 
 const W_NS_HEADING = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';

@@ -588,8 +588,8 @@ async function applyTaglineRelocation(zip: JSZip): Promise<void> {
 /**
  * Find the tagline paragraph and strip wrapping straight or smart double
  * quotes from its value. Leaves the "Tagline:" prefix and spacing intact.
- * Only fires when the rule has already confirmed both sides have a matching
- * quote, so no re-check is needed here.
+ * Re-verifies that wrapping quotes are present before modifying so the
+ * function is safe to call even if the autoApplied trigger fired spuriously.
  */
 async function applyTaglineUnquote(zip: JSZip): Promise<void> {
   const docFile = zip.file('word/document.xml');
@@ -610,15 +610,6 @@ async function applyTaglineUnquote(zip: JSZip): Promise<void> {
   if (!taglinePara) return;
 
   const fullText = getParaText(taglinePara).trim();
-  const colonIdx = fullText.indexOf(':');
-  if (colonIdx === -1) return;
-
-  const prefix = fullText.slice(0, colonIdx + 1);
-  const value = fullText.slice(colonIdx + 1).trim();
-
-  const quotePairs: Record<string, string> = {
-    '"': '"',
-  const fullText = getParaText(taglinePara);
   const colonIdx = fullText.indexOf(':');
   if (colonIdx === -1) return;
 
