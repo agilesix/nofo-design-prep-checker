@@ -51,6 +51,9 @@ const CLEAN_007: Rule = {
       {
         ruleId: 'CLEAN-007',
         description: 'CDC preamble removed from beginning of document.',
+        // Intentionally retain the legacy DGHT-specific key for backward
+        // compatibility with downstream consumers (for example buildDocx and
+        // existing filtering/analytics) that still recognize this targetField.
         targetField: 'struct.dght.removescaffolding',
       },
     ];
