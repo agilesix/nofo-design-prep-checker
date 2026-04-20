@@ -2318,12 +2318,14 @@ async function applyBoldBulletFix(zip: JSZip): Promise<void> {
     const pRpr = directChildEl(pPr, 'w:rPr');
     if (!pRpr) continue;
 
-    for (const wb of Array.from(pRpr.getElementsByTagName('w:b'))) {
-      pRpr.removeChild(wb);
-      changed = true;
-    }
-    for (const wbCs of Array.from(pRpr.getElementsByTagName('w:bCs'))) {
-      pRpr.removeChild(wbCs);
+    const boldNodes = Array.from(pRpr.childNodes).filter(
+      (node): node is Element =>
+        node.nodeType === Node.ELEMENT_NODE &&
+        ((node as Element).tagName === 'w:b' || (node as Element).tagName === 'w:bCs')
+    );
+
+    for (const boldNode of boldNodes) {
+      pRpr.removeChild(boldNode);
       changed = true;
     }
   }
