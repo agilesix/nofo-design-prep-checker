@@ -17,18 +17,14 @@
 
 ### Bug Fixes
 
-* **detectContentGuide:** broaden RFA-JG- signal and add debug logging for DGHP detection ([e3e8a40](https://github.com/agilesix/nofo-design-prep-checker/commit/e3e8a40f19b279398dd5086031c5247bf96f5af6))
-* **detectContentGuide:** broaden RFA-JG- signal and add debug logging… ([5c40b7c](https://github.com/agilesix/nofo-design-prep-checker/commit/5c40b7c930487065377686e07006c9a02b71d629))
+* **detectContentGuide:** broaden RFA-JG- signal and add debug logging for DGHP detection ([e3e8a40](https://github.com/agilesix/nofo-design-prep-checker/commit/e3e8a40f19b279398dd5086031c5247bf96f5af6), [5c40b7c](https://github.com/agilesix/nofo-design-prep-checker/commit/5c40b7c930487065377686e07006c9a02b71d629))
 * **detectContentGuide:** gate DGHP fast-path on hasCdcIdentifier ([1269c67](https://github.com/agilesix/nofo-design-prep-checker/commit/1269c673d3814b0261a348d2a0758129fbc91418))
 * **detectContentGuide:** resolve merge conflicts in DGHP detection ([ba13956](https://github.com/agilesix/nofo-design-prep-checker/commit/ba139565b4f309536d0b09472ea58fe39b3dd1a0))
-* **download:** update bold text reminder copy ([97230ca](https://github.com/agilesix/nofo-design-prep-checker/commit/97230ca1fd5fe07c4b817dd7141aedd6951bbd5b))
-* **download:** update bold text reminder copy ([4925e11](https://github.com/agilesix/nofo-design-prep-checker/commit/4925e11f3ce0f5f355f1bd17c6b6d3c05d229115))
+* **download:** update bold text reminder copy ([97230ca](https://github.com/agilesix/nofo-design-prep-checker/commit/97230ca1fd5fe07c4b817dd7141aedd6951bbd5b), [4925e11](https://github.com/agilesix/nofo-design-prep-checker/commit/4925e11f3ce0f5f355f1bd17c6b6d3c05d229115))
 * **guide-selection:** associate CDC hint with select via aria-describedby ([52b732c](https://github.com/agilesix/nofo-design-prep-checker/commit/52b732c7b4760c3dae1bd305118f1f49c7b6b304))
 * **head-004:** tailor description to the threshold(s) exceeded ([d7ee794](https://github.com/agilesix/nofo-design-prep-checker/commit/d7ee794b3ba6bc177625a24181e74f3e62d71f71))
-* **ReviewStep:** persist accepted text input values across back-navig… ([34e59d0](https://github.com/agilesix/nofo-design-prep-checker/commit/34e59d0a60917748455c3100eaa3bd36f0294ed9))
-* **ReviewStep:** persist accepted text input values across back-navigation ([6bdaba4](https://github.com/agilesix/nofo-design-prep-checker/commit/6bdaba440a440549b4176b8dc5dc60580daaf9d0))
-* **tests:** update CLEAN-007 and RuleRunner tests for cdc-dghp guide ([a144b0b](https://github.com/agilesix/nofo-design-prep-checker/commit/a144b0b11487ab659d973381a572abd897e952df))
-* **tests:** update CLEAN-007 and RuleRunner tests for cdc-dghp guide ([8321a84](https://github.com/agilesix/nofo-design-prep-checker/commit/8321a84b7bf7533f94a05cd24c619f15f8da9fb2))
+* **ReviewStep:** persist accepted text input values across back-navigation ([34e59d0](https://github.com/agilesix/nofo-design-prep-checker/commit/34e59d0a60917748455c3100eaa3bd36f0294ed9), [6bdaba4](https://github.com/agilesix/nofo-design-prep-checker/commit/6bdaba440a440549b4176b8dc5dc60580daaf9d0))
+* **tests:** update CLEAN-007 and RuleRunner tests for cdc-dghp guide ([a144b0b](https://github.com/agilesix/nofo-design-prep-checker/commit/a144b0b11487ab659d973381a572abd897e952df), [8321a84](https://github.com/agilesix/nofo-design-prep-checker/commit/8321a84b7bf7533f94a05cd24c619f15f8da9fb2))
 
 ## [1.2.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.1.0...v1.2.0) (2026-04-16)
 
