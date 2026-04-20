@@ -241,11 +241,11 @@ describe('CDC DGHP detection', () => {
     expect(result.confidence).toBe('high');
   });
 
-  it('detects cdc-dghp via "DGHP-SPECIFIC INSTRUCTIONS" + "DGHP Basic Information" + CDC identifier', () => {
+  it('detects cdc-dghp via "DGHP-SPECIFIC INSTRUCTIONS" + "Division of Global Health Protection" + CDC identifier', () => {
     const text = makeText(
       'Centers for Disease Control and Prevention',
       'DGHP-SPECIFIC INSTRUCTIONS for this section',
-      'DGHP Basic Information block',
+      'Division of Global Health Protection',
     );
     const result = detectContentGuide(text);
     expect(result.detectedId).toBe('cdc-dghp');
@@ -311,5 +311,59 @@ describe('CDC DGHP detection', () => {
     );
     const result = detectContentGuide(text);
     expect(result.detectedId).toBe('cdc-dghp');
+  });
+
+  it('detects cdc-dghp via "Division of Global Health Protection" + CDC-RFA-JG- opportunity number', () => {
+    const text = makeText(
+      'Subagency: Division of Global Health Protection',
+      'Opportunity Number: CDC-RFA-JG-26-0001',
+    );
+    const result = detectContentGuide(text);
+    expect(result.detectedId).toBe('cdc-dghp');
+    expect(result.confidence).toBe('high');
+  });
+
+  it('detects cdc-dghp via "Global Health Security Agenda (GHSA)" + "DGHP NOFO Tracker" + CDC identifier', () => {
+    const text = makeText(
+      'CDC competitive award',
+      'Global Health Security Agenda (GHSA) activities',
+      'DGHP NOFO Tracker reference',
+    );
+    const result = detectContentGuide(text);
+    expect(result.detectedId).toBe('cdc-dghp');
+    expect(result.confidence).toBe('high');
+  });
+
+  it('detects cdc-dghp via GHS cooperative agreements boilerplate + CDC identifier', () => {
+    const text = makeText(
+      'CDC Division of Global Health Protection',
+      'We fund all Global Health Security (GHS) cooperative agreements under this mechanism',
+      'DGHP NOFO Tracker submission',
+    );
+    const result = detectContentGuide(text);
+    expect(result.detectedId).toBe('cdc-dghp');
+    expect(result.confidence).toBe('high');
+  });
+
+  it('does NOT detect cdc-dghp for a standard CDC NOFO with no DGHP signals', () => {
+    const text = makeText(
+      'Centers for Disease Control and Prevention',
+      'CDC Office of Grants Services',
+      'Global Health Security (GHS)',
+    );
+    const result = detectContentGuide(text);
+    // Only 1 DGHP signal (GHS) — below the 2-signal threshold
+    expect(result.detectedId).not.toBe('cdc-dghp');
+  });
+
+  it('detects cdc-dghp and not cdc for a document matching DGHP signals', () => {
+    const text = makeText(
+      'Subagency: Division of Global Health Protection',
+      'Opportunity Number: CDC-RFA-JG-26-0001',
+      'Centers for Disease Control and Prevention',
+    );
+    const result = detectContentGuide(text);
+    expect(result.detectedId).toBe('cdc-dghp');
+    expect(result.detectedId).not.toBe('cdc');
   });
 });
