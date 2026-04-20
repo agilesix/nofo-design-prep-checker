@@ -16,6 +16,8 @@ interface ReviewStepProps {
   bannerDismissed: boolean;
   onDismissBanner: (val: boolean) => void;
   isPreNofo: boolean;
+  /** Called whenever the in-progress accepted fixes change so App can persist them. */
+  onLiveFixesChange?: (fixes: AcceptedFix[]) => void;
 }
 
 type SeverityFilter = 'all' | 'error' | 'warning' | 'suggestion';
@@ -30,6 +32,7 @@ export default function ReviewStep({
   bannerDismissed,
   onDismissBanner,
   isPreNofo,
+  onLiveFixesChange,
 }: ReviewStepProps): React.ReactElement {
   const headingRef = useFocusHeading();
   const [resolutions, setResolutions] = useState<Record<string, IssueResolution>>(
@@ -66,6 +69,20 @@ export default function ReviewStep({
     setAcceptedFixes([]);
     setDismissedCategories(new Set());
   }, [reviewState.issues, reviewState.resolutions]);
+
+  // Keep App's acceptedFixes in sync with local state so that navigating away
+  // (e.g. to the About page) and back does not lose in-progress accepted values.
+  // A separate mount guard is needed because isInitialMount is consumed by the
+  // guide-change effect above and will already be false by the time this effect
+  // runs on the first render.
+  const hasSyncedOnce = useRef(false);
+  useEffect(() => {
+    if (!hasSyncedOnce.current) {
+      hasSyncedOnce.current = true;
+      return;
+    }
+    onLiveFixesChange?.(acceptedFixes);
+  }, [acceptedFixes, onLiveFixesChange]);
 
   const { issues, autoAppliedChanges, activeContentGuide } = reviewState;
 

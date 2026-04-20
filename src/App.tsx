@@ -176,6 +176,12 @@ export default function App(): React.ReactElement {
     setStep('summary');
   }, [reviewState]);
 
+  // Sync in-progress accepted fixes from ReviewStep to App state so that
+  // navigating away (e.g. About page) and back does not lose user-entered values.
+  const handleLiveFixesChange = useCallback((fixes: AcceptedFix[]) => {
+    setAcceptedFixes(fixes);
+  }, []);
+
   const handleProceedToDownload = useCallback(() => {
     setStep('download');
   }, []);
@@ -249,13 +255,14 @@ export default function App(): React.ReactElement {
           <ReviewStep
             doc={parsedDoc}
             reviewState={reviewState}
-            initialAcceptedFixes={[]}
+            initialAcceptedFixes={acceptedFixes}
             onComplete={handleReviewComplete}
             onGuideChange={handleGuideChangeFromReview}
             onStartOver={handleStartOver}
             bannerDismissed={reviewBannerDismissed}
             onDismissBanner={setReviewBannerDismissed}
             isPreNofo={isPreNofo}
+            onLiveFixesChange={handleLiveFixesChange}
           />
         )}
 
