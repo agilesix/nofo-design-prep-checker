@@ -6,6 +6,8 @@ import HeadingCard from './HeadingCard';
 interface IssueCardProps {
   issue: Issue;
   resolution: IssueResolution;
+  /** Previously accepted value, restored when navigating back to the Review page. */
+  acceptedValue?: string;
   onAccept: (fix: AcceptedFix) => void;
   onSkip: () => void;
   onKeepAsBold?: () => void;
@@ -27,12 +29,13 @@ const SEVERITY_LABELS: Record<string, string> = {
 export default function IssueCard({
   issue,
   resolution,
+  acceptedValue,
   onAccept,
   onSkip,
   onKeepAsBold,
   onUndo,
 }: IssueCardProps): React.ReactElement {
-  const [inputValue, setInputValue] = useState(issue.inputRequired?.prefill ?? '');
+  const [inputValue, setInputValue] = useState(acceptedValue ?? issue.inputRequired?.prefill ?? '');
   const [validationError, setValidationError] = useState<string | null>(null);
   const inputId = useId();
 
