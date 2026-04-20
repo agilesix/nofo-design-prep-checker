@@ -11,8 +11,26 @@ const MIN_GAP = 3;
 // Number of distinct signal categories that must have matched
 const MIN_SIGNAL_CATEGORIES = 2;
 
+function isDebugEnabled(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem('DEBUG_DETECT_GUIDE') === '1';
+  } catch {
+    return false;
+  }
+}
+
+function debugLog(msg: string, ...args: unknown[]): void {
+  if (isDebugEnabled()) console.log(`[detectContentGuide] ${msg}`, ...args);
+}
+
 export function detectContentGuide(rawText: string): ContentGuideDetectionResult {
   const text = rawText.toLowerCase();
+
+  debugLog(
+    'rawText metadata: length=%d, lines=%d',
+    rawText.length,
+    rawText === '' ? 0 : rawText.split(/\r?\n/).length,
+  );
 
   const hasCdcIdentifier =
     text.includes('centers for disease control') ||
@@ -23,7 +41,7 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
   const dghpSignalChecks = [
     { label: 'CDC/DGHP identifier detected',                             matched: /cdc\/dghp/i.test(rawText) },
     { label: 'Division of Global Health Protection detected',            matched: /division of global health protection/i.test(rawText) },
-    { label: 'CDC-RFA-JG- opportunity number detected',                  matched: /cdc-rfa-jg-/i.test(rawText) },
+    { label: 'RFA-JG- opportunity number detected',                      matched: /\brfa-jg-/i.test(rawText) },
     { label: 'DGHP-SPECIFIC INSTRUCTIONS detected',                      matched: /dghp-specific instructions/i.test(rawText) },
     { label: 'DGHP NOFO Tracker detected',                               matched: /dghp nofo tracker/i.test(rawText) },
     { label: 'Global Health Security (GHS) detected',                    matched: /global health security \(ghs\)/i.test(rawText) },
@@ -31,6 +49,7 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
     { label: 'GHS cooperative agreements boilerplate detected',          matched: /we fund all global health security \(ghs\) cooperative agreements/i.test(rawText) },
   ];
   const dghpMatched = dghpSignalChecks.filter(s => s.matched);
+  debugLog('hasCdcIdentifier=%s, dghpMatched=%d/%d: %o', hasCdcIdentifier, dghpMatched.length, dghpSignalChecks.length, dghpMatched.map(s => s.label));
   if (hasCdcIdentifier && dghpMatched.length >= 2) {
     return {
       detectedId: 'cdc-dghp',

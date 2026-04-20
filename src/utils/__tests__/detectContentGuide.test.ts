@@ -323,6 +323,17 @@ describe('CDC DGHP detection', () => {
     expect(result.confidence).toBe('high');
   });
 
+  it('detects cdc-dghp via "Division of Global Health Protection" + bare RFA-JG- opportunity number (no CDC- prefix)', () => {
+    const text = makeText(
+      'Agency: Centers for Disease Control and Prevention',
+      'Subagency: Division of Global Health Protection',
+      'Opportunity Number: RFA-JG-26-0001',
+    );
+    const result = detectContentGuide(text);
+    expect(result.detectedId).toBe('cdc-dghp');
+    expect(result.confidence).toBe('high');
+  });
+
   it('detects cdc-dghp via "Global Health Security Agenda (GHSA)" + "DGHP NOFO Tracker" + CDC identifier', () => {
     const text = makeText(
       'CDC competitive award',
