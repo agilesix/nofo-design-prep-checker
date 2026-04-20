@@ -231,7 +231,7 @@ describe('CDC Research detection', () => {
 // ─── CDC DGHP fast-path ───────────────────────────────────────────────────────
 
 describe('CDC DGHP detection', () => {
-  it('detects cdc-dghp with high confidence when 2 DGHP signals are present', () => {
+  it('detects cdc-dghp with high confidence when ≥2 DGHP signals + CDC identifier present', () => {
     const text = makeText(
       'CDC/DGHP funding opportunity',
       'DGHP NOFO Tracker submission required',
@@ -241,8 +241,9 @@ describe('CDC DGHP detection', () => {
     expect(result.confidence).toBe('high');
   });
 
-  it('detects cdc-dghp via "DGHP-SPECIFIC INSTRUCTIONS" + "DGHP Basic Information"', () => {
+  it('detects cdc-dghp via "DGHP-SPECIFIC INSTRUCTIONS" + "DGHP Basic Information" + CDC identifier', () => {
     const text = makeText(
+      'Centers for Disease Control and Prevention',
       'DGHP-SPECIFIC INSTRUCTIONS for this section',
       'DGHP Basic Information block',
     );
@@ -251,10 +252,11 @@ describe('CDC DGHP detection', () => {
     expect(result.confidence).toBe('high');
   });
 
-  it('detects cdc-dghp via "Global Health Security (GHS)" + "CDC/DGHP"', () => {
+  it('detects cdc-dghp via "Global Health Security (GHS)" + "DGHP NOFO Tracker" + CDC identifier', () => {
     const text = makeText(
-      'CDC/DGHP competitive award',
+      'CDC competitive award',
       'Global Health Security (GHS) activities',
+      'DGHP NOFO Tracker reference',
     );
     const result = detectContentGuide(text);
     expect(result.detectedId).toBe('cdc-dghp');
@@ -273,17 +275,35 @@ describe('CDC DGHP detection', () => {
 
   it('does NOT detect cdc-dghp when only 1 DGHP signal is present', () => {
     const text = makeText(
-      'CDC/DGHP funding opportunity',
       'Centers for Disease Control and Prevention',
       'CDC Office of Grants Services',
+      'DGHP NOFO Tracker reference',
+    );
+    const result = detectContentGuide(text);
+    expect(result.detectedId).not.toBe('cdc-dghp');
+  });
+
+  it('does NOT detect cdc-dghp when 0 DGHP signals are present', () => {
+    const text = makeText(
+      'Centers for Disease Control and Prevention',
+      'CDC Office of Grants Services',
+      'CDC grant announcement',
+    );
+    const result = detectContentGuide(text);
+    expect(result.detectedId).not.toBe('cdc-dghp');
+  });
+
+  it('does NOT detect cdc-dghp when DGHP signals are present but no CDC identifier', () => {
+    const text = makeText(
+      'Administration for Children and Families',
+      'DGHP-SPECIFIC INSTRUCTIONS for this section',
+      'DGHP Basic Information block',
     );
     const result = detectContentGuide(text);
     expect(result.detectedId).not.toBe('cdc-dghp');
   });
 
   it('detects cdc-dghp before DGHT fast-path when DGHP signals are present', () => {
-    // If a document somehow contains both DGHP and DGHT signals,
-    // the DGHP fast-path fires first and takes precedence.
     const text = makeText(
       'CDC/DGHP competitive award',
       'DGHP NOFO Tracker',
