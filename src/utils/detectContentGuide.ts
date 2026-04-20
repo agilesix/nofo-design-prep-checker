@@ -28,7 +28,7 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
     { label: 'DGHP Basic Information detected',       matched: /dghp basic information/i.test(rawText) },
   ];
   const dghpMatched = dghpSignalChecks.filter(s => s.matched);
-  if (dghpMatched.length >= 2) {
+  if (hasCdcIdentifier && dghpMatched.length >= 2) {
     return {
       detectedId: 'cdc-dghp',
       confidence: 'high',
@@ -91,6 +91,11 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
     if (guide.id === 'cdc-research') continue;
     if (guide.id === 'cdc-dght-ssj') continue;
     if (guide.id === 'cdc-dght-competitive') continue;
+    // cdc-dghp is detected exclusively via the fast-path above (2-of-5 DGHP signals +
+    // hasCdcIdentifier). Its detectionSignals entries (abbreviations: ['CDC', 'DGHP'],
+    // uniqueSections: ['DGHP Basic Information', 'Global Health Security']) would score
+    // against every CDC document if included here, inflating CDC scores and causing
+    // incorrect low-confidence results for standard CDC NOFOs.
     if (guide.id === 'cdc-dghp') continue;
 
     const guideSignals: string[] = [];
