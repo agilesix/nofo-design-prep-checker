@@ -40,7 +40,7 @@ describe('2-signal threshold', () => {
     expect(result.signals).toHaveLength(2);
   });
 
-  it('detects when all 5 signals are present', () => {
+  it('detects when 5 of the 7 signals are present (original DGHP/PEPFAR set)', () => {
     const html = makeHtml([
       'Relevant deadlines',     // position 1 — within first 3
       'Writing instructions',   // position 2 — within first 5
@@ -96,9 +96,55 @@ describe('Signal 2 — "Pre-NOFO checklist" heading', () => {
   });
 });
 
-// ─── Signal 3: "Writing instructions" within first 5 headings ────────────────
+// ─── Signal 3: "NOFO content" as H1 ──────────────────────────────────────────
 
-describe('Signal 3 — "Writing instructions" within first 5 headings', () => {
+describe('Signal 3 — "NOFO content" as H1', () => {
+  it('fires when an H1 heading contains "NOFO content"', () => {
+    const result = detectPreNofo('<h1>NOFO content</h1>', 'pre-nofo.docx');
+    expect(result.signals).toContain('heading:nofo-content-h1');
+    expect(result.detected).toBe(true);
+  });
+
+  it('does NOT fire when "NOFO content" appears only in a non-H1 heading', () => {
+    const result = detectPreNofo(
+      '<h2>NOFO content</h2><h1>Other heading</h1>',
+      'pre-nofo.docx',
+    );
+    expect(result.signals).not.toContain('heading:nofo-content-h1');
+  });
+
+  it('matches case-insensitively', () => {
+    const result = detectPreNofo('<h1>nofo content overview</h1>', 'pre-nofo.docx');
+    expect(result.signals).toContain('heading:nofo-content-h1');
+  });
+});
+
+// ─── Signal 4: "Sole Source Justification" in body ───────────────────────────
+
+describe('Signal 4 — "Sole Source Justification" in body text', () => {
+  it('fires when "Sole Source Justification" appears in a paragraph', () => {
+    const html = '<h1>Introduction</h1><p>This is a Sole Source Justification document.</p>';
+    const result = detectPreNofo(html, 'pre-nofo.docx');
+    expect(result.signals).toContain('body:sole-source-justification');
+    expect(result.detected).toBe(true);
+  });
+
+  it('fires when "Sole Source Justification" appears in a heading', () => {
+    const html = '<h2>Sole Source Justification</h2>';
+    const result = detectPreNofo(html, 'pre-nofo.docx');
+    expect(result.signals).toContain('body:sole-source-justification');
+  });
+
+  it('matches case-insensitively', () => {
+    const html = '<p>sole source justification for this award</p>';
+    const result = detectPreNofo(html, 'pre-nofo.docx');
+    expect(result.signals).toContain('body:sole-source-justification');
+  });
+});
+
+// ─── Signal 5: "Writing instructions" within first 5 headings ────────────────
+
+describe('Signal 5 — "Writing instructions" within first 5 headings', () => {
   it('fires when "Writing instructions" is the first heading', () => {
     const result = detectPreNofo(
       makeHtml(['Writing instructions', 'Background']),
@@ -151,9 +197,9 @@ describe('Signal 3 — "Writing instructions" within first 5 headings', () => {
   });
 });
 
-// ─── Signal 4: "Relevant deadlines" within first 3 headings ──────────────────
+// ─── Signal 6: "Relevant deadlines" within first 3 headings ──────────────────
 
-describe('Signal 4 — "Relevant deadlines" within first 3 headings', () => {
+describe('Signal 6 — "Relevant deadlines" within first 3 headings', () => {
   it('fires when "Relevant deadlines" is the first heading', () => {
     const result = detectPreNofo(
       makeHtml(['Relevant deadlines', 'Background']),
@@ -202,52 +248,6 @@ describe('Signal 4 — "Relevant deadlines" within first 3 headings', () => {
   });
 });
 
-// ─── Signal 3: "NOFO content" as H1 ──────────────────────────────────────────
-
-describe('Signal 3 — "NOFO content" as H1', () => {
-  it('fires when an H1 heading contains "NOFO content"', () => {
-    const result = detectPreNofo('<h1>NOFO content</h1>', 'pre-nofo.docx');
-    expect(result.signals).toContain('heading:nofo-content-h1');
-    expect(result.detected).toBe(true);
-  });
-
-  it('does NOT fire when "NOFO content" appears only in a non-H1 heading', () => {
-    const result = detectPreNofo(
-      '<h2>NOFO content</h2><h1>Other heading</h1>',
-      'pre-nofo.docx',
-    );
-    expect(result.signals).not.toContain('heading:nofo-content-h1');
-  });
-
-  it('matches case-insensitively', () => {
-    const result = detectPreNofo('<h1>nofo content overview</h1>', 'pre-nofo.docx');
-    expect(result.signals).toContain('heading:nofo-content-h1');
-  });
-});
-
-// ─── Signal 4: "Sole Source Justification" in body ───────────────────────────
-
-describe('Signal 4 — "Sole Source Justification" in body text', () => {
-  it('fires when "Sole Source Justification" appears in a paragraph', () => {
-    const html = '<h1>Introduction</h1><p>This is a Sole Source Justification document.</p>';
-    const result = detectPreNofo(html, 'pre-nofo.docx');
-    expect(result.signals).toContain('body:sole-source-justification');
-    expect(result.detected).toBe(true);
-  });
-
-  it('fires when "Sole Source Justification" appears in a heading', () => {
-    const html = '<h2>Sole Source Justification</h2>';
-    const result = detectPreNofo(html, 'pre-nofo.docx');
-    expect(result.signals).toContain('body:sole-source-justification');
-  });
-
-  it('matches case-insensitively', () => {
-    const html = '<p>sole source justification for this award</p>';
-    const result = detectPreNofo(html, 'pre-nofo.docx');
-    expect(result.signals).toContain('body:sole-source-justification');
-  });
-});
-
 // ─── Step 1 exclusion guard ───────────────────────────────────────────────────
 
 describe('Step 1 exclusion guard', () => {
@@ -280,7 +280,7 @@ describe('Step 1 exclusion guard', () => {
   });
 });
 
-// ─── Signal 7: filename (formerly Signal 5) ───────────────────────────────────
+// ─── Signal 7: filename ───────────────────────────────────────────────────────
 
 describe('Signal 7 — filename', () => {
   it('fires for "pre-nofo" in the filename (hyphenated)', () => {
