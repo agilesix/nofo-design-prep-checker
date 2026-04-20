@@ -1239,11 +1239,12 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
     const fix = fixesByIndex.get(currentIndex);
     if (!fix) continue;
 
-    // Heading-level guard: skip if the paragraph at this index is no longer
-    // the same heading level encoded in the targetField.
-    if (fix.level !== level) continue;
     // Text guard: skip if the paragraph at this index doesn't match the
-    // original text encoded in the targetField.
+    // original text encoded in the targetField. This is the primary guard
+    // against index drift and is sufficient on its own — the level guard was
+    // removed because applyHeadingLevelCorrections (HEAD-003) may have already
+    // changed the level of this paragraph before this function runs, causing
+    // the original-level check to incorrectly reject a valid fix.
     if (getParaText(wP).trim() !== fix.originalText) continue;
 
     const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';

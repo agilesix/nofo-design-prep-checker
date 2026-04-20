@@ -2369,6 +2369,38 @@ describe('buildDocx — applyHeadingTextCorrections (HEAD-004)', () => {
     // Index 3 (fourth element in styles) updated
     expect(styles[3]).toMatchObject({ style: 'Heading3', text: 'Short heading' });
   });
+
+  it('applies text fix even when HEAD-003 already changed the heading level in the same buildDocx run', async () => {
+    // H1(0), H4(1) — the H4 skips from H1 (HEAD-003 fires) AND its text is too
+    // long (HEAD-004 fires). The level fix runs first and changes H4→H2. The text
+    // fix must still apply even though the heading is now H2, not H4.
+    const longText = 'This heading has eleven words so it should be flagged here';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'NOFO Title'),    // index 0
+      headingPara(4, longText),        // index 1 — skips H1→H4, and is too long
+    ]));
+
+    const levelFix: AcceptedFix = {
+      issueId: 'HEAD-003-1',
+      ruleId: 'HEAD-003',
+      targetField: 'heading.level.H4.1::' + longText,
+      value: '2',
+    };
+    const textFix: AcceptedFix = {
+      issueId: 'HEAD-004-1',
+      ruleId: 'HEAD-004',
+      targetField: 'heading.text.H4.1::' + longText,
+      value: 'Short heading',
+    };
+
+    const xml = await getOutputDocXml(zip, [levelFix, textFix]);
+    const styles = extractHeadingStyles(xml);
+    // Level corrected H4→H2
+    expect(styles[1]).toMatchObject({ style: 'Heading2' });
+    // Text corrected despite level having changed before this patch ran
+    expect(styles[1]).toMatchObject({ text: 'Short heading' });
+  });
 });
 
 // ─── LINK-006 auto-applied bookmark retargets ─────────────────────────────────
