@@ -44,12 +44,35 @@ const TABLE_004: Rule = {
   },
 };
 
+function t4DirectChildrenByTagName(parent: Element, tagName: string): Element[] {
+  const result: Element[] = [];
+  for (const node of Array.from(parent.childNodes)) {
+    if (node.nodeType === 1 && (node as Element).tagName === tagName) {
+      result.push(node as Element);
+    }
+  }
+  return result;
+}
+
+function t4DirectRowsOfTable(tbl: Element): Element[] {
+  return t4DirectChildrenByTagName(tbl, 'w:tr');
+}
+
+function t4DirectCellsOfRow(tr: Element): Element[] {
+  return t4DirectChildrenByTagName(tr, 'w:tc');
+}
+
+function t4DirectCellsOfTable(tbl: Element): Element[] {
+  return t4DirectRowsOfTable(tbl).flatMap(t4DirectCellsOfRow);
+}
+
 function t4IsSingleCellTable(tbl: Element): boolean {
-  return tbl.getElementsByTagName('w:tc').length === 1;
+  return t4DirectCellsOfTable(tbl).length === 1;
 }
 
 function t4HasQualifyingFirstParagraph(tbl: Element): boolean {
-  const tc = tbl.getElementsByTagName('w:tc')[0]!;
+  const tc = t4DirectCellsOfTable(tbl)[0];
+  if (!tc) return false;
   const paragraphs = t4DirectParagraphsOf(tc);
   if (paragraphs.length < 2) return false;
   const text = t4ParagraphText(paragraphs[0]!).trim().toLowerCase();
