@@ -2855,6 +2855,140 @@ describe('buildDocx — CLEAN-007: CDC preamble removal', () => {
   });
 });
 
+// ─── applyTrailingPeriodBoldFix (CLEAN-016) ──────────────────────────────────
+
+const W_NS_PERIOD = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function makeTrailingPeriodDocXml(body: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_PERIOD}">` +
+    `<w:body>${body}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+const TRAILING_PERIOD_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-016',
+  description: 'Bold removed from 1 trailing period.',
+  targetField: 'text.trailing.period.unbold',
+};
+
+describe('buildDocx — CLEAN-016: trailing period bold removal', () => {
+  it('removes w:b from the period run when the period is in its own run', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:t>Hello world</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>.</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeTrailingPeriodDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [TRAILING_PERIOD_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    expect(runs).toHaveLength(2);
+
+    const periodRun = runs[1]!;
+    const rPr = Array.from(periodRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(rPr?.getElementsByTagName('w:b').length ?? 0).toBe(0);
+    expect(periodRun.getElementsByTagName('w:t')[0]?.textContent).toBe('.');
+  });
+
+  it('removes w:b and w:bCs together when both are present on the period run', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:t>Hello</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/><w:bCs/></w:rPr><w:t>.</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeTrailingPeriodDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [TRAILING_PERIOD_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    const periodRun = runs[1]!;
+    const rPr = Array.from(periodRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(rPr?.getElementsByTagName('w:b').length ?? 0).toBe(0);
+    expect(rPr?.getElementsByTagName('w:bCs').length ?? 0).toBe(0);
+  });
+
+  it('splits the run when the period is attached to other bold text', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:t>Normal</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>end.</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeTrailingPeriodDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [TRAILING_PERIOD_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    // Original two-run paragraph becomes three runs: "Normal", "end" (bold), "." (not bold)
+    expect(runs).toHaveLength(3);
+
+    const boldPrefixRun = runs[1]!;
+    const periodRun = runs[2]!;
+
+    const boldRpr = Array.from(boldPrefixRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(boldRpr?.getElementsByTagName('w:b').length ?? 0).toBe(1);
+    expect(boldPrefixRun.getElementsByTagName('w:t')[0]?.textContent).toBe('end');
+
+    const periodRpr = Array.from(periodRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(periodRpr?.getElementsByTagName('w:b').length ?? 0).toBe(0);
+    expect(periodRun.getElementsByTagName('w:t')[0]?.textContent).toBe('.');
+  });
+
+  it('does not modify the document when the preceding run is also bold', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>Bold text</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>.</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeTrailingPeriodDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [TRAILING_PERIOD_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    expect(runs).toHaveLength(2);
+    const periodRun = runs[1]!;
+    const rPr = Array.from(periodRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(rPr?.getElementsByTagName('w:b').length ?? 0).toBe(1);
+  });
+});
+
 // ─── applyBoldBulletFix (CLEAN-015) ──────────────────────────────────────────
 
 const W_NS_BULLET = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';

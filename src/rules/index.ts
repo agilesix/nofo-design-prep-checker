@@ -11,6 +11,7 @@ import LINK_004 from './universal/LINK-004';
 import LINK_006 from './universal/LINK-006';
 import LINK_007 from './universal/LINK-007';
 import LINK_008 from './universal/LINK-008';
+import LINK_009 from './universal/LINK-009';
 import TABLE_002 from './universal/TABLE-002';
 import TABLE_003 from './universal/TABLE-003';
 import NOTE_001 from './universal/NOTE-001';
@@ -76,6 +77,7 @@ export const allRules: Rule[] = [
   CLEAN_015,
   CLEAN_016,
   LINK_007,
+  LINK_009,
   FORMAT_002,
   FORMAT_003,
 
@@ -138,7 +140,7 @@ export const allRules: Rule[] = [
 export {
   HEAD_001, HEAD_002, HEAD_003, HEAD_004,
   META_001, META_002, META_003,
-  LINK_001, LINK_002, LINK_003, LINK_004, LINK_006, LINK_007, LINK_008,
+  LINK_001, LINK_002, LINK_003, LINK_004, LINK_006, LINK_007, LINK_008, LINK_009,
   TABLE_002, TABLE_003,
   NOTE_001, NOTE_004,
   IMG_001,
