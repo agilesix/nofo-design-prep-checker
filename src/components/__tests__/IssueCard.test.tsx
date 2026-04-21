@@ -24,12 +24,12 @@ const inputIssue: Issue = {
 
 /** Wrapper that owns resolution state so IssueCard re-renders after Skip/Undo */
 function Wrapper({
-  onAccept,
-  onSkipNotify,
+  onAccept = () => {},
+  onSkipNotify = () => {},
 }: {
-  onAccept: (fix: AcceptedFix) => void;
-  onSkipNotify: () => void;
-}): React.ReactElement {
+  onAccept?: (fix: AcceptedFix) => void;
+  onSkipNotify?: () => void;
+} = {}): React.ReactElement {
   const [resolution, setResolution] = useState<IssueResolution>('unreviewed');
   return (
     <IssueCard
@@ -46,6 +46,26 @@ function Wrapper({
       onUndo={() => setResolution('unreviewed')}
     />
   );
+}
+
+async function typeValue(container: HTMLDivElement, value: string): Promise<void> {
+  const input = container.querySelector('input') as HTMLInputElement;
+  await act(async () => {
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      'value',
+    )!.set!;
+    nativeSetter.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+async function clickButton(container: HTMLDivElement, label: string): Promise<void> {
+  const btn = Array.from(container.querySelectorAll('button')).find(
+    (b) => b.textContent?.trim() === label,
+  ) as HTMLButtonElement;
+  expect(btn).not.toBeNull();
+  await act(async () => { btn.click(); });
 }
 
 describe('IssueCard – skip with a recorded text input value', () => {
@@ -65,65 +85,48 @@ describe('IssueCard – skip with a recorded text input value', () => {
 
   it('does not show "Value recorded" text after skipping', async () => {
     const onAccept = vi.fn();
-    const onSkipNotify = vi.fn();
+    await act(async () => { root.render(<Wrapper onAccept={onAccept} />); });
 
-    await act(async () => {
-      root.render(<Wrapper onAccept={onAccept} onSkipNotify={onSkipNotify} />);
-    });
+    await typeValue(container, 'My test value');
+    await clickButton(container, 'Skip');
 
-    // Type a value into the input
-    const input = container.querySelector('input') as HTMLInputElement;
-    expect(input).not.toBeNull();
-    await act(async () => {
-      const nativeSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        'value',
-      )!.set!;
-      nativeSetter.call(input, 'My test value');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-
-    // Click Skip
-    const skipButton = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Skip',
-    ) as HTMLButtonElement;
-    expect(skipButton).not.toBeNull();
-    await act(async () => { skipButton.click(); });
-
-    // "✓ Value recorded" must not appear
     expect(container.textContent).not.toContain('Value recorded');
-    // onAccept must not have been called
     expect(onAccept).not.toHaveBeenCalled();
   });
 
   it('shows "Value recorded" only when resolution is accepted', async () => {
-    const onAccept = vi.fn();
-    const onSkipNotify = vi.fn();
+    await act(async () => { root.render(<Wrapper />); });
 
-    await act(async () => {
-      root.render(<Wrapper onAccept={onAccept} onSkipNotify={onSkipNotify} />);
-    });
+    await typeValue(container, 'My accepted value');
+    await clickButton(container, 'Accept fix');
 
-    // Type a value into the input
-    const input = container.querySelector('input') as HTMLInputElement;
-    await act(async () => {
-      const nativeSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLInputElement.prototype,
-        'value',
-      )!.set!;
-      nativeSetter.call(input, 'My accepted value');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-
-    // Click Accept
-    const acceptButton = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Accept fix',
-    ) as HTMLButtonElement;
-    expect(acceptButton).not.toBeNull();
-    await act(async () => { acceptButton.click(); });
-
-    // "✓ Value recorded" must appear
     expect(container.textContent).toContain('Value recorded');
     expect(container.textContent).toContain('My accepted value');
+  });
+
+  it('resets input field to empty after type → Skip → Undo', async () => {
+    await act(async () => { root.render(<Wrapper />); });
+
+    await typeValue(container, 'Typed before skip');
+    await clickButton(container, 'Skip');
+    await clickButton(container, '↩ Undo');
+
+    // Input must be visible again (unreviewed) and cleared
+    const input = container.querySelector('input') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    expect(input.value).toBe('');
+  });
+
+  it('resets input field to empty after type → Accept → Undo', async () => {
+    await act(async () => { root.render(<Wrapper />); });
+
+    await typeValue(container, 'Typed before accept');
+    await clickButton(container, 'Accept fix');
+    await clickButton(container, '↩ Undo');
+
+    // Input must be visible again (unreviewed) and cleared
+    const input = container.querySelector('input') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    expect(input.value).toBe('');
   });
 });
