@@ -1620,6 +1620,20 @@ describe('buildDocx — LINK-006 link text fix: hyperlink attribute preservation
   });
 });
 
+// ─── Helpers: output zip ─────────────────────────────────────────────────────
+
+/**
+ * Run buildDocx and return the output archive for multi-file inspection.
+ */
+async function getOutputZip(
+  zip: JSZip,
+  acceptedFixes: AcceptedFix[] = [],
+  autoAppliedChanges: AutoAppliedChange[] = []
+): Promise<JSZip> {
+  const blob = await buildDocx(zip, acceptedFixes, autoAppliedChanges);
+  return JSZip.loadAsync(blob);
+}
+
 // ─── LINK-007: [PDF] label OOXML patch ────────────────────────────────────────
 
 const RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
@@ -3299,5 +3313,258 @@ describe('buildDocx — LINK-009: partial hyperlink fix', () => {
 
     expect(getHyperlinkText(outXml, 'rId1')).toBe('link text');
     expect(directParaRuns(outXml)).toHaveLength(1);
+  });
+});
+
+// ─── applyEmailMailtoFixes (LINK-008) ────────────────────────────────────────
+
+function makeEmailDocXml(body: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}">` +
+    `<w:body>${body}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+function makeEmptyRelsXml(): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="${RELS_NS}"></Relationships>`
+  );
+}
+
+function makeEmailChange(email: string): AutoAppliedChange {
+  return {
+    ruleId: 'LINK-008',
+    description: `Email address converted to a mailto: link — ${email}`,
+    targetField: 'email.mailto',
+    value: email,
+  };
+}
+
+describe('buildDocx — LINK-008: email mailto conversion', () => {
+  it('wraps a plain-text email run in a w:hyperlink element', async () => {
+    const email = 'user@example.com';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t>${email}</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    const outZip = await getOutputZip(zip, [], [makeEmailChange(email)]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(1);
+
+    const hlText = Array.from(hyperlinks[0]!.getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '')
+      .join('');
+    expect(hlText).toBe(email);
+
+    // No direct w:r children on the paragraph — run was moved inside hyperlink
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const directRuns = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).localName === 'r'
+    );
+    expect(directRuns).toHaveLength(0);
+  });
+
+  it('adds a Relationship entry with correct Type, Target, and TargetMode to rels', async () => {
+    const email = 'contact@example.org';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t>${email}</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    const outZip = await getOutputZip(zip, [], [makeEmailChange(email)]);
+    const relsXml = await outZip.file('word/_rels/document.xml.rels')!.async('string');
+
+    const parser = new DOMParser();
+    const relsDoc = parser.parseFromString(relsXml, 'application/xml');
+    const rels = Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'));
+
+    expect(rels).toHaveLength(1);
+    expect(rels[0]!.getAttribute('Type')).toBe(HYPERLINK_TYPE_URI);
+    expect(rels[0]!.getAttribute('Target')).toBe(`mailto:${email}`);
+    expect(rels[0]!.getAttribute('TargetMode')).toBe('External');
+  });
+
+  it('r:id on the new hyperlink element matches the Relationship Id in rels', async () => {
+    const email = 'match@example.com';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t>${email}</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    const outZip = await getOutputZip(zip, [], [makeEmailChange(email)]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+    const relsXml = await outZip.file('word/_rels/document.xml.rels')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+    const relsDoc = parser.parseFromString(relsXml, 'application/xml');
+
+    const hl = xmlDoc.getElementsByTagName('w:hyperlink')[0]!;
+    const relId = hl.getAttributeNS(R_NS, 'id');
+    expect(relId).toBeTruthy();
+
+    const rels = Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'));
+    const matchingRel = rels.find(r => r.getAttribute('Id') === relId);
+    expect(matchingRel).toBeDefined();
+    expect(matchingRel!.getAttribute('Target')).toBe(`mailto:${email}`);
+  });
+
+  it('adds w:rStyle w:val="Hyperlink" to the run inside the new hyperlink', async () => {
+    const email = 'style@example.com';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t>${email}</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    const outZip = await getOutputZip(zip, [], [makeEmailChange(email)]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+    const hl = xmlDoc.getElementsByTagName('w:hyperlink')[0]!;
+    const run = Array.from(hl.children).find(c => c.localName === 'r')!;
+    const rPr = Array.from(run.children).find(c => c.localName === 'rPr');
+    const rStyle = rPr ? Array.from(rPr.children).find(c => c.localName === 'rStyle') : undefined;
+    expect(rStyle?.getAttributeNS(W_NS, 'val')).toBe('Hyperlink');
+  });
+
+  it('does not double-wrap a run already inside a w:hyperlink', async () => {
+    const email = 'already@example.com';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p>` +
+      `<w:hyperlink r:id="rId1" w:history="1">` +
+      `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>${email}</w:t></w:r>` +
+      `</w:hyperlink>` +
+      `</w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makePdfRelsXml(
+      'rId1', `mailto:${email}`, 'External', HYPERLINK_TYPE_URI
+    ));
+
+    const outZip = await getOutputZip(zip, [], [makeEmailChange(email)]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+
+    // Still exactly one hyperlink — no double-wrapping
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(1);
+
+    // The hyperlink's parent is the paragraph, not another hyperlink
+    expect(hyperlinks[0]!.parentElement?.localName).not.toBe('hyperlink');
+  });
+
+  it('allocates a new rId that does not collide with existing relationships', async () => {
+    const email = 'new@example.com';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t>${email}</w:t></w:r></w:p>`
+    ));
+    // Pre-existing relationships occupy rId1 and rId2
+    zip.file('word/_rels/document.xml.rels', (
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="${RELS_NS}">` +
+      `<Relationship Id="rId1" Type="${HYPERLINK_TYPE_URI}" Target="https://example.com" TargetMode="External"/>` +
+      `<Relationship Id="rId2" Type="${HYPERLINK_TYPE_URI}" Target="https://other.com" TargetMode="External"/>` +
+      `</Relationships>`
+    ));
+
+    const outZip = await getOutputZip(zip, [], [makeEmailChange(email)]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+    const relsXml = await outZip.file('word/_rels/document.xml.rels')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+    const relsDoc = parser.parseFromString(relsXml, 'application/xml');
+
+    // The new email hyperlink is the last one in document order
+    const emailHl = Array.from(xmlDoc.getElementsByTagName('w:hyperlink')).find(
+      h => Array.from(h.getElementsByTagName('w:t')).some(t => t.textContent === email)
+    )!;
+    const newRelId = emailHl.getAttributeNS(R_NS, 'id')!;
+
+    // Must not be rId1 or rId2
+    expect(newRelId).not.toBe('rId1');
+    expect(newRelId).not.toBe('rId2');
+
+    // The rels file must contain a matching entry
+    const rels = Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'));
+    const newRel = rels.find(r => r.getAttribute('Id') === newRelId);
+    expect(newRel?.getAttribute('Target')).toBe(`mailto:${email}`);
+  });
+
+  it('converts an email embedded in a longer text run by splitting the run at the email boundary', async () => {
+    const email = 'embedded@example.com';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t xml:space="preserve">Contact ${email} for help</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    const outZip = await getOutputZip(zip, [], [makeEmailChange(email)]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+
+    // Email must now be inside a w:hyperlink
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(1);
+    const hlText = Array.from(hyperlinks[0]!.getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '')
+      .join('');
+    expect(hlText).toBe(email);
+
+    // The paragraph should have three children: before run, hyperlink, after run
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const children = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1
+    ) as Element[];
+    expect(children).toHaveLength(3);
+    expect(children[0]!.localName).toBe('r');
+    expect(children[1]!.localName).toBe('hyperlink');
+    expect(children[2]!.localName).toBe('r');
+
+    const beforeText = Array.from((children[0] as Element).getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '').join('');
+    const afterText = Array.from((children[2] as Element).getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '').join('');
+    expect(beforeText).toBe('Contact ');
+    expect(afterText).toBe(' for help');
+  });
+
+  it('does not modify the document when autoAppliedChanges does not include LINK-008', async () => {
+    const email = 'noop@example.com';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t>${email}</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    const outZip = await getOutputZip(zip, [], []);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+    const relsXml = await outZip.file('word/_rels/document.xml.rels')!.async('string');
+
+    const parser = new DOMParser();
+    expect(parser.parseFromString(docXml, 'application/xml').getElementsByTagName('w:hyperlink'))
+      .toHaveLength(0);
+    expect(parser.parseFromString(relsXml, 'application/xml')
+      .getElementsByTagNameNS(RELS_NS, 'Relationship'))
+      .toHaveLength(0);
   });
 });
