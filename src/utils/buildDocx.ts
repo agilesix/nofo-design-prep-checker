@@ -69,6 +69,9 @@ export async function buildDocx(
   const hasBoldBulletFix = autoAppliedChanges.some(
     c => c.targetField === 'list.bullet.unbold'
   );
+  const hasTrailingPeriodBoldFix = autoAppliedChanges.some(
+    c => c.targetField === 'text.trailing.period.unbold'
+  );
   const h2TitleCaseChanges = autoAppliedChanges.filter(
     c => c.targetField === 'heading.h2.titlecase' && c.value
   );
@@ -195,6 +198,11 @@ export async function buildDocx(
   // Remove bold from list item bullet/number characters
   if (hasBoldBulletFix) {
     await applyBoldBulletFix(zip);
+  }
+
+  // Remove bold from trailing periods preceded by non-bold text
+  if (hasTrailingPeriodBoldFix) {
+    await applyTrailingPeriodBoldFix(zip);
   }
 
   // Strip content controls — unconditional, silent (documented on the Download
@@ -2336,6 +2344,128 @@ async function applyBoldBulletFix(zip: JSZip): Promise<void> {
   if (changed) {
     const serializer = new XMLSerializer();
     zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+// ─── CLEAN-016: Remove bold from trailing periods preceded by non-bold text ────
+
+/**
+ * For each paragraph where the last direct w:r run ends with a period, is bold,
+ * and the immediately preceding w:r run is not bold:
+ *   - If the period is the run's only character: removes w:b and w:bCs in-place.
+ *   - If the period follows other text in the same run: splits the run so the
+ *     prefix stays bold and the period moves to a new non-bold run after it.
+ */
+async function applyTrailingPeriodBoldFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  let changed = false;
+
+  for (const wP of Array.from(xmlDoc.getElementsByTagName('w:p'))) {
+    const runs = p16DirectRuns(wP);
+    if (runs.length < 2) continue;
+
+    const lastRun = runs[runs.length - 1]!;
+    const prevRun = runs[runs.length - 2]!;
+
+    const text = p16RunText(lastRun);
+    if (!text.endsWith('.')) continue;
+    if (!p16RunHasBold(lastRun)) continue;
+    if (p16RunHasBold(prevRun)) continue;
+
+    if (text === '.') {
+      p16RemoveBold(lastRun);
+    } else {
+      p16SplitTrailingPeriod(wP, lastRun, text);
+    }
+    changed = true;
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+function p16DirectRuns(wP: Element): Element[] {
+  const result: Element[] = [];
+  for (const node of Array.from(wP.childNodes)) {
+    if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === 'w:r') {
+      result.push(node as Element);
+    }
+  }
+  return result;
+}
+
+function p16RunText(run: Element): string {
+  return Array.from(run.getElementsByTagName('w:t'))
+    .map(t => t.textContent ?? '')
+    .join('');
+}
+
+function p16RunHasBold(run: Element): boolean {
+  const rPr = directChildEl(run, 'w:rPr');
+  if (!rPr) return false;
+  return !!directChildEl(rPr, 'w:b');
+}
+
+function p16RemoveBold(run: Element): void {
+  const rPr = directChildEl(run, 'w:rPr');
+  if (!rPr) return;
+  const toRemove = Array.from(rPr.childNodes).filter(
+    n => n.nodeType === Node.ELEMENT_NODE &&
+         ((n as Element).tagName === 'w:b' || (n as Element).tagName === 'w:bCs')
+  );
+  for (const node of toRemove) rPr.removeChild(node);
+}
+
+/**
+ * Splits the trailing period from `lastRun` into a new non-bold run.
+ * Collapses all w:t elements in both the original and new run to a single w:t.
+ * The original run retains its bold and keeps the prefix text.
+ * The new run is a clone with bold removed and text set to ".".
+ */
+function p16SplitTrailingPeriod(wP: Element, lastRun: Element, fullText: string): void {
+  const prefix = fullText.slice(0, -1);
+
+  // Collapse all w:t elements in the original run to a single one with prefix text
+  const wTs = Array.from(lastRun.getElementsByTagName('w:t'));
+  if (wTs.length > 0) {
+    wTs[0]!.textContent = prefix;
+    if (prefix !== prefix.trim()) {
+      wTs[0]!.setAttribute('xml:space', 'preserve');
+    } else {
+      wTs[0]!.removeAttribute('xml:space');
+    }
+    for (let i = 1; i < wTs.length; i++) wTs[i]!.parentNode?.removeChild(wTs[i]!);
+  }
+
+  // Clone the original run to create the period run, then strip bold and set text
+  const periodRun = lastRun.cloneNode(true) as Element;
+  const periodWTs = Array.from(periodRun.getElementsByTagName('w:t'));
+  if (periodWTs.length > 0) {
+    periodWTs[0]!.textContent = '.';
+    periodWTs[0]!.removeAttribute('xml:space');
+    for (let i = 1; i < periodWTs.length; i++) {
+      periodWTs[i]!.parentNode?.removeChild(periodWTs[i]!);
+    }
+  } else {
+    const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const newT = periodRun.ownerDocument!.createElementNS(W_NS, 'w:t');
+    newT.textContent = '.';
+    periodRun.appendChild(newT);
+  }
+  p16RemoveBold(periodRun);
+
+  if (lastRun.nextSibling) {
+    wP.insertBefore(periodRun, lastRun.nextSibling);
+  } else {
+    wP.appendChild(periodRun);
   }
 }
 
