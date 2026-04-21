@@ -1405,9 +1405,11 @@ async function applyDateFormatCorrections(zip: JSZip): Promise<void> {
  *
  * For each email address:
  *  1. Add a relationship entry to word/_rels/document.xml.rels
- *  2. Find <w:t> elements whose exact text matches the email
- *  3. Wrap the parent <w:r> in a <w:hyperlink r:id="..."> element
- *  4. Ensure the run has <w:rStyle w:val="Hyperlink"/> in its <w:rPr>
+ *  2. Find <w:t> elements whose text contains the email address
+ *  3a. If the entire run text is the email, wrap the <w:r> in <w:hyperlink>
+ *  3b. If the email is embedded in a longer run, split the run into
+ *      before-text / hyperlinked-email / after-text segments
+ *  4. The email run carries <w:rStyle w:val="Hyperlink"/> in its <w:rPr>
  */
 async function applyEmailMailtoFixes(zip: JSZip, emails: string[]): Promise<void> {
   const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -1488,10 +1490,11 @@ async function applyEmailMailtoFixes(zip: JSZip, emails: string[]): Promise<void
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
 
   for (const [email, relId] of emailRelIds) {
-    // Find <w:t> elements whose trimmed text exactly matches the email
     const wTElements = Array.from(xmlDoc.getElementsByTagName('w:t'));
     for (const wT of wTElements) {
-      if ((wT.textContent ?? '').trim() !== email) continue;
+      const text = wT.textContent ?? '';
+      const emailIdx = text.indexOf(email);
+      if (emailIdx === -1) continue;
 
       const wR = wT.parentElement;
       if (!wR || wR.localName !== 'r') continue;
@@ -1502,31 +1505,68 @@ async function applyEmailMailtoFixes(zip: JSZip, emails: string[]): Promise<void
       const wP = wR.parentElement;
       if (!wP) continue;
 
-      // Ensure <w:rPr> has <w:rStyle w:val="Hyperlink"/>
-      let rPr = wR.getElementsByTagName('w:rPr')[0];
-      if (!rPr) {
-        rPr = xmlDoc.createElementNS(W, 'w:rPr');
-        wR.insertBefore(rPr, wR.firstChild);
-      }
-      const existingStyle = rPr.getElementsByTagName('w:rStyle')[0];
-      if (!existingStyle) {
-        const rStyle = xmlDoc.createElementNS(W, 'w:rStyle');
-        rStyle.setAttributeNS(W, 'w:val', 'Hyperlink');
-        rPr.insertBefore(rStyle, rPr.firstChild);
-      }
+      const before = text.slice(0, emailIdx);
+      const after = text.slice(emailIdx + email.length);
+      const rPr = Array.from(wR.childNodes).find(
+        n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'rPr'
+      ) as Element | undefined;
 
-      // Create <w:hyperlink r:id="..." w:history="1">
       const hyperlink = xmlDoc.createElementNS(W, 'w:hyperlink');
       hyperlink.setAttributeNS(R, 'r:id', relId);
       hyperlink.setAttributeNS(W, 'w:history', '1');
+      hyperlink.appendChild(l8MakeEmailRun(xmlDoc, W, rPr ?? null, email));
 
-      // Replace <w:r> with <w:hyperlink> containing <w:r>
-      wP.insertBefore(hyperlink, wR);
-      hyperlink.appendChild(wR);
+      if (before === '' && after === '') {
+        // Whole run is exactly the email: swap it out
+        wP.insertBefore(hyperlink, wR);
+        wP.removeChild(wR);
+      } else {
+        // Email is embedded in a longer run (including whitespace-only surroundings):
+        // split into before / hyperlink / after so surrounding text is preserved
+        if (before !== '') {
+          wP.insertBefore(l8MakeTextRun(xmlDoc, W, rPr ?? null, before), wR);
+        }
+        wP.insertBefore(hyperlink, wR);
+        if (after !== '') {
+          wP.insertBefore(l8MakeTextRun(xmlDoc, W, rPr ?? null, after), wR);
+        }
+        wP.removeChild(wR);
+      }
     }
   }
 
   zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+}
+
+/** Create a <w:r> for the email address itself, with w:rStyle w:val="Hyperlink". */
+function l8MakeEmailRun(xmlDoc: Document, W: string, rPr: Element | null, email: string): Element {
+  const run = xmlDoc.createElementNS(W, 'w:r');
+  const newRPr: Element = rPr
+    ? (rPr.cloneNode(true) as Element)
+    : xmlDoc.createElementNS(W, 'w:rPr');
+  const existingStyle = Array.from(newRPr.childNodes).find(
+    n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'rStyle'
+  ) as Element | undefined;
+  if (existingStyle) newRPr.removeChild(existingStyle);
+  const rStyle = xmlDoc.createElementNS(W, 'w:rStyle');
+  rStyle.setAttributeNS(W, 'w:val', 'Hyperlink');
+  newRPr.insertBefore(rStyle, newRPr.firstChild);
+  run.appendChild(newRPr);
+  const wT = xmlDoc.createElementNS(W, 'w:t');
+  wT.textContent = email;
+  run.appendChild(wT);
+  return run;
+}
+
+/** Create a <w:r> for a plain-text fragment, cloning the source run's rPr. */
+function l8MakeTextRun(xmlDoc: Document, W: string, rPr: Element | null, text: string): Element {
+  const run = xmlDoc.createElementNS(W, 'w:r');
+  if (rPr) run.appendChild(rPr.cloneNode(true));
+  const wT = xmlDoc.createElementNS(W, 'w:t');
+  wT.textContent = text;
+  if (text !== text.trim()) wT.setAttribute('xml:space', 'preserve');
+  run.appendChild(wT);
+  return run;
 }
 
 // ─── CLEAN-009: Accept tracked changes and remove comments ───────────────────
