@@ -1516,12 +1516,13 @@ async function applyEmailMailtoFixes(zip: JSZip, emails: string[]): Promise<void
       hyperlink.setAttributeNS(W, 'w:history', '1');
       hyperlink.appendChild(l8MakeEmailRun(xmlDoc, W, rPr ?? null, email));
 
-      if (before.trim() === '' && after.trim() === '') {
-        // Whole run is the email (possibly with surrounding whitespace): swap it out
+      if (before === '' && after === '') {
+        // Whole run is exactly the email: swap it out
         wP.insertBefore(hyperlink, wR);
         wP.removeChild(wR);
       } else {
-        // Email is embedded in a longer run: split into before / hyperlink / after
+        // Email is embedded in a longer run (including whitespace-only surroundings):
+        // split into before / hyperlink / after so surrounding text is preserved
         if (before !== '') {
           wP.insertBefore(l8MakeTextRun(xmlDoc, W, rPr ?? null, before), wR);
         }
