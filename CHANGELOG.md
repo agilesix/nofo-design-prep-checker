@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.1](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.4.0...v1.4.1) (2026-04-21)
+
+
+### Bug Fixes
+
+* clear input value and gate display on accepted when user skips a text input issue ([3181c47](https://github.com/agilesix/nofo-design-prep-checker/commit/3181c47e49c9ff86dfa4ae55686ef29170e194a1))
+
 ## [1.4.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.3.0...v1.4.0) (2026-04-20)
 
 
