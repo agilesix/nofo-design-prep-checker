@@ -164,7 +164,12 @@ export async function buildDocx(
   // page; no issue is surfaced to the user and no entry goes in the summary).
   await applyRemoveContentControls(zip);
 
-  return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+  return await zip.generateAsync({
+    type: 'blob',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 },
+  });
 }
 
 /**
@@ -1243,7 +1248,7 @@ async function applyEmailMailtoFixes(zip: JSZip, emails: string[]): Promise<void
   }
 
   const serializer = new XMLSerializer();
-  zip.file(relsPath, serializer.serializeToString(relsDoc));
+  zip.file(relsPath, serializer.serializeToString(relsDoc), { compression: 'STORE' });
 
   // ── Document body ─────────────────────────────────────────────────────────
   const docFile = zip.file('word/document.xml');
@@ -1428,7 +1433,7 @@ async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<v
       for (const el of overridesToRemove) {
         el.parentNode?.removeChild(el);
       }
-      zip.file(contentTypesPath, serializer.serializeToString(contentTypesDoc));
+      zip.file(contentTypesPath, serializer.serializeToString(contentTypesDoc), { compression: 'STORE' });
     }
   }
   // ── Clean comment relationship entries ────────────────────────────────────
@@ -1456,7 +1461,7 @@ async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<v
     for (const el of commentRels) {
       el.parentNode?.removeChild(el);
     }
-    zip.file(relsPath, serializer.serializeToString(relsDoc));
+    zip.file(relsPath, serializer.serializeToString(relsDoc), { compression: 'STORE' });
   }
 }
 
