@@ -3679,3 +3679,219 @@ describe('buildDocx — LINK-008: email mailto conversion', () => {
     expect(hlTexts).toContain(email2);
   });
 });
+
+// ─── TABLE-004: applyImportantPublicHeadingFix ────────────────────────────────
+
+const W_NS_T4 = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+const TABLE_004_CHANGE: AutoAppliedChange = {
+  ruleId: 'TABLE-004',
+  description: 'Heading style applied to "Important: public information" in 1 table.',
+  targetField: 'table.importantpublic.heading',
+  value: '1',
+};
+
+function makeT4DocXml(bodyInner: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_T4}">` +
+    `<w:body>${bodyInner}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+function t4HeadingPara(level: number): string {
+  return (
+    `<w:p>` +
+    `<w:pPr><w:pStyle w:val="Heading${level}"/></w:pPr>` +
+    `<w:r><w:t>Section heading</w:t></w:r>` +
+    `</w:p>`
+  );
+}
+
+function t4SingleCellTable(firstParaText: string, extraParas = 1): string {
+  const extras = Array.from({ length: extraParas }, () =>
+    `<w:p><w:r><w:t>Body text.</w:t></w:r></w:p>`
+  ).join('');
+  return (
+    `<w:tbl><w:tr><w:tc>` +
+    `<w:p><w:r><w:t>${firstParaText}</w:t></w:r></w:p>` +
+    extras +
+    `</w:tc></w:tr></w:tbl>`
+  );
+}
+
+function t4MultiCellTable(firstParaText: string): string {
+  return (
+    `<w:tbl><w:tr>` +
+    `<w:tc><w:p><w:r><w:t>${firstParaText}</w:t></w:r></w:p><w:p><w:r><w:t>extra</w:t></w:r></w:p></w:tc>` +
+    `<w:tc><w:p><w:r><w:t>Cell 2</w:t></w:r></w:p></w:tc>` +
+    `</w:tr></w:tbl>`
+  );
+}
+
+async function t4GetFirstParaStyle(docXml: string): Promise<string | null> {
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+  const tbl = xmlDoc.getElementsByTagName('w:tbl')[0];
+  if (!tbl) return null;
+  const tc = tbl.getElementsByTagName('w:tc')[0];
+  if (!tc) return null;
+  const firstPara = Array.from(tc.childNodes).find(
+    n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'p'
+  ) as Element | undefined;
+  if (!firstPara) return null;
+  const pStyle = firstPara.getElementsByTagName('w:pStyle')[0];
+  return pStyle ? pStyle.getAttribute('w:val') : null;
+}
+
+describe('buildDocx — TABLE-004: important public information heading fix', () => {
+  it('applies heading style matching nearest preceding heading level', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(3) +
+      t4SingleCellTable('Important: public information')
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBe('Heading3');
+  });
+
+  it('defaults to Heading5 when no preceding heading exists', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4SingleCellTable('Important: public information')
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBe('Heading5');
+  });
+
+  it('picks the nearest preceding heading when multiple precede the table', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(2) +
+      `<w:p><w:r><w:t>Intro paragraph.</w:t></w:r></w:p>` +
+      t4HeadingPara(4) +
+      t4SingleCellTable('Important: public information')
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBe('Heading4');
+  });
+
+  it('is case-insensitive — applies style for "IMPORTANT: PUBLIC INFORMATION"', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(2) +
+      t4SingleCellTable('IMPORTANT: PUBLIC INFORMATION')
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBe('Heading2');
+  });
+
+  it('does not modify a table whose first paragraph has no body content', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(3) +
+      t4SingleCellTable('Important: public information', 0)
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBeNull();
+  });
+
+  it('does not modify a multi-cell table even if first cell text matches', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(3) +
+      t4MultiCellTable('Important: public information')
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+    const firstPara = Array.from(
+      xmlDoc.getElementsByTagName('w:tc')[0]!.childNodes
+    ).find(
+      n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'p'
+    ) as Element | undefined;
+    const pStyle = firstPara?.getElementsByTagName('w:pStyle')[0];
+    expect(pStyle).toBeUndefined();
+  });
+
+  it('does not modify a table with non-matching first paragraph text', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(3) +
+      t4SingleCellTable('Note: This is informational only')
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBeNull();
+  });
+
+  it('does not modify anything when TABLE-004 change is absent', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(3) +
+      t4SingleCellTable('Important: public information')
+    ));
+    const docXml = await getOutputDocXml(zip, [], []);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBeNull();
+  });
+
+  it('preserves existing w:pPr children when adding w:pStyle', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(3) +
+      `<w:tbl><w:tr><w:tc>` +
+      `<w:p><w:pPr><w:ind w:left="720"/></w:pPr><w:r><w:t>Important: public information</w:t></w:r></w:p>` +
+      `<w:p><w:r><w:t>Body text.</w:t></w:r></w:p>` +
+      `</w:tc></w:tr></w:tbl>`
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+    const tc = xmlDoc.getElementsByTagName('w:tc')[0]!;
+    const firstPara = Array.from(tc.childNodes).find(
+      n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'p'
+    ) as Element;
+    const pPr = Array.from(firstPara.childNodes).find(
+      n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'pPr'
+    ) as Element;
+    expect(pPr.getElementsByTagName('w:pStyle')[0]?.getAttribute('w:val')).toBe('Heading3');
+    expect(pPr.getElementsByTagName('w:ind')[0]).toBeTruthy();
+  });
+
+  it('preserves spaced style ID format "Heading 3" from preceding heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      `<w:p><w:pPr><w:pStyle w:val="Heading 3"/></w:pPr><w:r><w:t>Section</w:t></w:r></w:p>` +
+      t4SingleCellTable('Important: public information')
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBe('Heading 3');
+  });
+
+  it('applies fix to outer single-cell table even when the cell contains a nested table', async () => {
+    const nestedTable =
+      `<w:tbl><w:tr>` +
+      `<w:tc><w:p><w:r><w:t>A</w:t></w:r></w:p></w:tc>` +
+      `<w:tc><w:p><w:r><w:t>B</w:t></w:r></w:p></w:tc>` +
+      `</w:tr></w:tbl>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(2) +
+      `<w:tbl><w:tr><w:tc>` +
+      `<w:p><w:r><w:t>Important: public information</w:t></w:r></w:p>` +
+      `<w:p><w:r><w:t>Body text.</w:t></w:r></w:p>` +
+      nestedTable +
+      `</w:tc></w:tr></w:tbl>`
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBe('Heading2');
+  });
+});

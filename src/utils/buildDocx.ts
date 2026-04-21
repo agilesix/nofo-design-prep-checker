@@ -75,6 +75,9 @@ export async function buildDocx(
   const hasPartialHyperlinkFix = autoAppliedChanges.some(
     c => c.targetField === 'link.partial.fix'
   );
+  const hasImportantPublicHeadingFix = autoAppliedChanges.some(
+    c => c.targetField === 'table.importantpublic.heading'
+  );
   const h2TitleCaseChanges = autoAppliedChanges.filter(
     c => c.targetField === 'heading.h2.titlecase' && c.value
   );
@@ -215,7 +218,13 @@ export async function buildDocx(
 
   // Strip content controls — unconditional, silent (documented on the Download
   // page; no issue is surfaced to the user and no entry goes in the summary).
+  // Runs before TABLE-004 so that tables wrapped in w:sdt are already unwrapped.
   await applyRemoveContentControls(zip);
+
+  // Apply heading style to "Important: public information" in single-cell tables
+  if (hasImportantPublicHeadingFix) {
+    await applyImportantPublicHeadingFix(zip);
+  }
 
   return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 }
@@ -2695,6 +2704,130 @@ function p16SplitTrailingPeriod(wP: Element, lastRun: Element, fullText: string)
     wP.insertBefore(periodRun, lastRun.nextSibling);
   } else {
     wP.appendChild(periodRun);
+  }
+}
+
+// ─── TABLE-004: Apply heading style to "Important: public information" ────────
+
+/**
+ * For each single-cell table whose first paragraph starts with
+ * "Important: public information" (case-insensitive) and has at least one
+ * further paragraph in the cell, sets the paragraph's w:pStyle to the heading
+ * level of the nearest preceding heading in the document body. Defaults to
+ * Heading5 when no preceding heading is found.
+ */
+async function applyImportantPublicHeadingFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  if (!xmlStr.includes('w:tbl')) return;
+
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  const bodyChildren = Array.from(body.childNodes).filter(
+    n => n.nodeType === Node.ELEMENT_NODE
+  ) as Element[];
+
+  let changed = false;
+
+  for (let i = 0; i < bodyChildren.length; i++) {
+    const el = bodyChildren[i]!;
+    if (el.localName !== 'tbl') continue;
+
+    const tc = t4GetSingleDirectCell(el);
+    if (!tc) continue;
+
+    const paragraphs = t4DirectParagraphsOf(tc);
+    if (paragraphs.length < 2) continue;
+
+    const firstPara = paragraphs[0]!;
+    if (!getParaText(firstPara).trim().toLowerCase().startsWith('important: public information')) continue;
+
+    const styleVal = t4FindPrecedingHeadingStyle(bodyChildren, i);
+    t4ApplyPStyle(xmlDoc, W, firstPara, styleVal);
+    changed = true;
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+/** Returns direct w:p children of a w:tc element. */
+function t4DirectParagraphsOf(tc: Element): Element[] {
+  const result: Element[] = [];
+  for (const node of Array.from(tc.childNodes)) {
+    if (node.nodeType === Node.ELEMENT_NODE && (node as Element).localName === 'p') {
+      result.push(node as Element);
+    }
+  }
+  return result;
+}
+
+/**
+ * Returns the exact w:pStyle w:val of the nearest preceding heading paragraph
+ * (e.g. "Heading2" or "Heading 2"), preserving the document's own format.
+ * Defaults to "Heading5" when no preceding heading is found.
+ */
+function t4FindPrecedingHeadingStyle(bodyChildren: Element[], tableIdx: number): string {
+  for (let j = tableIdx - 1; j >= 0; j--) {
+    const sibling = bodyChildren[j]!;
+    if (sibling.localName !== 'p') continue;
+    const pPr = Array.from(sibling.children).find(c => c.localName === 'pPr');
+    if (!pPr) continue;
+    const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+    if (!pStyle) continue;
+    const val = pStyle.getAttribute('w:val') ?? '';
+    if (/^Heading\s*\d+$/i.test(val)) return val;
+  }
+  return 'Heading5';
+}
+
+/**
+ * Returns the single direct w:tc cell of a table, or null if the table has
+ * zero or more than one direct cell. Counts only direct w:tc children of
+ * direct w:tr children to avoid counting cells inside nested tables.
+ */
+function t4GetSingleDirectCell(tbl: Element): Element | null {
+  let count = 0;
+  let firstCell: Element | null = null;
+  for (const node of Array.from(tbl.childNodes)) {
+    if (node.nodeType !== Node.ELEMENT_NODE || (node as Element).localName !== 'tr') continue;
+    for (const cell of Array.from((node as Element).childNodes)) {
+      if (cell.nodeType !== Node.ELEMENT_NODE || (cell as Element).localName !== 'tc') continue;
+      count++;
+      if (count === 1) firstCell = cell as Element;
+      if (count > 1) return null;
+    }
+  }
+  return count === 1 ? firstCell : null;
+}
+
+/**
+ * Sets (or creates) w:pStyle on the paragraph to the given style value.
+ * Inserts or updates w:pPr/w:pStyle, placing w:pStyle as the first child
+ * of w:pPr per OOXML ordering requirements.
+ */
+function t4ApplyPStyle(xmlDoc: Document, W: string, wP: Element, styleVal: string): void {
+  let pPr = directChildEl(wP, 'w:pPr');
+  if (!pPr) {
+    pPr = xmlDoc.createElementNS(W, 'w:pPr');
+    wP.insertBefore(pPr, wP.firstChild);
+  }
+  const existing = directChildEl(pPr, 'w:pStyle');
+  if (existing) {
+    existing.setAttribute('w:val', styleVal);
+  } else {
+    const pStyle = xmlDoc.createElementNS(W, 'w:pStyle');
+    pStyle.setAttribute('w:val', styleVal);
+    pPr.insertBefore(pStyle, pPr.firstChild);
   }
 }
 
