@@ -3863,4 +3863,35 @@ describe('buildDocx — TABLE-004: important public information heading fix', ()
     expect(pPr.getElementsByTagName('w:pStyle')[0]?.getAttribute('w:val')).toBe('Heading3');
     expect(pPr.getElementsByTagName('w:ind')[0]).toBeTruthy();
   });
+
+  it('preserves spaced style ID format "Heading 3" from preceding heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      `<w:p><w:pPr><w:pStyle w:val="Heading 3"/></w:pPr><w:r><w:t>Section</w:t></w:r></w:p>` +
+      t4SingleCellTable('Important: public information')
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBe('Heading 3');
+  });
+
+  it('applies fix to outer single-cell table even when the cell contains a nested table', async () => {
+    const nestedTable =
+      `<w:tbl><w:tr>` +
+      `<w:tc><w:p><w:r><w:t>A</w:t></w:r></w:p></w:tc>` +
+      `<w:tc><w:p><w:r><w:t>B</w:t></w:r></w:p></w:tc>` +
+      `</w:tr></w:tbl>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(2) +
+      `<w:tbl><w:tr><w:tc>` +
+      `<w:p><w:r><w:t>Important: public information</w:t></w:r></w:p>` +
+      `<w:p><w:r><w:t>Body text.</w:t></w:r></w:p>` +
+      nestedTable +
+      `</w:tc></w:tr></w:tbl>`
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBe('Heading2');
+  });
 });

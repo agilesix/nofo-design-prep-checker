@@ -216,14 +216,15 @@ export async function buildDocx(
     await applyTrailingPeriodBoldFix(zip);
   }
 
+  // Strip content controls — unconditional, silent (documented on the Download
+  // page; no issue is surfaced to the user and no entry goes in the summary).
+  // Runs before TABLE-004 so that tables wrapped in w:sdt are already unwrapped.
+  await applyRemoveContentControls(zip);
+
   // Apply heading style to "Important: public information" in single-cell tables
   if (hasImportantPublicHeadingFix) {
     await applyImportantPublicHeadingFix(zip);
   }
-
-  // Strip content controls — unconditional, silent (documented on the Download
-  // page; no issue is surfaced to the user and no entry goes in the summary).
-  await applyRemoveContentControls(zip);
 
   return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
 }
@@ -2739,17 +2740,17 @@ async function applyImportantPublicHeadingFix(zip: JSZip): Promise<void> {
     const el = bodyChildren[i]!;
     if (el.localName !== 'tbl') continue;
 
-    if (el.getElementsByTagName('w:tc').length !== 1) continue;
+    const tc = t4GetSingleDirectCell(el);
+    if (!tc) continue;
 
-    const tc = el.getElementsByTagName('w:tc')[0]!;
     const paragraphs = t4DirectParagraphsOf(tc);
     if (paragraphs.length < 2) continue;
 
     const firstPara = paragraphs[0]!;
     if (!getParaText(firstPara).trim().toLowerCase().startsWith('important: public information')) continue;
 
-    const level = t4FindPrecedingHeadingLevel(bodyChildren, i);
-    t4ApplyPStyle(xmlDoc, W, firstPara, `Heading${level}`);
+    const styleVal = t4FindPrecedingHeadingStyle(bodyChildren, i);
+    t4ApplyPStyle(xmlDoc, W, firstPara, styleVal);
     changed = true;
   }
 
@@ -2771,17 +2772,42 @@ function t4DirectParagraphsOf(tc: Element): Element[] {
 }
 
 /**
- * Scans body children before bodyChildren[tableIdx] backwards for a heading
- * paragraph, returning that heading's level. Returns 5 if none is found.
+ * Returns the exact w:pStyle w:val of the nearest preceding heading paragraph
+ * (e.g. "Heading2" or "Heading 2"), preserving the document's own format.
+ * Defaults to "Heading5" when no preceding heading is found.
  */
-function t4FindPrecedingHeadingLevel(bodyChildren: Element[], tableIdx: number): number {
+function t4FindPrecedingHeadingStyle(bodyChildren: Element[], tableIdx: number): string {
   for (let j = tableIdx - 1; j >= 0; j--) {
     const sibling = bodyChildren[j]!;
     if (sibling.localName !== 'p') continue;
-    const level = getHeadingLevel(sibling);
-    if (level > 0) return level;
+    const pPr = Array.from(sibling.children).find(c => c.localName === 'pPr');
+    if (!pPr) continue;
+    const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+    if (!pStyle) continue;
+    const val = pStyle.getAttribute('w:val') ?? '';
+    if (/^Heading\s*\d+$/i.test(val)) return val;
   }
-  return 5;
+  return 'Heading5';
+}
+
+/**
+ * Returns the single direct w:tc cell of a table, or null if the table has
+ * zero or more than one direct cell. Counts only direct w:tc children of
+ * direct w:tr children to avoid counting cells inside nested tables.
+ */
+function t4GetSingleDirectCell(tbl: Element): Element | null {
+  let count = 0;
+  let firstCell: Element | null = null;
+  for (const node of Array.from(tbl.childNodes)) {
+    if (node.nodeType !== Node.ELEMENT_NODE || (node as Element).localName !== 'tr') continue;
+    for (const cell of Array.from((node as Element).childNodes)) {
+      if (cell.nodeType !== Node.ELEMENT_NODE || (cell as Element).localName !== 'tc') continue;
+      count++;
+      if (count === 1) firstCell = cell as Element;
+      if (count > 1) return null;
+    }
+  }
+  return count === 1 ? firstCell : null;
 }
 
 /**
