@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.5.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.4.1...v1.5.0) (2026-04-21)
+
+
+### Features
+
+* **rules:** add CLEAN-016 auto-fix for bold trailing periods ([960666d](https://github.com/agilesix/nofo-design-prep-checker/commit/960666d2528b1e5b2dcfe1c4ae185281fa87ad2e))
+* **rules:** add CLEAN-016 auto-fix for bold trailing periods ([c33f250](https://github.com/agilesix/nofo-design-prep-checker/commit/c33f25084ecdc2d78101e0f976117850c91c9421))
+* **rules:** add LINK-009 auto-fix for partial hyperlinks ([c83fc5f](https://github.com/agilesix/nofo-design-prep-checker/commit/c83fc5fd3b0693e94464c79a7252acc8079babed))
+* **rules:** add LINK-009 auto-fix for partial hyperlinks ([0ba9c4b](https://github.com/agilesix/nofo-design-prep-checker/commit/0ba9c4b9e87db1dbbc4c58ae0ee39cadc607ce75))
+* **TABLE-004:** auto-apply heading style to "Important: public information" callout tables ([f83bf30](https://github.com/agilesix/nofo-design-prep-checker/commit/f83bf308d635460f92c64bdacc0d83704e34be44))
+* **TABLE-004:** auto-apply heading style to Important: public info ([0a439be](https://github.com/agilesix/nofo-design-prep-checker/commit/0a439be68dac7166f15893187fc5d6b0dbbb15f8))
+
+
+### Bug Fixes
+
+* **buildDocx:** handle emails embedded in longer runs for LINK-008 mailto fix ([e2e0013](https://github.com/agilesix/nofo-design-prep-checker/commit/e2e001330741a942a70830942a7e1504723e5850))
+* **buildDocx:** handle emails embedded in longer runs for mailto fix ([30888b9](https://github.com/agilesix/nofo-design-prep-checker/commit/30888b9a539672bdf993fb448e31298a07c81553))
+* **TABLE-004:** preserve heading style format, fix cell/sdt scoping ([998dbe8](https://github.com/agilesix/nofo-design-prep-checker/commit/998dbe86365c87aedb698c36ccef266ace809861))
+
 ## [1.4.1](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.4.0...v1.4.1) (2026-04-21)
 
 
