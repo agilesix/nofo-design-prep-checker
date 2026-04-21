@@ -85,8 +85,18 @@ export default function IssueCard({
     ? { backgroundColor: resolution === 'accepted' ? '#ecf3ec' : '#f0f0f0' }
     : {};
 
-  function handleUndo(): void {
+  function resetInputState(): void {
+    setInputValue(issue.inputRequired?.prefill ?? '');
     setValidationError(null);
+  }
+
+  function handleSkip(): void {
+    resetInputState();
+    onSkip();
+  }
+
+  function handleUndo(): void {
+    resetInputState();
     onUndo();
   }
 
@@ -227,7 +237,7 @@ export default function IssueCard({
           </div>
         )}
 
-        {isResolved && issue.inputRequired && !issue.instructionOnly && inputValue.trim() && (
+        {resolution === 'accepted' && issue.inputRequired && !issue.instructionOnly && inputValue.trim() && (
           <p className="font-body-sm margin-top-2" style={{ color: '#2e7d32' }}>
             ✓ Value recorded: {inputValue.trim()}
           </p>
@@ -258,7 +268,7 @@ export default function IssueCard({
             <button
               type="button"
               className="usa-button usa-button--unstyled usa-button--small"
-              onClick={onSkip}
+              onClick={handleSkip}
             >
               {issue.instructionOnly ? content.review.actions.instructionOnlySkip : content.review.actions.skip}
             </button>
