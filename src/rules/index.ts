@@ -105,7 +105,6 @@ export const allRules: Rule[] = [
   // Table rules
   TABLE_002,
   TABLE_003,
-  TABLE_004,
 
   // Note rules
   NOTE_001,
