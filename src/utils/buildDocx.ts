@@ -72,6 +72,9 @@ export async function buildDocx(
   const hasTrailingPeriodBoldFix = autoAppliedChanges.some(
     c => c.targetField === 'text.trailing.period.unbold'
   );
+  const hasPartialHyperlinkFix = autoAppliedChanges.some(
+    c => c.targetField === 'link.partial.fix'
+  );
   const h2TitleCaseChanges = autoAppliedChanges.filter(
     c => c.targetField === 'heading.h2.titlecase' && c.value
   );
@@ -183,6 +186,11 @@ export async function buildDocx(
   // Add [PDF] labels to external PDF links
   if (hasPdfLabelFix) {
     await applyPdfLabelFix(zip);
+  }
+
+  // Move partial-word characters that are outside w:hyperlink into it
+  if (hasPartialHyperlinkFix) {
+    await applyPartialHyperlinkFix(zip);
   }
 
   // Bold "asterisked ( * )" in Approach / Program logic model sections
@@ -1947,6 +1955,177 @@ async function applyPdfLabelFix(zip: JSZip): Promise<void> {
     const serializer = new XMLSerializer();
     zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
   }
+}
+
+// ─── LINK-009: Fix partial hyperlinks ────────────────────────────────────────
+
+/**
+ * For each w:hyperlink, moves non-whitespace characters that are accidentally
+ * outside the element but immediately adjacent to it:
+ *
+ *   Leading fix: trailing non-whitespace chars are removed from the end of the
+ *                preceding sibling w:r and inserted as a new first run in the
+ *                hyperlink.
+ *   Trailing fix: leading non-whitespace chars are removed from the start of
+ *                 the following sibling w:r and appended as a new last run.
+ *
+ * Bookmark elements (w:bookmarkStart, w:bookmarkEnd) between the run and the
+ * hyperlink are ignored; any other intervening element blocks adjacency.
+ * External (r:id) and internal (w:anchor) hyperlinks are both processed.
+ * Run properties from the external run are preserved on the new internal run.
+ */
+async function applyPartialHyperlinkFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  if (!xmlStr.includes('w:hyperlink')) return;
+
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  let changed = false;
+
+  for (const hyperlink of Array.from(xmlDoc.getElementsByTagName('w:hyperlink'))) {
+    const hlText = l9HlText(hyperlink);
+    if (!hlText) continue;
+
+    // Leading fix: move trailing non-whitespace of preceding run inside hyperlink
+    const prevRun = l9AdjacentRun(hyperlink, 'prev');
+    if (prevRun) {
+      const prevText = l9RunText(prevRun);
+      const chars = l9TrailingNonWS(prevText);
+      if (chars.length > 0 && !/^\s/.test(hlText)) {
+        const rPr = Array.from(prevRun.children).find(c => c.localName === 'rPr') as Element | undefined;
+        hyperlink.insertBefore(l9MakeRun(xmlDoc, W, rPr ?? null, chars), hyperlink.firstChild);
+        const remaining = prevText.slice(0, prevText.length - chars.length);
+        if (remaining === '') {
+          prevRun.parentNode?.removeChild(prevRun);
+        } else {
+          l9SetRunText(prevRun, remaining);
+        }
+        changed = true;
+      }
+    }
+
+    // Trailing fix: move leading non-whitespace of following run inside hyperlink
+    const hlTextNow = l9HlText(hyperlink);
+    const nextRun = l9AdjacentRun(hyperlink, 'next');
+    if (nextRun) {
+      const nextText = l9RunText(nextRun);
+      const chars = l9LeadingNonWS(nextText);
+      if (chars.length > 0 && !/\s$/.test(hlTextNow)) {
+        const rPr = Array.from(nextRun.children).find(c => c.localName === 'rPr') as Element | undefined;
+        hyperlink.appendChild(l9MakeRun(xmlDoc, W, rPr ?? null, chars));
+        const remaining = nextText.slice(chars.length);
+        if (remaining === '') {
+          nextRun.parentNode?.removeChild(nextRun);
+        } else {
+          l9SetRunText(nextRun, remaining);
+        }
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+function l9HlText(hyperlink: Element): string {
+  return Array.from(hyperlink.getElementsByTagName('w:t'))
+    .map(t => t.textContent ?? '')
+    .join('');
+}
+
+function l9RunText(run: Element): string {
+  return Array.from(run.getElementsByTagName('w:t'))
+    .map(t => t.textContent ?? '')
+    .join('');
+}
+
+/**
+ * Returns the w:r sibling adjacent to `hyperlink` in the given direction,
+ * skipping w:bookmarkStart / w:bookmarkEnd elements.
+ * Returns null if any other element type is encountered first.
+ */
+function l9AdjacentRun(hyperlink: Element, direction: 'prev' | 'next'): Element | null {
+  let node: Node | null =
+    direction === 'prev' ? hyperlink.previousSibling : hyperlink.nextSibling;
+  while (node !== null) {
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      node = direction === 'prev' ? node.previousSibling : node.nextSibling;
+      continue;
+    }
+    const el = node as Element;
+    const name = el.localName;
+    if (name === 'bookmarkStart' || name === 'bookmarkEnd') {
+      node = direction === 'prev' ? node.previousSibling : node.nextSibling;
+      continue;
+    }
+    return name === 'r' ? el : null;
+  }
+  return null;
+}
+
+function l9TrailingNonWS(text: string): string {
+  const m = text.match(/\S+$/);
+  return m ? m[0] : '';
+}
+
+function l9LeadingNonWS(text: string): string {
+  const m = text.match(/^\S+/);
+  return m ? m[0] : '';
+}
+
+/**
+ * Create a new w:r run for insertion inside a w:hyperlink.
+ * Starts from the external run's w:rPr (cloned, preserving any bold, font size, etc.),
+ * then ensures w:rStyle w:val="Hyperlink" is the first child — so the moved
+ * characters render with blue-underline hyperlink formatting.
+ * If the external run had no rPr, a new one is created with just the Hyperlink style.
+ */
+function l9MakeRun(xmlDoc: Document, W: string, rPr: Element | null, text: string): Element {
+  const run = xmlDoc.createElementNS(W, 'w:r');
+
+  const newRpr: Element = rPr
+    ? (rPr.cloneNode(true) as Element)
+    : xmlDoc.createElementNS(W, 'w:rPr');
+
+  // Remove any existing w:rStyle — it will be replaced with Hyperlink
+  const existingStyle = Array.from(newRpr.childNodes).find(
+    n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'rStyle'
+  ) as Element | undefined;
+  if (existingStyle) newRpr.removeChild(existingStyle);
+
+  // w:rStyle must be first child per OOXML schema ordering
+  const rStyle = xmlDoc.createElementNS(W, 'w:rStyle');
+  rStyle.setAttributeNS(W, 'w:val', 'Hyperlink');
+  newRpr.insertBefore(rStyle, newRpr.firstChild);
+
+  run.appendChild(newRpr);
+
+  const wT = xmlDoc.createElementNS(W, 'w:t');
+  wT.textContent = text;
+  if (text !== text.trim()) wT.setAttribute('xml:space', 'preserve');
+  run.appendChild(wT);
+  return run;
+}
+
+/** Update the text of a w:r run, collapsing to a single w:t element. */
+function l9SetRunText(run: Element, text: string): void {
+  const wTs = Array.from(run.getElementsByTagName('w:t'));
+  if (wTs.length === 0) return;
+  wTs[0]!.textContent = text;
+  if (text !== text.trim()) {
+    wTs[0]!.setAttribute('xml:space', 'preserve');
+  } else {
+    wTs[0]!.removeAttribute('xml:space');
+  }
+  for (let i = 1; i < wTs.length; i++) wTs[i]!.parentNode?.removeChild(wTs[i]!);
 }
 
 // ─── CLEAN-012: Bold "asterisked ( * )" in scoped sections ───────────────────

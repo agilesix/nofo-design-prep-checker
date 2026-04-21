@@ -2855,6 +2855,140 @@ describe('buildDocx — CLEAN-007: CDC preamble removal', () => {
   });
 });
 
+// ─── applyTrailingPeriodBoldFix (CLEAN-016) ──────────────────────────────────
+
+const W_NS_PERIOD = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function makeTrailingPeriodDocXml(body: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_PERIOD}">` +
+    `<w:body>${body}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+const TRAILING_PERIOD_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-016',
+  description: 'Bold removed from 1 trailing period.',
+  targetField: 'text.trailing.period.unbold',
+};
+
+describe('buildDocx — CLEAN-016: trailing period bold removal', () => {
+  it('removes w:b from the period run when the period is in its own run', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:t>Hello world</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>.</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeTrailingPeriodDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [TRAILING_PERIOD_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    expect(runs).toHaveLength(2);
+
+    const periodRun = runs[1]!;
+    const rPr = Array.from(periodRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(rPr?.getElementsByTagName('w:b').length ?? 0).toBe(0);
+    expect(periodRun.getElementsByTagName('w:t')[0]?.textContent).toBe('.');
+  });
+
+  it('removes w:b and w:bCs together when both are present on the period run', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:t>Hello</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/><w:bCs/></w:rPr><w:t>.</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeTrailingPeriodDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [TRAILING_PERIOD_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    const periodRun = runs[1]!;
+    const rPr = Array.from(periodRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(rPr?.getElementsByTagName('w:b').length ?? 0).toBe(0);
+    expect(rPr?.getElementsByTagName('w:bCs').length ?? 0).toBe(0);
+  });
+
+  it('splits the run when the period is attached to other bold text', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:t>Normal</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>end.</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeTrailingPeriodDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [TRAILING_PERIOD_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    // Original two-run paragraph becomes three runs: "Normal", "end" (bold), "." (not bold)
+    expect(runs).toHaveLength(3);
+
+    const boldPrefixRun = runs[1]!;
+    const periodRun = runs[2]!;
+
+    const boldRpr = Array.from(boldPrefixRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(boldRpr?.getElementsByTagName('w:b').length ?? 0).toBe(1);
+    expect(boldPrefixRun.getElementsByTagName('w:t')[0]?.textContent).toBe('end');
+
+    const periodRpr = Array.from(periodRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(periodRpr?.getElementsByTagName('w:b').length ?? 0).toBe(0);
+    expect(periodRun.getElementsByTagName('w:t')[0]?.textContent).toBe('.');
+  });
+
+  it('does not modify the document when the preceding run is also bold', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>Bold text</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>.</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeTrailingPeriodDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [TRAILING_PERIOD_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    expect(runs).toHaveLength(2);
+    const periodRun = runs[1]!;
+    const rPr = Array.from(periodRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(rPr?.getElementsByTagName('w:b').length ?? 0).toBe(1);
+  });
+});
+
 // ─── applyBoldBulletFix (CLEAN-015) ──────────────────────────────────────────
 
 const W_NS_BULLET = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -3022,5 +3156,148 @@ describe('buildDocx — CLEAN-015: bold bullet removal', () => {
       : undefined;
 
     expect(pRpr?.getElementsByTagName('w:b').length ?? 0).toBe(1);
+  });
+});
+
+// ─── applyPartialHyperlinkFix (LINK-009) ────────────────────────────────────
+
+const PARTIAL_HYPERLINK_CHANGE: AutoAppliedChange = {
+  ruleId: 'LINK-009',
+  description: 'Partial hyperlink text corrected for 1 link.',
+  targetField: 'link.partial.fix',
+  value: '1',
+};
+
+const HL_INNER_RUN =
+  `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>link text</w:t></w:r>`;
+
+function makePartialHlDocXml(before: string, after: string, inner: string = HL_INNER_RUN): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}">` +
+    `<w:body><w:p>` +
+    before +
+    `<w:hyperlink r:id="rId1" w:history="1">${inner}</w:hyperlink>` +
+    after +
+    `</w:p><w:sectPr/></w:body></w:document>`
+  );
+}
+
+function directParaRuns(xml: string): Element[] {
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xml, 'application/xml');
+  const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  return Array.from(wP!.childNodes).filter(
+    n => n.nodeType === 1 && (n as Element).localName === 'r'
+  ) as Element[];
+}
+
+describe('buildDocx — LINK-009: partial hyperlink fix', () => {
+  it('moves trailing non-ws char from preceding run into hyperlink and removes emptied run', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePartialHlDocXml(`<w:r><w:t>(</w:t></w:r>`, ``));
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('(link text');
+    expect(directParaRuns(outXml)).toHaveLength(0);
+  });
+
+  it('moves leading non-ws char from following run into hyperlink and removes emptied run', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePartialHlDocXml(``, `<w:r><w:t>)</w:t></w:r>`));
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('link text)');
+    expect(directParaRuns(outXml)).toHaveLength(0);
+  });
+
+  it('handles both leading and trailing moves on the same hyperlink', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePartialHlDocXml(`<w:r><w:t>(</w:t></w:r>`, `<w:r><w:t>)</w:t></w:r>`)
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('(link text)');
+    expect(directParaRuns(outXml)).toHaveLength(0);
+  });
+
+  it('trims only trailing non-ws from preceding run, preserving whitespace remainder', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePartialHlDocXml(`<w:r><w:t xml:space="preserve">Hello (</w:t></w:r>`, ``)
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('(link text');
+    const remaining = directParaRuns(outXml);
+    expect(remaining).toHaveLength(1);
+    const text = Array.from((remaining[0] as Element).getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '')
+      .join('');
+    expect(text).toBe('Hello ');
+  });
+
+  it('skips bookmark elements between preceding run and hyperlink and still applies fix', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePartialHlDocXml(
+        `<w:r><w:t>(</w:t></w:r><w:bookmarkEnd w:id="0"/>`,
+        ``
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('(link text');
+  });
+
+  it('does not apply fix when a non-bookmark element blocks adjacency', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePartialHlDocXml(
+        `<w:r><w:t>(</w:t></w:r><w:proofErr w:type="spellStart"/>`,
+        ``
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('link text');
+  });
+
+  it('inserts the moved run with w:rStyle w:val="Hyperlink" for correct rendering', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePartialHlDocXml(`<w:r><w:t>(</w:t></w:r>`, ``));
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    const hl = hyperlinks.find(el => el.getAttributeNS(R_NS, 'id') === 'rId1')!;
+    const runs = Array.from(hl.children).filter(c => c.localName === 'r');
+    const insertedRun = runs[0]!;
+    const rPr = Array.from(insertedRun.children).find(c => c.localName === 'rPr');
+    const rStyle = rPr ? Array.from(rPr.children).find(c => c.localName === 'rStyle') : undefined;
+    expect(rStyle?.getAttributeNS(W_NS, 'val')).toBe('Hyperlink');
+  });
+
+  it('does not modify the document when autoAppliedChanges does not include LINK-009', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePartialHlDocXml(`<w:r><w:t>(</w:t></w:r>`, ``));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('link text');
+    expect(directParaRuns(outXml)).toHaveLength(1);
   });
 });
