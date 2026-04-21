@@ -3158,3 +3158,146 @@ describe('buildDocx — CLEAN-015: bold bullet removal', () => {
     expect(pRpr?.getElementsByTagName('w:b').length ?? 0).toBe(1);
   });
 });
+
+// ─── applyPartialHyperlinkFix (LINK-009) ────────────────────────────────────
+
+const PARTIAL_HYPERLINK_CHANGE: AutoAppliedChange = {
+  ruleId: 'LINK-009',
+  description: 'Partial hyperlink text corrected for 1 link.',
+  targetField: 'link.partial.fix',
+  value: '1',
+};
+
+const HL_INNER_RUN =
+  `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>link text</w:t></w:r>`;
+
+function makePartialHlDocXml(before: string, after: string, inner: string = HL_INNER_RUN): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}">` +
+    `<w:body><w:p>` +
+    before +
+    `<w:hyperlink r:id="rId1" w:history="1">${inner}</w:hyperlink>` +
+    after +
+    `</w:p><w:sectPr/></w:body></w:document>`
+  );
+}
+
+function directParaRuns(xml: string): Element[] {
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xml, 'application/xml');
+  const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  return Array.from(wP!.childNodes).filter(
+    n => n.nodeType === 1 && (n as Element).localName === 'r'
+  ) as Element[];
+}
+
+describe('buildDocx — LINK-009: partial hyperlink fix', () => {
+  it('moves trailing non-ws char from preceding run into hyperlink and removes emptied run', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePartialHlDocXml(`<w:r><w:t>(</w:t></w:r>`, ``));
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('(link text');
+    expect(directParaRuns(outXml)).toHaveLength(0);
+  });
+
+  it('moves leading non-ws char from following run into hyperlink and removes emptied run', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePartialHlDocXml(``, `<w:r><w:t>)</w:t></w:r>`));
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('link text)');
+    expect(directParaRuns(outXml)).toHaveLength(0);
+  });
+
+  it('handles both leading and trailing moves on the same hyperlink', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePartialHlDocXml(`<w:r><w:t>(</w:t></w:r>`, `<w:r><w:t>)</w:t></w:r>`)
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('(link text)');
+    expect(directParaRuns(outXml)).toHaveLength(0);
+  });
+
+  it('trims only trailing non-ws from preceding run, preserving whitespace remainder', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePartialHlDocXml(`<w:r><w:t xml:space="preserve">Hello (</w:t></w:r>`, ``)
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('(link text');
+    const remaining = directParaRuns(outXml);
+    expect(remaining).toHaveLength(1);
+    const text = Array.from((remaining[0] as Element).getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '')
+      .join('');
+    expect(text).toBe('Hello ');
+  });
+
+  it('skips bookmark elements between preceding run and hyperlink and still applies fix', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePartialHlDocXml(
+        `<w:r><w:t>(</w:t></w:r><w:bookmarkEnd w:id="0"/>`,
+        ``
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('(link text');
+  });
+
+  it('does not apply fix when a non-bookmark element blocks adjacency', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePartialHlDocXml(
+        `<w:r><w:t>(</w:t></w:r><w:proofErr w:type="spellStart"/>`,
+        ``
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('link text');
+  });
+
+  it('inserts the moved run with w:rStyle w:val="Hyperlink" for correct rendering', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePartialHlDocXml(`<w:r><w:t>(</w:t></w:r>`, ``));
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    const hl = hyperlinks.find(el => el.getAttributeNS(R_NS, 'id') === 'rId1')!;
+    const runs = Array.from(hl.children).filter(c => c.localName === 'r');
+    const insertedRun = runs[0]!;
+    const rPr = Array.from(insertedRun.children).find(c => c.localName === 'rPr');
+    const rStyle = rPr ? Array.from(rPr.children).find(c => c.localName === 'rStyle') : undefined;
+    expect(rStyle?.getAttributeNS(W_NS, 'val')).toBe('Hyperlink');
+  });
+
+  it('does not modify the document when autoAppliedChanges does not include LINK-009', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePartialHlDocXml(`<w:r><w:t>(</w:t></w:r>`, ``));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('link text');
+    expect(directParaRuns(outXml)).toHaveLength(1);
+  });
+});

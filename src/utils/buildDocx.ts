@@ -2081,10 +2081,33 @@ function l9LeadingNonWS(text: string): string {
   return m ? m[0] : '';
 }
 
-/** Create a new w:r run with optional cloned w:rPr and a single w:t element. */
+/**
+ * Create a new w:r run for insertion inside a w:hyperlink.
+ * Starts from the external run's w:rPr (cloned, preserving any bold, font size, etc.),
+ * then ensures w:rStyle w:val="Hyperlink" is the first child — so the moved
+ * characters render with blue-underline hyperlink formatting.
+ * If the external run had no rPr, a new one is created with just the Hyperlink style.
+ */
 function l9MakeRun(xmlDoc: Document, W: string, rPr: Element | null, text: string): Element {
   const run = xmlDoc.createElementNS(W, 'w:r');
-  if (rPr) run.appendChild(rPr.cloneNode(true));
+
+  const newRpr: Element = rPr
+    ? (rPr.cloneNode(true) as Element)
+    : xmlDoc.createElementNS(W, 'w:rPr');
+
+  // Remove any existing w:rStyle — it will be replaced with Hyperlink
+  const existingStyle = Array.from(newRpr.childNodes).find(
+    n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'rStyle'
+  ) as Element | undefined;
+  if (existingStyle) newRpr.removeChild(existingStyle);
+
+  // w:rStyle must be first child per OOXML schema ordering
+  const rStyle = xmlDoc.createElementNS(W, 'w:rStyle');
+  rStyle.setAttributeNS(W, 'w:val', 'Hyperlink');
+  newRpr.insertBefore(rStyle, newRpr.firstChild);
+
+  run.appendChild(newRpr);
+
   const wT = xmlDoc.createElementNS(W, 'w:t');
   wT.textContent = text;
   if (text !== text.trim()) wT.setAttribute('xml:space', 'preserve');
