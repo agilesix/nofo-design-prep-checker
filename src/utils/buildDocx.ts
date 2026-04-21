@@ -2408,10 +2408,20 @@ function p16RunText(run: Element): string {
     .join('');
 }
 
+function p16IsEnabledOnOffProperty(el: Element | null): boolean {
+  if (!el) return false;
+  const val = el.getAttribute('w:val');
+  if (val == null) return true;
+  return val !== '0' && val !== 'false' && val !== 'off';
+}
+
 function p16RunHasBold(run: Element): boolean {
   const rPr = directChildEl(run, 'w:rPr');
   if (!rPr) return false;
-  return !!directChildEl(rPr, 'w:b');
+  return (
+    p16IsEnabledOnOffProperty(directChildEl(rPr, 'w:b')) ||
+    p16IsEnabledOnOffProperty(directChildEl(rPr, 'w:bCs'))
+  );
 }
 
 function p16RemoveBold(run: Element): void {
