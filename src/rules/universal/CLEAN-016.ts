@@ -77,7 +77,7 @@ function runText(run: Element): string {
 function runHasBold(run: Element): boolean {
   const rPr = c16DirectChild(run, 'w:rPr');
   if (!rPr) return false;
-  return !!c16DirectChild(rPr, 'w:b');
+  return !!c16DirectChild(rPr, 'w:b') || !!c16DirectChild(rPr, 'w:bCs');
 }
 
 function c16DirectChild(parent: Element, tagName: string): Element | null {
