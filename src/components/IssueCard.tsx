@@ -82,15 +82,18 @@ export default function IssueCard({
     ? { backgroundColor: resolution === 'accepted' ? '#ecf3ec' : '#f0f0f0' }
     : {};
 
-  function handleSkip(): void {
+  function resetInputState(): void {
     setInputValue(issue.inputRequired?.prefill ?? '');
     setValidationError(null);
+  }
+
+  function handleSkip(): void {
+    resetInputState();
     onSkip();
   }
 
   function handleUndo(): void {
-    setInputValue(issue.inputRequired?.prefill ?? '');
-    setValidationError(null);
+    resetInputState();
     onUndo();
   }
 
