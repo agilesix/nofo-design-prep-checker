@@ -3567,4 +3567,115 @@ describe('buildDocx — LINK-008: email mailto conversion', () => {
       .getElementsByTagNameNS(RELS_NS, 'Relationship'))
       .toHaveLength(0);
   });
+
+  it('converts two different email addresses in separate runs — both get hyperlinked with distinct rels entries', async () => {
+    const email1 = 'alice@example.com';
+    const email2 = 'bob@example.org';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t>${email1}</w:t></w:r></w:p>` +
+      `<w:p><w:r><w:t>${email2}</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    const outZip = await getOutputZip(zip, [], [
+      makeEmailChange(email1),
+      makeEmailChange(email2),
+    ]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+    const relsXml = await outZip.file('word/_rels/document.xml.rels')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+    const relsDoc = parser.parseFromString(relsXml, 'application/xml');
+
+    // Both paragraphs should have a hyperlink
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(2);
+
+    const hlTexts = hyperlinks.map(hl =>
+      Array.from(hl.getElementsByTagName('w:t')).map(t => t.textContent ?? '').join('')
+    );
+    expect(hlTexts).toContain(email1);
+    expect(hlTexts).toContain(email2);
+
+    // Two separate rels entries, one per email
+    const rels = Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'));
+    expect(rels).toHaveLength(2);
+    const targets = rels.map(r => r.getAttribute('Target') ?? '');
+    expect(targets).toContain(`mailto:${email1}`);
+    expect(targets).toContain(`mailto:${email2}`);
+  });
+
+  it('converts both occurrences of the same email address appearing in different paragraphs', async () => {
+    const email = 'repeat@example.com';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t>${email}</w:t></w:r></w:p>` +
+      `<w:p><w:r><w:t>${email}</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    // Rule emits one change per occurrence — two changes for two occurrences
+    const outZip = await getOutputZip(zip, [], [
+      makeEmailChange(email),
+      makeEmailChange(email),
+    ]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+    const relsXml = await outZip.file('word/_rels/document.xml.rels')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+    const relsDoc = parser.parseFromString(relsXml, 'application/xml');
+
+    // Both runs should be wrapped — two hyperlinks in the document
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(2);
+
+    // Both hyperlinks should carry the same email text
+    for (const hl of hyperlinks) {
+      const text = Array.from(hl.getElementsByTagName('w:t'))
+        .map(t => t.textContent ?? '').join('');
+      expect(text).toBe(email);
+    }
+
+    // Only ONE relationship entry is needed for the same email
+    const rels = Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'));
+    expect(rels).toHaveLength(1);
+    expect(rels[0]!.getAttribute('Target')).toBe(`mailto:${email}`);
+
+    // Both hyperlinks reference the same rId
+    const relId = rels[0]!.getAttribute('Id');
+    for (const hl of hyperlinks) {
+      expect(hl.getAttributeNS(R_NS, 'id')).toBe(relId);
+    }
+  });
+
+  it('converts two different emails embedded in the same text run — both get hyperlinked', async () => {
+    const email1 = 'first@example.com';
+    const email2 = 'second@example.org';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t xml:space="preserve">${email1} or ${email2}</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    const outZip = await getOutputZip(zip, [], [
+      makeEmailChange(email1),
+      makeEmailChange(email2),
+    ]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(2);
+
+    const hlTexts = hyperlinks.map(hl =>
+      Array.from(hl.getElementsByTagName('w:t')).map(t => t.textContent ?? '').join('')
+    );
+    expect(hlTexts).toContain(email1);
+    expect(hlTexts).toContain(email2);
+  });
 });
