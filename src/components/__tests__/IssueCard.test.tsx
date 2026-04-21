@@ -63,9 +63,9 @@ async function typeValue(container: HTMLDivElement, value: string): Promise<void
 async function clickButton(container: HTMLDivElement, label: string): Promise<void> {
   const btn = Array.from(container.querySelectorAll('button')).find(
     (b) => b.textContent?.trim() === label,
-  ) as HTMLButtonElement;
-  expect(btn).not.toBeNull();
-  await act(async () => { btn.click(); });
+  );
+  expect(btn, `Button with label "${label}" was not found`).toBeTruthy();
+  await act(async () => { btn!.click(); });
 }
 
 describe('IssueCard – skip with a recorded text input value', () => {
