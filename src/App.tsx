@@ -206,15 +206,31 @@ export default function App(): React.ReactElement {
         type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: downloadName });
-        return;
+        try {
+          await navigator.share({ files: [file], title: downloadName });
+          return;
+        } catch (error) {
+          if (!(error instanceof DOMException) || (error.name !== 'AbortError' && error.name !== 'NotAllowedError')) {
+            throw error;
+          }
+        }
       }
       // Fall back to base64 data URI — iOS opens it via its file handler which offers Word
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        window.location.href = reader.result as string;
-      };
-      reader.readAsDataURL(blob);
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => {
+          reject(reader.error ?? new Error('Failed to read generated document.'));
+        };
+        reader.onloadend = () => {
+          if (typeof reader.result === 'string') {
+            resolve(reader.result);
+            return;
+          }
+          reject(new Error('Failed to generate a data URL for download.'));
+        };
+        reader.readAsDataURL(blob);
+      });
+      window.location.href = dataUrl;
       return;
     }
 
