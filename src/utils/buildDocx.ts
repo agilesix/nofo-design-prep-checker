@@ -33,6 +33,9 @@ export async function buildDocx(
   const hasTaglineRelocate = autoAppliedChanges.some(
     c => c.targetField === 'struct.tagline.relocate'
   );
+  const hasTaglineUnquote = autoAppliedChanges.some(
+    c => c.targetField === 'text.tagline.unquote'
+  );
   const hasRemoveBybHeading = autoAppliedChanges.some(
     c => c.targetField === 'struct.byb.removeheading'
   );
@@ -57,27 +60,53 @@ export async function buildDocx(
   const hasPdfLabelFix = autoAppliedChanges.some(
     c => c.targetField === 'link.pdf.label'
   );
-  const fmtAnchorChanges = autoAppliedChanges.filter(
-    c => c.targetField === 'link.anchor.fmt' && c.value
-  );
   const hasAsteriskedBoldFix = autoAppliedChanges.some(
     c => c.targetField === 'text.asterisked.bold'
   );
   const hasTimeCorrection = autoAppliedChanges.some(
     c => c.targetField === 'format.time.correct'
   );
+  const hasBoldBulletFix = autoAppliedChanges.some(
+    c => c.targetField === 'list.bullet.unbold'
+  );
+  const hasTrailingPeriodBoldFix = autoAppliedChanges.some(
+    c => c.targetField === 'text.trailing.period.unbold'
+  );
+  const hasPartialHyperlinkFix = autoAppliedChanges.some(
+    c => c.targetField === 'link.partial.fix'
+  );
+  const hasImportantPublicHeadingFix = autoAppliedChanges.some(
+    c => c.targetField === 'table.importantpublic.heading'
+  );
   const h2TitleCaseChanges = autoAppliedChanges.filter(
     c => c.targetField === 'heading.h2.titlecase' && c.value
   );
+  const headingLevelFixes = acceptedFixes.filter(
+    f => f.targetField?.startsWith('heading.level.H') && !!f.value
+  );
+  const headingTextFixes = acceptedFixes.filter(
+    f => f.targetField?.startsWith('heading.text.H') && !!f.value
+  );
+  const autoLinkBookmarkChanges = autoAppliedChanges
+    .filter(c => c.ruleId === 'LINK-006' && c.targetField?.startsWith('link.bookmark.') && !!c.value)
+    .map(
+      c =>
+        ({
+          issueId: `auto:${c.ruleId}:${c.targetField}`,
+          ruleId: c.ruleId,
+          targetField: c.targetField,
+          value: c.value,
+        } as AcceptedFix)
+    );
 
   // Apply metadata patches
   if (metaFixes.length > 0) {
     await applyMetadataFixes(zip, metaFixes);
   }
 
-  // Apply body patches (links, format)
-  if (bodyFixes.length > 0 || imgFixes.length > 0) {
-    await applyDocumentBodyFixes(zip, [...bodyFixes, ...imgFixes]);
+  // Apply body patches (links, format) plus auto-applied bookmark retargets
+  if (bodyFixes.length > 0 || imgFixes.length > 0 || autoLinkBookmarkChanges.length > 0) {
+    await applyDocumentBodyFixes(zip, [...bodyFixes, ...imgFixes, ...autoLinkBookmarkChanges]);
   }
 
   // Apply auto-applied email mailto patches
@@ -85,11 +114,17 @@ export async function buildDocx(
     await applyEmailMailtoFixes(zip, emailChanges.map(c => c.value as string));
   }
 
-  // Retarget internal bookmark anchors corrected for formatting (capitalization,
-  // leading/trailing underscores from heading whitespace artifacts, or missing
-  // word-separator underscores such as #AppendixA → #Appendix_A)
-  if (fmtAnchorChanges.length > 0) {
-    await applyAnchorFmtFixes(zip, fmtAnchorChanges);
+  // Apply accepted heading level corrections (HEAD-003) — must run before any
+  // transform that removes or reorders headings (applyRemoveDghtScaffolding,
+  // applyRemoveBeforeYouBeginHeading) so that ordinal-index-based targeting
+  // remains aligned with the heading structure check() observed.
+  if (headingLevelFixes.length > 0) {
+    await applyHeadingLevelCorrections(zip, headingLevelFixes);
+  }
+
+  // Apply accepted heading text corrections (HEAD-004)
+  if (headingTextFixes.length > 0) {
+    await applyHeadingTextCorrections(zip, headingTextFixes);
   }
 
   // Apply double-space collapse
@@ -107,6 +142,12 @@ export async function buildDocx(
   // Apply tagline relocation
   if (hasTaglineRelocate) {
     await applyTaglineRelocation(zip);
+  }
+
+  // Strip wrapping quotes from the tagline value (runs after relocation so
+  // the tagline is in its final position before its content is modified)
+  if (hasTaglineUnquote) {
+    await applyTaglineUnquote(zip);
   }
 
   // Apply "Before You Begin" heading removal
@@ -150,6 +191,11 @@ export async function buildDocx(
     await applyPdfLabelFix(zip);
   }
 
+  // Move partial-word characters that are outside w:hyperlink into it
+  if (hasPartialHyperlinkFix) {
+    await applyPartialHyperlinkFix(zip);
+  }
+
   // Bold "asterisked ( * )" in Approach / Program logic model sections
   if (hasAsteriskedBoldFix) {
     await applyAsteriskedBoldFix(zip);
@@ -160,9 +206,25 @@ export async function buildDocx(
     await applyTimeFormatCorrections(zip);
   }
 
+  // Remove bold from list item bullet/number characters
+  if (hasBoldBulletFix) {
+    await applyBoldBulletFix(zip);
+  }
+
+  // Remove bold from trailing periods preceded by non-bold text
+  if (hasTrailingPeriodBoldFix) {
+    await applyTrailingPeriodBoldFix(zip);
+  }
+
   // Strip content controls — unconditional, silent (documented on the Download
   // page; no issue is surfaced to the user and no entry goes in the summary).
+  // Runs before TABLE-004 so that tables wrapped in w:sdt are already unwrapped.
   await applyRemoveContentControls(zip);
+
+  // Apply heading style to "Important: public information" in single-cell tables
+  if (hasImportantPublicHeadingFix) {
+    await applyImportantPublicHeadingFix(zip);
+  }
 
   return await zip.generateAsync({
     type: 'blob',
@@ -302,9 +364,13 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
       if (anchor && newText?.trim()) {
         const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
         for (const el of hyperlinks) {
-          // Use getAttributeNS so the namespace-qualified attribute is matched
-          // correctly regardless of how the XML was parsed or serialized.
-          if (el.getAttributeNS(W, 'anchor') !== anchor) continue;
+          // getAttribute('w:anchor') is the primary read path: jsdom (and some
+          // browsers) store namespace-prefixed attributes under their qualified
+          // name rather than as namespace-aware attributes, so getAttributeNS
+          // returns null.  getAttributeNS is kept as a fallback for environments
+          // that store attributes namespace-aware but not under the qualified name.
+          const elAnchor = el.getAttribute('w:anchor') ?? el.getAttributeNS(W, 'anchor');
+          if (elAnchor !== anchor) continue;
 
           // Collect only the direct-child <w:r> runs of this hyperlink (bookmarks
           // and other sibling nodes are left untouched).
@@ -344,16 +410,15 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
             el.removeChild(runs[i]!);
           }
 
-          // Explicitly re-assert the w:anchor attribute via setAttributeNS.
-          // XMLSerializer may drop or strip the namespace prefix when serializing
-          // attributes that were only read (never written) through the DOM API —
-          // emitting `anchor="…"` instead of `w:anchor="…"`.  Word's hyperlink
-          // resolver looks for the namespace-qualified `w:anchor` attribute; a
-          // non-prefixed `anchor` attribute is invisible to it and the link
-          // silently falls back to navigating to the top of the document.
-          // setAttributeNS guarantees the attribute is written with the correct
-          // namespace URI so XMLSerializer always emits the `w:` prefix.
-          el.setAttributeNS(W, 'w:anchor', anchor);
+          // Re-assert w:anchor after modifying the run text so XMLSerializer
+          // always emits the attribute with its qualified name.  setAttribute
+          // (not setAttributeNS) is used deliberately: setAttributeNS causes
+          // XMLSerializer to inject a redundant xmlns:w declaration on this
+          // child element; setAttribute stores the qualified name directly and
+          // produces clean output without extra namespace re-declarations.
+          el.removeAttributeNS(W, 'anchor');
+          el.removeAttribute('anchor');
+          el.setAttribute('w:anchor', anchor);
         }
       }
     }
@@ -362,18 +427,16 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
     // targetField: "link.bookmark.{old_anchor}", value: "{new_anchor}"
     if (fix.ruleId === 'LINK-006' && fix.targetField?.startsWith('link.bookmark.')) {
       const oldAnchor = fix.targetField.replace('link.bookmark.', '');
-      const newAnchor = fix.value;
-      const normalizedNewAnchor = newAnchor.trim().replace(/^#/, '');
-      if (!normalizedNewAnchor) {
-        continue;
-      }
-      const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
-      for (const el of hyperlinks) {
-        // Use namespace-aware accessors so the attribute is read and written with
-        // its correct OOXML namespace URI, preventing XMLSerializer from emitting
-        // a non-namespaced or differently-prefixed attribute that Word cannot read.
-        if (el.getAttributeNS(W, 'anchor') === oldAnchor) {
-          el.setAttributeNS(W, 'w:anchor', normalizedNewAnchor);
+      const normalizedNewAnchor = (fix.value ?? '').trim().replace(/^#/, '');
+      if (normalizedNewAnchor) {
+        const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+        for (const el of hyperlinks) {
+          const elAnchor = el.getAttribute('w:anchor') ?? el.getAttributeNS(W, 'anchor');
+          if (elAnchor === oldAnchor) {
+            el.removeAttributeNS(W, 'anchor');
+            el.removeAttribute('anchor');
+            el.setAttribute('w:anchor', normalizedNewAnchor);
+          }
         }
       }
     }
@@ -381,53 +444,6 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
     // LINK-003: update link text
     if (fix.ruleId === 'LINK-003' && fix.targetField?.startsWith('link.')) {
       // Production implementation: match by relationship ID stored in the issue
-    }
-  }
-
-  const serializer = new XMLSerializer();
-  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
-}
-
-/**
- * LINK-006: Retarget internal bookmark anchors that differ from the correct
- * target only by capitalization and/or leading/trailing underscores
- * (e.g. #eligibility → #Eligibility, #_Key_facts → #Key_facts).
- * Each AutoAppliedChange carries a JSON-encoded array of {old, new} pairs in
- * its `value` field. All w:hyperlink elements whose w:anchor matches an old
- * anchor are rewritten to the corrected new anchor.
- */
-async function applyAnchorFmtFixes(zip: JSZip, changes: AutoAppliedChange[]): Promise<void> {
-  const docFile = zip.file('word/document.xml');
-  if (!docFile) return;
-
-  const xmlStr = await docFile.async('string');
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
-  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-  const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
-
-  for (const change of changes) {
-    let pairs: { old: string; new: string }[];
-    try {
-      const parsed = JSON.parse(change.value!);
-      if (!Array.isArray(parsed)) continue;
-      pairs = parsed.filter(
-        (p): p is { old: string; new: string } =>
-          p !== null &&
-          typeof p === 'object' &&
-          typeof p.old === 'string' &&
-          typeof p.new === 'string'
-      );
-    } catch {
-      // Malformed JSON — skip this entry so the rest of the download still succeeds
-      continue;
-    }
-    for (const pair of pairs) {
-      for (const el of hyperlinks) {
-        if (el.getAttributeNS(W, 'anchor') === pair.old) {
-          el.setAttributeNS(W, 'w:anchor', pair.new);
-        }
-      }
     }
   }
 
@@ -607,6 +623,85 @@ async function applyTaglineRelocation(zip: JSZip): Promise<void> {
     body.insertBefore(primary, nextSibling);
   } else {
     body.appendChild(primary);
+  }
+
+  const serializer = new XMLSerializer();
+  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+}
+
+// ─── CLEAN-014: Strip wrapping quotes from tagline value ─────────────────────
+
+/**
+ * Find the tagline paragraph and strip wrapping straight or smart double
+ * quotes from its value. Leaves the "Tagline:" prefix and spacing intact.
+ * Re-verifies that wrapping quotes are present before modifying so the
+ * function is safe to call even if the autoApplied trigger fired spuriously.
+ */
+async function applyTaglineUnquote(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  const paragraphs = Array.from(body.childNodes).filter(
+    n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'p'
+  ) as Element[];
+
+  const taglinePara = paragraphs.find(el => /^tagline\s*:/i.test(getParaText(el).trim()));
+  if (!taglinePara) return;
+
+  const fullText = getParaText(taglinePara).trim();
+  const colonIdx = fullText.indexOf(':');
+  if (colonIdx === -1) return;
+
+  let openingQuoteIdx = colonIdx + 1;
+  while (
+    openingQuoteIdx < fullText.length &&
+    /\s/.test(fullText.charAt(openingQuoteIdx))
+  ) {
+    openingQuoteIdx++;
+  }
+
+  let closingQuoteIdx = fullText.length - 1;
+  while (
+    closingQuoteIdx > openingQuoteIdx &&
+    /\s/.test(fullText.charAt(closingQuoteIdx))
+  ) {
+    closingQuoteIdx--;
+  }
+
+  if (openingQuoteIdx >= closingQuoteIdx) return;
+
+  const openingQuote = fullText.charAt(openingQuoteIdx);
+  const closingQuote = fullText.charAt(closingQuoteIdx);
+  const isOuterQuotePair =
+    (openingQuote === '"' && closingQuote === '"') ||
+    (openingQuote === '\'' && closingQuote === '\'') ||
+    (openingQuote === '“' && closingQuote === '”') ||
+    (openingQuote === '‘' && closingQuote === '’');
+  if (!isOuterQuotePair) return;
+
+  // Strip only the outer quote pair (straight or smart), preserving all other spacing.
+  const newText =
+    fullText.slice(0, openingQuoteIdx) +
+    fullText.slice(openingQuoteIdx + 1, closingQuoteIdx) +
+    fullText.slice(closingQuoteIdx + 1);
+  const allWTs = Array.from(taglinePara.getElementsByTagName('w:t'));
+  if (allWTs.length === 0) return;
+
+  allWTs[0]!.textContent = newText;
+  if (newText !== newText.trim()) {
+    allWTs[0]!.setAttribute('xml:space', 'preserve');
+  } else {
+    allWTs[0]!.removeAttribute('xml:space');
+  }
+  for (let i = 1; i < allWTs.length; i++) {
+    allWTs[i]!.textContent = '';
   }
 
   const serializer = new XMLSerializer();
@@ -835,90 +930,62 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
   //     pointing to a non-existent target, so the link is broken in Word.
   //
   // Three-layer attribute read to handle all serialization states:
-  //  a. getAttributeNS(W, 'anchor') — namespace-aware read (primary, correct for
-  //     original OOXML where the attribute is namespace-qualified).
-  //  b. getAttribute('anchor') — unprefixed fallback: catches the state after a
-  //     prior XMLSerializer pass stripped the namespace prefix from the attribute.
-  //  c. getAttribute('w:anchor') — qualified-name fallback: catches the state in
-  //     some browser DOMParser implementations that store attributes under their
-  //     full qualified name rather than under a namespace URI.
+  //  a. getAttribute('w:anchor') — primary: jsdom (and some browsers) store
+  //     namespace-prefixed attributes under their qualified name, so getAttributeNS
+  //     returns null even though the attribute is present.
+  //  b. getAttributeNS(W, 'anchor') — fallback for namespace-aware DOM environments
+  //     where the attribute is stored under the namespace URI, not the qualified name.
+  //  c. getAttribute('anchor') — last resort for the uncommon case where a prior
+  //     XMLSerializer pass stripped the namespace prefix from the attribute.
   //
-  // getElementsByTagNameNS is used instead of getElementsByTagName so element
-  // lookup succeeds even when a prior XMLSerializer pass remapped the 'w:' prefix
-  // to a different local alias (e.g. 'ns0:') — the namespace URI is stable even
-  // when the prefix is not.
+  // getElementsByTagName('w:hyperlink') is used rather than getElementsByTagNameNS
+  // because jsdom's XMLSerializer does not remap the 'w:' prefix, so the qualified
+  // tag name lookup is reliable and avoids the complexity of the NS variant.
   if (anchorRemap.size > 0) {
-    // getElementsByTagNameNS is robust against prefix remapping by XMLSerializer;
-    // getElementsByTagName is kept as a fallback for environments that do not
-    // support the NS variant for non-HTML content types.
-    const hyperlinksByNS = Array.from(xmlDoc.getElementsByTagNameNS(W, 'hyperlink'));
-    const hyperlinksByTag = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
-    // Merge both results, deduplicated by identity, so no element is visited twice.
-    const seenH = new Set<Element>();
-    const allHyperlinks: Element[] = [];
-    for (const el of [...hyperlinksByNS, ...hyperlinksByTag]) {
-      if (!seenH.has(el)) { seenH.add(el); allHyperlinks.push(el); }
-    }
-    dbg(
-      `[CLEAN-008] Scanning ${allHyperlinks.length} w:hyperlink elements for anchor update` +
-      ` (byNS=${hyperlinksByNS.length}, byTag=${hyperlinksByTag.length})`
-    );
+    const allHyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    dbg(`[CLEAN-008] Scanning ${allHyperlinks.length} w:hyperlink elements for anchor update`);
     for (const link of allHyperlinks) {
+      const anchorQual = link.getAttribute('w:anchor');
       const anchorNS = link.getAttributeNS(W, 'anchor');
       const anchorPlain = link.getAttribute('anchor');
-      const anchorQual = link.getAttribute('w:anchor');
-      const anchor = anchorNS ?? anchorPlain ?? anchorQual;
+      const anchor = anchorQual ?? anchorNS ?? anchorPlain;
       const matched = anchor ? anchorRemap.has(anchor) : false;
       dbg(
-        `[CLEAN-008]   hyperlink: getAttributeNS="${anchorNS}", plain="${anchorPlain}", qualified="${anchorQual}"` +
+        `[CLEAN-008]   hyperlink: qualified="${anchorQual}", getAttributeNS="${anchorNS}", plain="${anchorPlain}"` +
         `, combined="${anchor}", inRemap=${matched}`
       );
       if (anchor && matched) {
         const newVal = anchorRemap.get(anchor)!;
         dbg(`[CLEAN-008]     → Updating anchor "${anchor}" to "${newVal}"`);
-        // Remove any stale unprefixed, qualified-name, or namespace-aware
-        // duplicates so the serialized XML carries exactly one anchor
-        // attribute with the 'w:' prefix.
-        link.removeAttribute('anchor');
-        link.removeAttribute('w:anchor');
+        // Remove all stale variants so the output carries exactly one anchor
+        // attribute.  setAttribute (not setAttributeNS) is used so XMLSerializer
+        // does not inject a redundant xmlns:w declaration on this child element,
+        // which would shadow the root namespace declaration and break downstream
+        // OOXML consumers (including NOFO Builder).
         link.removeAttributeNS(W, 'anchor');
-        // Assert the canonical namespaced attribute once so XMLSerializer
-        // emits 'w:anchor'.
-        link.setAttributeNS(W, 'w:anchor', newVal);
+        link.removeAttribute('anchor');
+        link.setAttribute('w:anchor', newVal);
       }
     }
 
-    const bookmarksByNS = Array.from(xmlDoc.getElementsByTagNameNS(W, 'bookmarkStart'));
-    const bookmarksByTag = Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'));
-    const seenB = new Set<Element>();
-    const allBookmarks: Element[] = [];
-    for (const el of [...bookmarksByNS, ...bookmarksByTag]) {
-      if (!seenB.has(el)) { seenB.add(el); allBookmarks.push(el); }
-    }
-    dbg(
-      `[CLEAN-008] Scanning ${allBookmarks.length} w:bookmarkStart elements for name update` +
-      ` (byNS=${bookmarksByNS.length}, byTag=${bookmarksByTag.length})`
-    );
+    const allBookmarks = Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'));
+    dbg(`[CLEAN-008] Scanning ${allBookmarks.length} w:bookmarkStart elements for name update`);
     for (const bm of allBookmarks) {
+      const nameQual = bm.getAttribute('w:name');
       const nameNS = bm.getAttributeNS(W, 'name');
       const namePlain = bm.getAttribute('name');
-      const nameQual = bm.getAttribute('w:name');
-      const name = nameNS ?? namePlain ?? nameQual;
+      const name = nameQual ?? nameNS ?? namePlain;
       const matched = name ? anchorRemap.has(name) : false;
       dbg(
-        `[CLEAN-008]   bookmark: getAttributeNS="${nameNS}", plain="${namePlain}", qualified="${nameQual}"` +
+        `[CLEAN-008]   bookmark: qualified="${nameQual}", getAttributeNS="${nameNS}", plain="${namePlain}"` +
         `, combined="${name}", inRemap=${matched}`
       );
       if (name && matched) {
         const newVal = anchorRemap.get(name)!;
         dbg(`[CLEAN-008]     → Updating bookmark name "${name}" to "${newVal}"`);
-        // Remove all stale variants first (plain, qualified, namespace-aware),
-        // then assert the canonical namespaced attribute once — mirrors the
-        // same pattern used for hyperlink anchor cleanup above.
-        bm.removeAttribute('name');
-        bm.removeAttribute('w:name');
         bm.removeAttributeNS(W, 'name');
-        bm.setAttributeNS(W, 'w:name', newVal);
+        bm.removeAttribute('name');
+        bm.setAttribute('w:name', newVal);
       }
     }
   }
@@ -1056,6 +1123,183 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
   }
 }
 
+// ─── HEAD-003: Heading level corrections ─────────────────────────────────────
+
+/**
+ * HEAD-003: Change the heading level (w:pStyle) of paragraphs accepted by the
+ * user.
+ *
+ * Each AcceptedFix carries:
+ *   targetField: "heading.level.H{fromLevel}.{headingIndex}::{headingText}"
+ *   value:       the confirmed target level as a string (e.g. "2")
+ *
+ * headingIndex is the 0-based ordinal position of the paragraph among all
+ * heading paragraphs in document order — this uniquely identifies the target
+ * even when multiple headings share the same text.
+ *
+ * This function must be called before any transform that removes or reorders
+ * heading paragraphs so that headingCount stays aligned with the indices that
+ * check() encoded. As a secondary guard, the paragraph text is verified
+ * against the encoded headingText before the style change is applied.
+ *
+ * The patch replaces the trailing digit(s) of the existing w:pStyle w:val,
+ * preserving whether the original used "Heading1" or "Heading 1" format.
+ */
+async function applyHeadingLevelCorrections(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  interface LevelFix { from: number; to: number; text: string }
+  const fixesByIndex = new Map<number, LevelFix>();
+
+  for (const fix of fixes) {
+    if (!fix.targetField || !fix.value) continue;
+    // Format: "heading.level.H{fromLevel}.{headingIndex}::{headingText}"
+    const encoded = fix.targetField.replace('heading.level.H', '');
+    const dotIdx = encoded.indexOf('.');
+    if (dotIdx === -1) continue;
+    const fromLevel = parseInt(encoded.slice(0, dotIdx), 10);
+    const rest = encoded.slice(dotIdx + 1);
+    const sepIdx = rest.indexOf('::');
+    if (sepIdx === -1) continue;
+    const headingIndex = parseInt(rest.slice(0, sepIdx), 10);
+    const headingText = rest.slice(sepIdx + 2);
+    const toLevel = parseInt(fix.value, 10);
+    if (isNaN(fromLevel) || isNaN(headingIndex) || isNaN(toLevel) || toLevel < 1 || toLevel > 6) continue;
+    fixesByIndex.set(headingIndex, { from: fromLevel, to: toLevel, text: headingText });
+  }
+
+  if (fixesByIndex.size === 0) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  let headingCount = 0;
+  let changed = false;
+
+  for (const wP of paragraphs) {
+    const level = getHeadingLevel(wP);
+    if (level === 0) continue;
+
+    const currentIndex = headingCount++;
+    const fix = fixesByIndex.get(currentIndex);
+    if (!fix || fix.from !== level) continue;
+
+    // Text guard: skip if the paragraph at this index doesn't match what
+    // check() encoded — defence against index drift from unexpected transforms.
+    if (getParaText(wP).trim() !== fix.text) continue;
+
+    const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
+    if (!pPr) continue;
+    const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+    if (!pStyle) continue;
+
+    const originalVal = pStyle.getAttribute('w:val') ?? '';
+    const newVal = originalVal.replace(/\d+$/, String(fix.to));
+    pStyle.setAttribute('w:val', newVal);
+    changed = true;
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+// ─── HEAD-004: Update heading text while preserving level ────────────────────
+
+/**
+ * HEAD-004: Replace the text of a heading paragraph with a user-supplied
+ * shorter version while leaving the paragraph style (Heading3, Heading4, …)
+ * and all run formatting intact.
+ *
+ * Each AcceptedFix carries:
+ *   targetField: "heading.text.H{level}.{headingIndex}::{originalText}"
+ *   value:       the replacement heading text entered by the user
+ *
+ * headingIndex is the 0-based ordinal among ALL heading paragraphs in document
+ * order (same convention as HEAD-003). Fixes whose value is identical to the
+ * original text are skipped — no-op if the user accepted without editing.
+ *
+ * Only w:t text content is updated. w:pStyle, w:rPr, and all other formatting
+ * elements are not touched.
+ */
+async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
+  interface TextFix { level: number; originalText: string; newText: string }
+  const fixesByIndex = new Map<number, TextFix>();
+
+  for (const fix of fixes) {
+    if (!fix.targetField || !fix.value) continue;
+    // Format: "heading.text.H{level}.{headingIndex}::{originalText}"
+    const encoded = fix.targetField.replace('heading.text.H', '');
+    const dotIdx = encoded.indexOf('.');
+    if (dotIdx === -1) continue;
+    const level = parseInt(encoded.slice(0, dotIdx), 10);
+    const rest = encoded.slice(dotIdx + 1);
+    const sepIdx = rest.indexOf('::');
+    if (sepIdx === -1) continue;
+    const headingIndex = parseInt(rest.slice(0, sepIdx), 10);
+    const originalText = rest.slice(sepIdx + 2);
+    if (isNaN(level) || isNaN(headingIndex)) continue;
+    // Skip if value is unchanged — user accepted without editing
+    if (fix.value.trim() === originalText.trim()) continue;
+    fixesByIndex.set(headingIndex, { level, originalText, newText: fix.value.trim() });
+  }
+
+  if (fixesByIndex.size === 0) return;
+
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  let headingCount = 0;
+  let changed = false;
+
+  for (const wP of paragraphs) {
+    const level = getHeadingLevel(wP);
+    if (level === 0) continue;
+
+    const currentIndex = headingCount++;
+    const fix = fixesByIndex.get(currentIndex);
+    if (!fix) continue;
+
+    // Text guard: skip if the paragraph at this index doesn't match the
+    // original text encoded in the targetField. This is the primary guard
+    // against index drift and is sufficient on its own — the level guard was
+    // removed because applyHeadingLevelCorrections (HEAD-003) may have already
+    // changed the level of this paragraph before this function runs, causing
+    // the original-level check to incorrectly reject a valid fix. Any original
+    // heading `level` retained on the fix payload is therefore intentionally
+    // not consulted here and is only for debugging/telemetry.
+    if (getParaText(wP).trim() !== fix.originalText) continue;
+
+    const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const allWTs = Array.from(wP.getElementsByTagNameNS(W_NS, 't'));
+    if (allWTs.length === 0) {
+      allWTs.push(...Array.from(wP.getElementsByTagName('w:t')));
+    }
+    if (allWTs.length === 0) continue;
+
+    allWTs[0]!.textContent = fix.newText;
+    allWTs[0]!.removeAttribute('xml:space');
+    for (let i = 1; i < allWTs.length; i++) {
+      allWTs[i]!.textContent = '';
+    }
+    changed = true;
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
 // ─── FORMAT-002: Date format corrections ─────────────────────────────────────
 
 const DATE_MONTHS_FULL = [
@@ -1175,9 +1419,11 @@ async function applyDateFormatCorrections(zip: JSZip): Promise<void> {
  *
  * For each email address:
  *  1. Add a relationship entry to word/_rels/document.xml.rels
- *  2. Find <w:t> elements whose exact text matches the email
- *  3. Wrap the parent <w:r> in a <w:hyperlink r:id="..."> element
- *  4. Ensure the run has <w:rStyle w:val="Hyperlink"/> in its <w:rPr>
+ *  2. Find <w:t> elements whose text contains the email address
+ *  3a. If the entire run text is the email, wrap the <w:r> in <w:hyperlink>
+ *  3b. If the email is embedded in a longer run, split the run into
+ *      before-text / hyperlinked-email / after-text segments
+ *  4. The email run carries <w:rStyle w:val="Hyperlink"/> in its <w:rPr>
  */
 async function applyEmailMailtoFixes(zip: JSZip, emails: string[]): Promise<void> {
   const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -1258,10 +1504,11 @@ async function applyEmailMailtoFixes(zip: JSZip, emails: string[]): Promise<void
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
 
   for (const [email, relId] of emailRelIds) {
-    // Find <w:t> elements whose trimmed text exactly matches the email
     const wTElements = Array.from(xmlDoc.getElementsByTagName('w:t'));
     for (const wT of wTElements) {
-      if ((wT.textContent ?? '').trim() !== email) continue;
+      const text = wT.textContent ?? '';
+      const emailIdx = text.indexOf(email);
+      if (emailIdx === -1) continue;
 
       const wR = wT.parentElement;
       if (!wR || wR.localName !== 'r') continue;
@@ -1272,31 +1519,68 @@ async function applyEmailMailtoFixes(zip: JSZip, emails: string[]): Promise<void
       const wP = wR.parentElement;
       if (!wP) continue;
 
-      // Ensure <w:rPr> has <w:rStyle w:val="Hyperlink"/>
-      let rPr = wR.getElementsByTagName('w:rPr')[0];
-      if (!rPr) {
-        rPr = xmlDoc.createElementNS(W, 'w:rPr');
-        wR.insertBefore(rPr, wR.firstChild);
-      }
-      const existingStyle = rPr.getElementsByTagName('w:rStyle')[0];
-      if (!existingStyle) {
-        const rStyle = xmlDoc.createElementNS(W, 'w:rStyle');
-        rStyle.setAttributeNS(W, 'w:val', 'Hyperlink');
-        rPr.insertBefore(rStyle, rPr.firstChild);
-      }
+      const before = text.slice(0, emailIdx);
+      const after = text.slice(emailIdx + email.length);
+      const rPr = Array.from(wR.childNodes).find(
+        n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'rPr'
+      ) as Element | undefined;
 
-      // Create <w:hyperlink r:id="..." w:history="1">
       const hyperlink = xmlDoc.createElementNS(W, 'w:hyperlink');
       hyperlink.setAttributeNS(R, 'r:id', relId);
       hyperlink.setAttributeNS(W, 'w:history', '1');
+      hyperlink.appendChild(l8MakeEmailRun(xmlDoc, W, rPr ?? null, email));
 
-      // Replace <w:r> with <w:hyperlink> containing <w:r>
-      wP.insertBefore(hyperlink, wR);
-      hyperlink.appendChild(wR);
+      if (before === '' && after === '') {
+        // Whole run is exactly the email: swap it out
+        wP.insertBefore(hyperlink, wR);
+        wP.removeChild(wR);
+      } else {
+        // Email is embedded in a longer run (including whitespace-only surroundings):
+        // split into before / hyperlink / after so surrounding text is preserved
+        if (before !== '') {
+          wP.insertBefore(l8MakeTextRun(xmlDoc, W, rPr ?? null, before), wR);
+        }
+        wP.insertBefore(hyperlink, wR);
+        if (after !== '') {
+          wP.insertBefore(l8MakeTextRun(xmlDoc, W, rPr ?? null, after), wR);
+        }
+        wP.removeChild(wR);
+      }
     }
   }
 
   zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+}
+
+/** Create a <w:r> for the email address itself, with w:rStyle w:val="Hyperlink". */
+function l8MakeEmailRun(xmlDoc: Document, W: string, rPr: Element | null, email: string): Element {
+  const run = xmlDoc.createElementNS(W, 'w:r');
+  const newRPr: Element = rPr
+    ? (rPr.cloneNode(true) as Element)
+    : xmlDoc.createElementNS(W, 'w:rPr');
+  const existingStyle = Array.from(newRPr.childNodes).find(
+    n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'rStyle'
+  ) as Element | undefined;
+  if (existingStyle) newRPr.removeChild(existingStyle);
+  const rStyle = xmlDoc.createElementNS(W, 'w:rStyle');
+  rStyle.setAttributeNS(W, 'w:val', 'Hyperlink');
+  newRPr.insertBefore(rStyle, newRPr.firstChild);
+  run.appendChild(newRPr);
+  const wT = xmlDoc.createElementNS(W, 'w:t');
+  wT.textContent = email;
+  run.appendChild(wT);
+  return run;
+}
+
+/** Create a <w:r> for a plain-text fragment, cloning the source run's rPr. */
+function l8MakeTextRun(xmlDoc: Document, W: string, rPr: Element | null, text: string): Element {
+  const run = xmlDoc.createElementNS(W, 'w:r');
+  if (rPr) run.appendChild(rPr.cloneNode(true));
+  const wT = xmlDoc.createElementNS(W, 'w:t');
+  wT.textContent = text;
+  if (text !== text.trim()) wT.setAttribute('xml:space', 'preserve');
+  run.appendChild(wT);
+  return run;
 }
 
 // ─── CLEAN-009: Accept tracked changes and remove comments ───────────────────
@@ -1727,6 +2011,177 @@ async function applyPdfLabelFix(zip: JSZip): Promise<void> {
   }
 }
 
+// ─── LINK-009: Fix partial hyperlinks ────────────────────────────────────────
+
+/**
+ * For each w:hyperlink, moves non-whitespace characters that are accidentally
+ * outside the element but immediately adjacent to it:
+ *
+ *   Leading fix: trailing non-whitespace chars are removed from the end of the
+ *                preceding sibling w:r and inserted as a new first run in the
+ *                hyperlink.
+ *   Trailing fix: leading non-whitespace chars are removed from the start of
+ *                 the following sibling w:r and appended as a new last run.
+ *
+ * Bookmark elements (w:bookmarkStart, w:bookmarkEnd) between the run and the
+ * hyperlink are ignored; any other intervening element blocks adjacency.
+ * External (r:id) and internal (w:anchor) hyperlinks are both processed.
+ * Run properties from the external run are preserved on the new internal run.
+ */
+async function applyPartialHyperlinkFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  if (!xmlStr.includes('w:hyperlink')) return;
+
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  let changed = false;
+
+  for (const hyperlink of Array.from(xmlDoc.getElementsByTagName('w:hyperlink'))) {
+    const hlText = l9HlText(hyperlink);
+    if (!hlText) continue;
+
+    // Leading fix: move trailing non-whitespace of preceding run inside hyperlink
+    const prevRun = l9AdjacentRun(hyperlink, 'prev');
+    if (prevRun) {
+      const prevText = l9RunText(prevRun);
+      const chars = l9TrailingNonWS(prevText);
+      if (chars.length > 0 && !/^\s/.test(hlText)) {
+        const rPr = Array.from(prevRun.children).find(c => c.localName === 'rPr') as Element | undefined;
+        hyperlink.insertBefore(l9MakeRun(xmlDoc, W, rPr ?? null, chars), hyperlink.firstChild);
+        const remaining = prevText.slice(0, prevText.length - chars.length);
+        if (remaining === '') {
+          prevRun.parentNode?.removeChild(prevRun);
+        } else {
+          l9SetRunText(prevRun, remaining);
+        }
+        changed = true;
+      }
+    }
+
+    // Trailing fix: move leading non-whitespace of following run inside hyperlink
+    const hlTextNow = l9HlText(hyperlink);
+    const nextRun = l9AdjacentRun(hyperlink, 'next');
+    if (nextRun) {
+      const nextText = l9RunText(nextRun);
+      const chars = l9LeadingNonWS(nextText);
+      if (chars.length > 0 && !/\s$/.test(hlTextNow)) {
+        const rPr = Array.from(nextRun.children).find(c => c.localName === 'rPr') as Element | undefined;
+        hyperlink.appendChild(l9MakeRun(xmlDoc, W, rPr ?? null, chars));
+        const remaining = nextText.slice(chars.length);
+        if (remaining === '') {
+          nextRun.parentNode?.removeChild(nextRun);
+        } else {
+          l9SetRunText(nextRun, remaining);
+        }
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+function l9HlText(hyperlink: Element): string {
+  return Array.from(hyperlink.getElementsByTagName('w:t'))
+    .map(t => t.textContent ?? '')
+    .join('');
+}
+
+function l9RunText(run: Element): string {
+  return Array.from(run.getElementsByTagName('w:t'))
+    .map(t => t.textContent ?? '')
+    .join('');
+}
+
+/**
+ * Returns the w:r sibling adjacent to `hyperlink` in the given direction,
+ * skipping w:bookmarkStart / w:bookmarkEnd elements.
+ * Returns null if any other element type is encountered first.
+ */
+function l9AdjacentRun(hyperlink: Element, direction: 'prev' | 'next'): Element | null {
+  let node: Node | null =
+    direction === 'prev' ? hyperlink.previousSibling : hyperlink.nextSibling;
+  while (node !== null) {
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      node = direction === 'prev' ? node.previousSibling : node.nextSibling;
+      continue;
+    }
+    const el = node as Element;
+    const name = el.localName;
+    if (name === 'bookmarkStart' || name === 'bookmarkEnd') {
+      node = direction === 'prev' ? node.previousSibling : node.nextSibling;
+      continue;
+    }
+    return name === 'r' ? el : null;
+  }
+  return null;
+}
+
+function l9TrailingNonWS(text: string): string {
+  const m = text.match(/\S+$/);
+  return m ? m[0] : '';
+}
+
+function l9LeadingNonWS(text: string): string {
+  const m = text.match(/^\S+/);
+  return m ? m[0] : '';
+}
+
+/**
+ * Create a new w:r run for insertion inside a w:hyperlink.
+ * Starts from the external run's w:rPr (cloned, preserving any bold, font size, etc.),
+ * then ensures w:rStyle w:val="Hyperlink" is the first child — so the moved
+ * characters render with blue-underline hyperlink formatting.
+ * If the external run had no rPr, a new one is created with just the Hyperlink style.
+ */
+function l9MakeRun(xmlDoc: Document, W: string, rPr: Element | null, text: string): Element {
+  const run = xmlDoc.createElementNS(W, 'w:r');
+
+  const newRpr: Element = rPr
+    ? (rPr.cloneNode(true) as Element)
+    : xmlDoc.createElementNS(W, 'w:rPr');
+
+  // Remove any existing w:rStyle — it will be replaced with Hyperlink
+  const existingStyle = Array.from(newRpr.childNodes).find(
+    n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'rStyle'
+  ) as Element | undefined;
+  if (existingStyle) newRpr.removeChild(existingStyle);
+
+  // w:rStyle must be first child per OOXML schema ordering
+  const rStyle = xmlDoc.createElementNS(W, 'w:rStyle');
+  rStyle.setAttributeNS(W, 'w:val', 'Hyperlink');
+  newRpr.insertBefore(rStyle, newRpr.firstChild);
+
+  run.appendChild(newRpr);
+
+  const wT = xmlDoc.createElementNS(W, 'w:t');
+  wT.textContent = text;
+  if (text !== text.trim()) wT.setAttribute('xml:space', 'preserve');
+  run.appendChild(wT);
+  return run;
+}
+
+/** Update the text of a w:r run, collapsing to a single w:t element. */
+function l9SetRunText(run: Element, text: string): void {
+  const wTs = Array.from(run.getElementsByTagName('w:t'));
+  if (wTs.length === 0) return;
+  wTs[0]!.textContent = text;
+  if (text !== text.trim()) {
+    wTs[0]!.setAttribute('xml:space', 'preserve');
+  } else {
+    wTs[0]!.removeAttribute('xml:space');
+  }
+  for (let i = 1; i < wTs.length; i++) wTs[i]!.parentNode?.removeChild(wTs[i]!);
+}
+
 // ─── CLEAN-012: Bold "asterisked ( * )" in scoped sections ───────────────────
 
 const ASTERISKED_PHRASE_LC = 'asterisked ( * )';
@@ -2078,6 +2533,317 @@ async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
     const serializer = new XMLSerializer();
     zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
   }
+}
+
+// ─── CLEAN-015: Remove bold from list item bullet characters ─────────────────
+
+/**
+ * Removes w:b and w:bCs from the paragraph-level w:rPr (inside w:pPr) of every
+ * list paragraph (any w:p with w:numPr in its w:pPr). Only the paragraph-level
+ * run properties are modified; w:rPr elements on individual w:r text runs are
+ * left untouched.
+ */
+async function applyBoldBulletFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  if (!xmlStr.includes('w:numPr')) return;
+
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  let changed = false;
+  for (const wP of Array.from(xmlDoc.getElementsByTagName('w:p'))) {
+    const pPr = directChildEl(wP, 'w:pPr');
+    if (!pPr) continue;
+    if (!directChildEl(pPr, 'w:numPr')) continue;
+
+    const pRpr = directChildEl(pPr, 'w:rPr');
+    if (!pRpr) continue;
+
+    const boldNodes = Array.from(pRpr.childNodes).filter(
+      (node): node is Element =>
+        node.nodeType === Node.ELEMENT_NODE &&
+        ((node as Element).tagName === 'w:b' || (node as Element).tagName === 'w:bCs')
+    );
+
+    for (const boldNode of boldNodes) {
+      pRpr.removeChild(boldNode);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+// ─── CLEAN-016: Remove bold from trailing periods preceded by non-bold text ────
+
+/**
+ * For each paragraph where the last direct w:r run ends with a period, is bold,
+ * and the immediately preceding w:r run is not bold:
+ *   - If the period is the run's only character: removes w:b and w:bCs in-place.
+ *   - If the period follows other text in the same run: splits the run so the
+ *     prefix stays bold and the period moves to a new non-bold run after it.
+ */
+async function applyTrailingPeriodBoldFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  let changed = false;
+
+  for (const wP of Array.from(xmlDoc.getElementsByTagName('w:p'))) {
+    const runs = p16DirectRuns(wP);
+    if (runs.length < 2) continue;
+
+    const lastRun = runs[runs.length - 1]!;
+    const prevRun = runs[runs.length - 2]!;
+
+    const text = p16RunText(lastRun);
+    if (!text.endsWith('.')) continue;
+    if (!p16RunHasBold(lastRun)) continue;
+    if (p16RunHasBold(prevRun)) continue;
+
+    if (text === '.') {
+      p16RemoveBold(lastRun);
+    } else {
+      p16SplitTrailingPeriod(wP, lastRun, text);
+    }
+    changed = true;
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+function p16DirectRuns(wP: Element): Element[] {
+  const result: Element[] = [];
+  for (const node of Array.from(wP.childNodes)) {
+    if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === 'w:r') {
+      result.push(node as Element);
+    }
+  }
+  return result;
+}
+
+function p16RunText(run: Element): string {
+  return Array.from(run.getElementsByTagName('w:t'))
+    .map(t => t.textContent ?? '')
+    .join('');
+}
+
+function p16IsEnabledOnOffProperty(el: Element | null): boolean {
+  if (!el) return false;
+  const val = el.getAttribute('w:val');
+  if (val == null) return true;
+  return val !== '0' && val !== 'false' && val !== 'off';
+}
+
+function p16RunHasBold(run: Element): boolean {
+  const rPr = directChildEl(run, 'w:rPr');
+  if (!rPr) return false;
+  return (
+    p16IsEnabledOnOffProperty(directChildEl(rPr, 'w:b')) ||
+    p16IsEnabledOnOffProperty(directChildEl(rPr, 'w:bCs'))
+  );
+}
+
+function p16RemoveBold(run: Element): void {
+  const rPr = directChildEl(run, 'w:rPr');
+  if (!rPr) return;
+  const toRemove = Array.from(rPr.childNodes).filter(
+    n => n.nodeType === Node.ELEMENT_NODE &&
+         ((n as Element).tagName === 'w:b' || (n as Element).tagName === 'w:bCs')
+  );
+  for (const node of toRemove) rPr.removeChild(node);
+}
+
+/**
+ * Splits the trailing period from `lastRun` into a new non-bold run.
+ * Collapses all w:t elements in both the original and new run to a single w:t.
+ * The original run retains its bold and keeps the prefix text.
+ * The new run is a clone with bold removed and text set to ".".
+ */
+function p16SplitTrailingPeriod(wP: Element, lastRun: Element, fullText: string): void {
+  const prefix = fullText.slice(0, -1);
+
+  // Collapse all w:t elements in the original run to a single one with prefix text
+  const wTs = Array.from(lastRun.getElementsByTagName('w:t'));
+  if (wTs.length > 0) {
+    wTs[0]!.textContent = prefix;
+    if (prefix !== prefix.trim()) {
+      wTs[0]!.setAttribute('xml:space', 'preserve');
+    } else {
+      wTs[0]!.removeAttribute('xml:space');
+    }
+    for (let i = 1; i < wTs.length; i++) wTs[i]!.parentNode?.removeChild(wTs[i]!);
+  }
+
+  // Clone the original run to create the period run, then strip bold and set text
+  const periodRun = lastRun.cloneNode(true) as Element;
+  const periodWTs = Array.from(periodRun.getElementsByTagName('w:t'));
+  if (periodWTs.length > 0) {
+    periodWTs[0]!.textContent = '.';
+    periodWTs[0]!.removeAttribute('xml:space');
+    for (let i = 1; i < periodWTs.length; i++) {
+      periodWTs[i]!.parentNode?.removeChild(periodWTs[i]!);
+    }
+  } else {
+    const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const newT = periodRun.ownerDocument!.createElementNS(W_NS, 'w:t');
+    newT.textContent = '.';
+    periodRun.appendChild(newT);
+  }
+  p16RemoveBold(periodRun);
+
+  if (lastRun.nextSibling) {
+    wP.insertBefore(periodRun, lastRun.nextSibling);
+  } else {
+    wP.appendChild(periodRun);
+  }
+}
+
+// ─── TABLE-004: Apply heading style to "Important: public information" ────────
+
+/**
+ * For each single-cell table whose first paragraph starts with
+ * "Important: public information" (case-insensitive) and has at least one
+ * further paragraph in the cell, sets the paragraph's w:pStyle to the heading
+ * level of the nearest preceding heading in the document body. Defaults to
+ * Heading5 when no preceding heading is found.
+ */
+async function applyImportantPublicHeadingFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  if (!xmlStr.includes('w:tbl')) return;
+
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  const bodyChildren = Array.from(body.childNodes).filter(
+    n => n.nodeType === Node.ELEMENT_NODE
+  ) as Element[];
+
+  let changed = false;
+
+  for (let i = 0; i < bodyChildren.length; i++) {
+    const el = bodyChildren[i]!;
+    if (el.localName !== 'tbl') continue;
+
+    const tc = t4GetSingleDirectCell(el);
+    if (!tc) continue;
+
+    const paragraphs = t4DirectParagraphsOf(tc);
+    if (paragraphs.length < 2) continue;
+
+    const firstPara = paragraphs[0]!;
+    if (!getParaText(firstPara).trim().toLowerCase().startsWith('important: public information')) continue;
+
+    const styleVal = t4FindPrecedingHeadingStyle(bodyChildren, i);
+    t4ApplyPStyle(xmlDoc, W, firstPara, styleVal);
+    changed = true;
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+/** Returns direct w:p children of a w:tc element. */
+function t4DirectParagraphsOf(tc: Element): Element[] {
+  const result: Element[] = [];
+  for (const node of Array.from(tc.childNodes)) {
+    if (node.nodeType === Node.ELEMENT_NODE && (node as Element).localName === 'p') {
+      result.push(node as Element);
+    }
+  }
+  return result;
+}
+
+/**
+ * Returns the exact w:pStyle w:val of the nearest preceding heading paragraph
+ * (e.g. "Heading2" or "Heading 2"), preserving the document's own format.
+ * Defaults to "Heading5" when no preceding heading is found.
+ */
+function t4FindPrecedingHeadingStyle(bodyChildren: Element[], tableIdx: number): string {
+  for (let j = tableIdx - 1; j >= 0; j--) {
+    const sibling = bodyChildren[j]!;
+    if (sibling.localName !== 'p') continue;
+    const pPr = Array.from(sibling.children).find(c => c.localName === 'pPr');
+    if (!pPr) continue;
+    const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+    if (!pStyle) continue;
+    const val = pStyle.getAttribute('w:val') ?? '';
+    if (/^Heading\s*\d+$/i.test(val)) return val;
+  }
+  return 'Heading5';
+}
+
+/**
+ * Returns the single direct w:tc cell of a table, or null if the table has
+ * zero or more than one direct cell. Counts only direct w:tc children of
+ * direct w:tr children to avoid counting cells inside nested tables.
+ */
+function t4GetSingleDirectCell(tbl: Element): Element | null {
+  let count = 0;
+  let firstCell: Element | null = null;
+  for (const node of Array.from(tbl.childNodes)) {
+    if (node.nodeType !== Node.ELEMENT_NODE || (node as Element).localName !== 'tr') continue;
+    for (const cell of Array.from((node as Element).childNodes)) {
+      if (cell.nodeType !== Node.ELEMENT_NODE || (cell as Element).localName !== 'tc') continue;
+      count++;
+      if (count === 1) firstCell = cell as Element;
+      if (count > 1) return null;
+    }
+  }
+  return count === 1 ? firstCell : null;
+}
+
+/**
+ * Sets (or creates) w:pStyle on the paragraph to the given style value.
+ * Inserts or updates w:pPr/w:pStyle, placing w:pStyle as the first child
+ * of w:pPr per OOXML ordering requirements.
+ */
+function t4ApplyPStyle(xmlDoc: Document, W: string, wP: Element, styleVal: string): void {
+  let pPr = directChildEl(wP, 'w:pPr');
+  if (!pPr) {
+    pPr = xmlDoc.createElementNS(W, 'w:pPr');
+    wP.insertBefore(pPr, wP.firstChild);
+  }
+  const existing = directChildEl(pPr, 'w:pStyle');
+  if (existing) {
+    existing.setAttribute('w:val', styleVal);
+  } else {
+    const pStyle = xmlDoc.createElementNS(W, 'w:pStyle');
+    pStyle.setAttribute('w:val', styleVal);
+    pPr.insertBefore(pStyle, pPr.firstChild);
+  }
+}
+
+/** Returns the first direct child element of `parent` with the given tag name. */
+function directChildEl(parent: Element, tagName: string): Element | null {
+  for (const node of Array.from(parent.childNodes)) {
+    if (node.nodeType === 1 && (node as Element).tagName === tagName) {
+      return node as Element;
+    }
+  }
+  return null;
 }
 
 /**

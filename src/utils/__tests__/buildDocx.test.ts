@@ -447,6 +447,85 @@ describe('buildDocx — tagline relocation', () => {
   });
 });
 
+// ─── applyTaglineUnquote (CLEAN-014) ─────────────────────────────────────────
+
+const TAGLINE_UNQUOTE_AUTO_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-014',
+  description: 'Quotation marks removed from tagline.',
+  targetField: 'text.tagline.unquote',
+};
+
+describe('buildDocx — tagline unquote', () => {
+  it('removes straight double quotes wrapping the tagline value and preserves the "Tagline:" label', async () => {
+    const zip = await makeZip([
+      'Metadata keywords: health, CDC',
+      'Tagline: "Improving health outcomes"',
+      'Step 1: Review the Opportunity',
+    ]);
+
+    const xml = await getOutputDocXml(zip, [], [TAGLINE_UNQUOTE_AUTO_CHANGE]);
+    const paragraphs = extractParagraphTexts(xml);
+    const taglinePara = paragraphs.find(t => /^tagline\s*:/i.test(t));
+
+    expect(taglinePara).toBeDefined();
+    expect(taglinePara).toContain('Tagline:');
+    expect(taglinePara).toBe('Tagline: Improving health outcomes');
+  });
+
+  it('removes smart/curly double quotes wrapping the tagline value', async () => {
+    const zip = await makeZip([
+      'Metadata keywords: health, CDC',
+      'Tagline: \u201CImproving health outcomes\u201D',
+    ]);
+
+    const xml = await getOutputDocXml(zip, [], [TAGLINE_UNQUOTE_AUTO_CHANGE]);
+    const paragraphs = extractParagraphTexts(xml);
+    const taglinePara = paragraphs.find(t => /^tagline\s*:/i.test(t));
+
+    expect(taglinePara).toBeDefined();
+    expect(taglinePara).toContain('Tagline:');
+    expect(taglinePara).toBe('Tagline: Improving health outcomes');
+  });
+
+  it('composes correctly with struct.tagline.relocate — relocates then strips quotes', async () => {
+    const zip = await makeZip([
+      'Tagline: "Improving health outcomes"',
+      'Metadata author: Jane Smith',
+      'Metadata keywords: health, CDC',
+      'Step 1: Review the Opportunity',
+    ]);
+
+    const xml = await getOutputDocXml(zip, [], [
+      TAGLINE_AUTO_CHANGE,
+      TAGLINE_UNQUOTE_AUTO_CHANGE,
+    ]);
+    const paragraphs = extractParagraphTexts(xml);
+
+    const keywordsIdx = paragraphs.findIndex(t => t.startsWith('Metadata keywords:'));
+    const taglineIdx = paragraphs.findIndex(t => /^tagline\s*:/i.test(t));
+
+    // Tagline was relocated to follow keywords
+    expect(keywordsIdx).toBeGreaterThanOrEqual(0);
+    expect(taglineIdx).toBe(keywordsIdx + 1);
+
+    // Quotes were stripped and label preserved
+    expect(paragraphs[taglineIdx]).toBe('Tagline: Improving health outcomes');
+  });
+
+  it('leaves the tagline unchanged when there are no wrapping quotes', async () => {
+    const zip = await makeZip([
+      'Metadata keywords: health, CDC',
+      'Tagline: Improving health outcomes',
+    ]);
+
+    const xml = await getOutputDocXml(zip, [], [TAGLINE_UNQUOTE_AUTO_CHANGE]);
+    const paragraphs = extractParagraphTexts(xml);
+    const taglinePara = paragraphs.find(t => /^tagline\s*:/i.test(t));
+
+    expect(taglinePara).toBe('Tagline: Improving health outcomes');
+  });
+});
+
 // ─── applyHeadingLeadingSpaceFix (CLEAN-008) ─────────────────────────────────
 
 const W_NS_HEADING = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -1541,6 +1620,20 @@ describe('buildDocx — LINK-006 link text fix: hyperlink attribute preservation
   });
 });
 
+// ─── Helpers: output zip ─────────────────────────────────────────────────────
+
+/**
+ * Run buildDocx and return the output archive for multi-file inspection.
+ */
+async function getOutputZip(
+  zip: JSZip,
+  acceptedFixes: AcceptedFix[] = [],
+  autoAppliedChanges: AutoAppliedChange[] = []
+): Promise<JSZip> {
+  const blob = await buildDocx(zip, acceptedFixes, autoAppliedChanges);
+  return JSZip.loadAsync(blob);
+}
+
 // ─── LINK-007: [PDF] label OOXML patch ────────────────────────────────────────
 
 const RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
@@ -1781,123 +1874,6 @@ describe('buildDocx — CLEAN-012: asterisked bold OOXML patch', () => {
   });
 });
 
-// ─── LINK-006 anchor-fmt auto-fix: hyperlink retargeting ─────────────────────
-
-describe('buildDocx — LINK-006 anchor formatting auto-fix', () => {
-  // NOTE: these tests check the RAW SERIALIZED XML string so they catch
-  // XMLSerializer stripping the w: namespace prefix — the same rationale as
-  // the link-text hyperlink-preservation tests above.
-
-  function makeAnchorFmtChange(pairs: { old: string; new: string }[]): AutoAppliedChange {
-    return {
-      ruleId: 'LINK-006',
-      description: `${pairs.length} internal link anchor${pairs.length === 1 ? '' : 's'} corrected for capitalization or leading/trailing underscores`,
-      targetField: 'link.anchor.fmt',
-      value: JSON.stringify(pairs),
-    };
-  }
-
-  it('rewrites w:anchor from the old (lowercase) value to the correctly-cased new value', async () => {
-    const zip = new JSZip();
-    zip.file('word/document.xml', makeHyperlinkDocXml({ anchor: 'eligibility', linkText: 'link' }));
-
-    const outXml = await getOutputDocXml(zip, [], [makeAnchorFmtChange([{ old: 'eligibility', new: 'Eligibility' }])]);
-
-    // The serialized XML must contain the namespace-prefixed attribute with the new value.
-    expect(outXml).toMatch(/w:anchor="Eligibility"/);
-    // The old value must no longer appear as a w:anchor value.
-    expect(outXml).not.toMatch(/w:anchor="eligibility"/);
-  });
-
-  it('serialized XML retains the w: prefix on the rewritten anchor (namespace preservation)', async () => {
-    // Regression: XMLSerializer may emit `anchor="…"` without the w: prefix when an
-    // attribute is only read and never written through the DOM. setAttributeNS ensures
-    // the prefix is preserved so Word can resolve the link target.
-    const zip = new JSZip();
-    zip.file('word/document.xml', makeHyperlinkDocXml({ anchor: 'overview', linkText: 'link' }));
-
-    const outXml = await getOutputDocXml(zip, [], [makeAnchorFmtChange([{ old: 'overview', new: 'Overview' }])]);
-
-    expect(outXml).toMatch(/w:anchor="Overview"/);
-  });
-
-  it('rewrites all hyperlinks that share the same old anchor', async () => {
-    // Two hyperlinks with the same broken anchor in one document
-    const twoLinkXml =
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}">` +
-      `<w:body>` +
-      `<w:p><w:hyperlink w:anchor="eligibility" w:history="1"><w:r><w:t>first</w:t></w:r></w:hyperlink></w:p>` +
-      `<w:p><w:hyperlink w:anchor="eligibility" w:history="1"><w:r><w:t>second</w:t></w:r></w:hyperlink></w:p>` +
-      `<w:sectPr/></w:body></w:document>`;
-    const zip = new JSZip();
-    zip.file('word/document.xml', twoLinkXml);
-
-    const outXml = await getOutputDocXml(zip, [], [makeAnchorFmtChange([{ old: 'eligibility', new: 'Eligibility' }])]);
-
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(outXml, 'application/xml');
-    const hyperlinks = Array.from(doc.getElementsByTagName('w:hyperlink'));
-    expect(hyperlinks).toHaveLength(2);
-    for (const hl of hyperlinks) {
-      expect(hl.getAttributeNS(W_NS, 'anchor')).toBe('Eligibility');
-    }
-  });
-
-  it('does not touch hyperlinks whose anchor does not match the old value', async () => {
-    // Document has two internal hyperlinks; only one matches the anchor-fmt pair
-    const mixedXml =
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}">` +
-      `<w:body>` +
-      `<w:p><w:hyperlink w:anchor="eligibility" w:history="1"><w:r><w:t>link 1</w:t></w:r></w:hyperlink></w:p>` +
-      `<w:p><w:hyperlink w:anchor="Overview" w:history="1"><w:r><w:t>link 2</w:t></w:r></w:hyperlink></w:p>` +
-      `<w:sectPr/></w:body></w:document>`;
-    const zip = new JSZip();
-    zip.file('word/document.xml', mixedXml);
-
-    const outXml = await getOutputDocXml(zip, [], [makeAnchorFmtChange([{ old: 'eligibility', new: 'Eligibility' }])]);
-
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(outXml, 'application/xml');
-    const hyperlinks = Array.from(doc.getElementsByTagName('w:hyperlink'));
-    expect(hyperlinks[0]!.getAttributeNS(W_NS, 'anchor')).toBe('Eligibility'); // rewritten
-    expect(hyperlinks[1]!.getAttributeNS(W_NS, 'anchor')).toBe('Overview');    // untouched
-  });
-
-  it('skips gracefully when value is malformed JSON — download still succeeds', async () => {
-    const zip = new JSZip();
-    zip.file('word/document.xml', makeHyperlinkDocXml({ anchor: 'eligibility', linkText: 'link' }));
-
-    const badChange: AutoAppliedChange = {
-      ruleId: 'LINK-006',
-      description: 'cap fix',
-      targetField: 'link.anchor.fmt',
-      value: 'NOT_VALID_JSON',
-    };
-
-    // Should not throw — download must complete even with a corrupt entry
-    const outXml = await getOutputDocXml(zip, [], [badChange]);
-    // Anchor unchanged because the bad entry was skipped
-    expect(outXml).toMatch(/w:anchor="eligibility"/);
-  });
-
-  it('skips gracefully when value is a JSON non-array — download still succeeds', async () => {
-    const zip = new JSZip();
-    zip.file('word/document.xml', makeHyperlinkDocXml({ anchor: 'eligibility', linkText: 'link' }));
-
-    const badChange: AutoAppliedChange = {
-      ruleId: 'LINK-006',
-      description: 'cap fix',
-      targetField: 'link.anchor.fmt',
-      value: JSON.stringify({ old: 'eligibility', new: 'Eligibility' }), // object, not array
-    };
-
-    const outXml = await getOutputDocXml(zip, [], [badChange]);
-    expect(outXml).toMatch(/w:anchor="eligibility"/); // unchanged, entry was skipped
-  });
-});
-
 // ─── applyH2TitleCaseFix ─────────────────────────────────────────────────────
 
 /**
@@ -2128,6 +2104,1795 @@ describe('buildDocx — content control removal', () => {
     expect(outFootnotesXml).not.toBeNull();
     expect(outFootnotesXml).not.toContain('w:sdt');
     expect(outFootnotesXml).toContain('Footnote text');
+  });
+
+});
+
+// ─── applyHeadingLevelCorrections (HEAD-003) ─────────────────────────────────
+
+/**
+ * Build a <w:p> XML string styled as a heading.
+ * Uses "Heading{level}" (no space) which is the standard Word format.
+ */
+function headingPara(level: number, text: string): string {
+  return (
+    `<w:p>` +
+    `<w:pPr><w:pStyle w:val="Heading${level}"/></w:pPr>` +
+    `<w:r><w:t>${text}</w:t></w:r>` +
+    `</w:p>`
+  );
+}
+
+/**
+ * Build a word/document.xml string from an array of already-serialized <w:p>
+ * strings (heading or body).
+ */
+function makeDocXmlFromParas(paraStrings: string[]): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+    `<w:body>${paraStrings.join('')}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+/**
+ * Parse heading styles from a serialized word/document.xml string.
+ * Returns [{style, text}] for every paragraph that has a pStyle matching /Heading/i.
+ */
+function extractHeadingStyles(xml: string): Array<{ style: string; text: string }> {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'application/xml');
+  const result: Array<{ style: string; text: string }> = [];
+  for (const wP of Array.from(doc.getElementsByTagName('w:p'))) {
+    const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
+    if (!pPr) continue;
+    const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+    if (!pStyle) continue;
+    const style = pStyle.getAttribute('w:val') ?? '';
+    if (!/heading/i.test(style)) continue;
+    const text = Array.from(wP.getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '')
+      .join('');
+    result.push({ style, text });
+  }
+  return result;
+}
+
+describe('buildDocx — applyHeadingLevelCorrections (HEAD-003)', () => {
+  it('changes the pStyle of the targeted heading to the accepted level', async () => {
+    // Headings: H1(index 0), H3(index 1) — user accepts H3→H2
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'NOFO Title'),
+      headingPara(3, 'Skipped Heading'),
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-003-1',
+      ruleId: 'HEAD-003',
+      targetField: 'heading.level.H3.1::Skipped Heading',
+      value: '2',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    expect(styles).toHaveLength(2);
+    expect(styles[0]).toMatchObject({ style: 'Heading1', text: 'NOFO Title' });
+    expect(styles[1]).toMatchObject({ style: 'Heading2', text: 'Skipped Heading' });
+  });
+
+  it('preserves "Heading 2" (space) format when present in the original', async () => {
+    const zip = new JSZip();
+    // Use "Heading 4" (with space) as the source format
+    zip.file('word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:body>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading 1"/></w:pPr><w:r><w:t>Title</w:t></w:r></w:p>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading 4"/></w:pPr><w:r><w:t>Deep</w:t></w:r></w:p>` +
+      `<w:sectPr/></w:body></w:document>`
+    );
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-003-1',
+      ruleId: 'HEAD-003',
+      targetField: 'heading.level.H4.1::Deep',
+      value: '2',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    expect(styles[1]).toMatchObject({ style: 'Heading 2', text: 'Deep' });
+  });
+
+  it('does not change a heading at a different ordinal position with the same text', async () => {
+    // Two H3 headings with identical text — fix targets index 1, not index 3
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'Title'),          // index 0
+      headingPara(2, 'Section A'),       // index 1
+      headingPara(3, 'Introduction'),    // index 2 — same text, NOT targeted
+      headingPara(2, 'Section B'),       // index 3
+      headingPara(3, 'Introduction'),    // index 4 — targeted (H3 at position 4)
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-003-4',
+      ruleId: 'HEAD-003',
+      targetField: 'heading.level.H3.4::Introduction',
+      value: '2',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    // index 2: H3 'Introduction' — must stay H3
+    expect(styles[2]).toMatchObject({ style: 'Heading3', text: 'Introduction' });
+    // index 4: H3 'Introduction' — must become H2
+    expect(styles[4]).toMatchObject({ style: 'Heading2', text: 'Introduction' });
+  });
+
+  it('does not change any heading when the from-level does not match', async () => {
+    // Fix says H4 at index 1, but that position is actually H3 — no change
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'Title'),
+      headingPara(3, 'Section'),
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-003-1',
+      ruleId: 'HEAD-003',
+      targetField: 'heading.level.H4.1::Section',
+      value: '2',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    // H3 must be unchanged because fix.from (4) !== actual level (3)
+    expect(styles[1]).toMatchObject({ style: 'Heading3', text: 'Section' });
+  });
+
+  it('applies multiple independent level corrections in one pass', async () => {
+    // H1(0), H3(1), H5(2) — fix both skipped headings
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'Title'),
+      headingPara(3, 'First Skip'),
+      headingPara(5, 'Second Skip'),
+    ]));
+
+    const fixes: AcceptedFix[] = [
+      { issueId: 'HEAD-003-1', ruleId: 'HEAD-003', targetField: 'heading.level.H3.1::First Skip', value: '2' },
+      { issueId: 'HEAD-003-2', ruleId: 'HEAD-003', targetField: 'heading.level.H5.2::Second Skip', value: '3' },
+    ];
+
+    const xml = await getOutputDocXml(zip, fixes);
+    const styles = extractHeadingStyles(xml);
+    expect(styles[0]).toMatchObject({ style: 'Heading1', text: 'Title' });
+    expect(styles[1]).toMatchObject({ style: 'Heading2', text: 'First Skip' });
+    expect(styles[2]).toMatchObject({ style: 'Heading3', text: 'Second Skip' });
+  });
+
+  it('skips the fix when ordinal index matches but heading text does not', async () => {
+    // Simulates index drift: a preceding heading was removed by an earlier
+    // transform, so a different heading now sits at the targeted index.
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'Title'),
+      headingPara(3, 'Different Text'),  // index 1 — text does not match fix
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-003-1',
+      ruleId: 'HEAD-003',
+      // from-level and index match, but headingText is stale
+      targetField: 'heading.level.H3.1::Skipped Heading',
+      value: '2',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    // H3 must stay H3 because the text guard rejected the fix
+    expect(styles[1]).toMatchObject({ style: 'Heading3', text: 'Different Text' });
+  });
+
+  it('leaves the document unchanged when no heading-level fixes are present', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'Title'),
+      headingPara(3, 'Skipped'),
+    ]));
+
+    const xml = await getOutputDocXml(zip, []);
+    const styles = extractHeadingStyles(xml);
+    expect(styles[0]).toMatchObject({ style: 'Heading1' });
+    expect(styles[1]).toMatchObject({ style: 'Heading3' });
+  });
+});
+
+// ─── applyHeadingTextCorrections (HEAD-004) ──────────────────────────────────
+
+describe('buildDocx — applyHeadingTextCorrections (HEAD-004)', () => {
+  it('replaces the heading text and preserves the heading style', async () => {
+    // H1(0), H3(1) — user shortens the H3
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'NOFO Title'),
+      headingPara(3, 'This heading has eleven words so it should be flagged here'),
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-004-1',
+      ruleId: 'HEAD-004',
+      targetField: 'heading.text.H3.1::This heading has eleven words so it should be flagged here',
+      value: 'Flagged heading',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    expect(styles).toHaveLength(2);
+    // Style unchanged
+    expect(styles[1]).toMatchObject({ style: 'Heading3', text: 'Flagged heading' });
+    // H1 untouched
+    expect(styles[0]).toMatchObject({ style: 'Heading1', text: 'NOFO Title' });
+  });
+
+  it('does not apply the fix when value is identical to the original text', async () => {
+    const originalText = 'This heading has eleven words so it should be flagged here';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'Title'),
+      headingPara(3, originalText),
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-004-1',
+      ruleId: 'HEAD-004',
+      targetField: `heading.text.H3.1::${originalText}`,
+      value: originalText,
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    // Text unchanged — fix was a no-op
+    expect(styles[1]).toMatchObject({ style: 'Heading3', text: originalText });
+  });
+
+  it('targets by ordinal index — does not affect a heading at a different position', async () => {
+    const longText = 'This heading has eleven words so it should be flagged here';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'Title'),           // index 0
+      headingPara(3, longText),          // index 1 — NOT targeted
+      headingPara(2, 'Section'),         // index 2
+      headingPara(3, longText),          // index 3 — targeted
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-004-3',
+      ruleId: 'HEAD-004',
+      targetField: `heading.text.H3.3::${longText}`,
+      value: 'Short heading',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    // Index 1 (second element in styles) unchanged
+    expect(styles[1]).toMatchObject({ style: 'Heading3', text: longText });
+    // Index 3 (fourth element in styles) updated
+    expect(styles[3]).toMatchObject({ style: 'Heading3', text: 'Short heading' });
+  });
+
+  it('applies text fix even when HEAD-003 already changed the heading level in the same buildDocx run', async () => {
+    // H1(0), H4(1) — the H4 skips from H1 (HEAD-003 fires) AND its text is too
+    // long (HEAD-004 fires). The level fix runs first and changes H4→H2. The text
+    // fix must still apply even though the heading is now H2, not H4.
+    const longText = 'This heading has eleven words so it should be flagged here';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'NOFO Title'),    // index 0
+      headingPara(4, longText),        // index 1 — skips H1→H4, and is too long
+    ]));
+
+    const levelFix: AcceptedFix = {
+      issueId: 'HEAD-003-1',
+      ruleId: 'HEAD-003',
+      targetField: 'heading.level.H4.1::' + longText,
+      value: '2',
+    };
+    const textFix: AcceptedFix = {
+      issueId: 'HEAD-004-1',
+      ruleId: 'HEAD-004',
+      targetField: 'heading.text.H4.1::' + longText,
+      value: 'Short heading',
+    };
+
+    const xml = await getOutputDocXml(zip, [levelFix, textFix]);
+    const styles = extractHeadingStyles(xml);
+    // Level corrected H4→H2
+    expect(styles[1]).toMatchObject({ style: 'Heading2' });
+    // Text corrected despite level having changed before this patch ran
+    expect(styles[1]).toMatchObject({ text: 'Short heading' });
+  });
+});
+
+// ─── LINK-006 auto-applied bookmark retargets ─────────────────────────────────
+
+function makeSimpleHyperlinkDocXml(anchor: string): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:hyperlink w:anchor="${anchor}">
+        <w:r><w:t>Link text</w:t></w:r>
+      </w:hyperlink>
+    </w:p>
+    <w:sectPr/>
+  </w:body>
+</w:document>`;
+}
+
+describe('buildDocx — LINK-006 auto-applied bookmark retargets', () => {
+  it('retargets w:anchor from old to new value when acceptedFixes is empty', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSimpleHyperlinkDocXml('_Eligibility'));
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Retargeted internal link "#_Eligibility" → "#Eligibility"',
+      targetField: 'link.bookmark._Eligibility',
+      value: 'Eligibility',
+    };
+
+    const xml = await getOutputDocXml(zip, [], [change]);
+    expect(xml).toContain('w:anchor="Eligibility"');
+    expect(xml).not.toContain('w:anchor="_Eligibility"');
+  });
+
+  it('does not require any acceptedFixes to trigger the bookmark patch', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSimpleHyperlinkDocXml('_Grants_management'));
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Retargeted internal link "#_Grants_management" → "#Grants_management"',
+      targetField: 'link.bookmark._Grants_management',
+      value: 'Grants_management',
+    };
+
+    const xml = await getOutputDocXml(zip, [], [change]);
+    expect(xml).toContain('w:anchor="Grants_management"');
+  });
+
+  it('leaves a non-matching anchor untouched', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSimpleHyperlinkDocXml('_Eligibility'));
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Retargeted internal link "#_Other" → "#Other"',
+      targetField: 'link.bookmark._Other',
+      value: 'Other',
+    };
+
+    const xml = await getOutputDocXml(zip, [], [change]);
+    expect(xml).toContain('w:anchor="_Eligibility"');
+    expect(xml).not.toContain('w:anchor="Other"');
+  });
+
+  it('does not modify w:bookmarkStart w:name when only the hyperlink anchor changes', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:bookmarkStart w:id="1" w:name="_Contacts_and_Support"/>
+      <w:r><w:t>Contacts and Support</w:t></w:r>
+      <w:bookmarkEnd w:id="1"/>
+    </w:p>
+    <w:p>
+      <w:hyperlink w:anchor="_Contacts_and_support">
+        <w:r><w:t>Link</w:t></w:r>
+      </w:hyperlink>
+    </w:p>
+    <w:sectPr/>
+  </w:body>
+</w:document>`
+    );
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Retargeted "#_Contacts_and_support" → "#_Contacts_and_Support"',
+      targetField: 'link.bookmark._Contacts_and_support',
+      value: '_Contacts_and_Support',
+    };
+
+    const xml = await getOutputDocXml(zip, [], [change]);
+    // Hyperlink anchor updated
+    expect(xml).toContain('w:anchor="_Contacts_and_Support"');
+    expect(xml).not.toContain('w:anchor="_Contacts_and_support"');
+    // Bookmark name must be unchanged — LINK-006 only touches the hyperlink
+    expect(xml).toContain('w:name="_Contacts_and_Support"');
+    expect(xml).not.toContain('w:name="_Contacts_and_support"');
+  });
+
+  it('applies multiple bookmark retargets in one pass', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:hyperlink w:anchor="_Eligibility"><w:r><w:t>A</w:t></w:r></w:hyperlink>
+    </w:p>
+    <w:p>
+      <w:hyperlink w:anchor="_Program-specific_limitations_1"><w:r><w:t>B</w:t></w:r></w:hyperlink>
+    </w:p>
+    <w:sectPr/>
+  </w:body>
+</w:document>`
+    );
+
+    const changes: AutoAppliedChange[] = [
+      {
+        ruleId: 'LINK-006',
+        description: 'Retargeted "#_Eligibility" → "#Eligibility"',
+        targetField: 'link.bookmark._Eligibility',
+        value: 'Eligibility',
+      },
+      {
+        ruleId: 'LINK-006',
+        description: 'Retargeted "#_Program-specific_limitations_1" → "#_Program-specific_limitations"',
+        targetField: 'link.bookmark._Program-specific_limitations_1',
+        value: '_Program-specific_limitations',
+      },
+    ];
+
+    const xml = await getOutputDocXml(zip, [], changes);
+    expect(xml).toContain('w:anchor="Eligibility"');
+    expect(xml).toContain('w:anchor="_Program-specific_limitations"');
+    expect(xml).not.toContain('w:anchor="_Eligibility"');
+    expect(xml).not.toContain('w:anchor="_Program-specific_limitations_1"');
+  });
+});
+
+// ─── LINK-006 + CLEAN-008 interaction ────────────────────────────────────────
+//
+// These tests cover the two real-world failing cases the user reported:
+//   1. "#_Responsiveness_criteria_1" → "#_Responsiveness_criteria" (suffix stripped)
+//   2. "#_Contacts_and_support" → "#_Contacts_and_Support" (capitalisation fix)
+//
+// Both involve a heading with a leading space, so CLEAN-008 also runs and
+// renames the w:bookmarkStart w:name from _Foo → Foo (leading underscore removed).
+// The hyperlink must stay in sync: the final anchor and bookmark name must match.
+
+function makeHeadingBookmarkDocXml({
+  headingText,
+  bookmarkName,
+  hyperlinkAnchor,
+}: {
+  headingText: string;
+  bookmarkName: string;
+  hyperlinkAnchor: string;
+}): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p>
+      <w:pPr><w:pStyle w:val="Heading2"/></w:pPr>
+      <w:bookmarkStart w:id="1" w:name="${bookmarkName}"/>
+      <w:r><w:t xml:space="preserve">${headingText}</w:t></w:r>
+      <w:bookmarkEnd w:id="1"/>
+    </w:p>
+    <w:p>
+      <w:hyperlink w:anchor="${hyperlinkAnchor}">
+        <w:r><w:t>See section</w:t></w:r>
+      </w:hyperlink>
+    </w:p>
+    <w:sectPr/>
+  </w:body>
+</w:document>`;
+}
+
+describe('buildDocx — LINK-006 bookmark retarget + CLEAN-008 heading leading-space interaction', () => {
+  it('Case 2: capitalisation fix — final anchor and bookmark both become "Contacts_and_Support"', async () => {
+    // Heading " Contacts and Support" (leading space) → CLEAN-008 strips space and
+    // renames bookmark _Contacts_and_Support → Contacts_and_Support.
+    // LINK-006 first fixes the wrong-case anchor _Contacts_and_support →
+    // _Contacts_and_Support, then CLEAN-008 updates that anchor → Contacts_and_Support.
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingBookmarkDocXml({
+        headingText: ' Contacts and Support',
+        bookmarkName: '_Contacts_and_Support',
+        hyperlinkAnchor: '_Contacts_and_support',
+      })
+    );
+
+    const changes: AutoAppliedChange[] = [
+      {
+        ruleId: 'LINK-006',
+        description: 'Retargeted "#_Contacts_and_support" → "#_Contacts_and_Support"',
+        targetField: 'link.bookmark._Contacts_and_support',
+        value: '_Contacts_and_Support',
+      },
+      {
+        ruleId: 'CLEAN-008',
+        description: 'Removed leading spaces from headings',
+        targetField: 'heading.leadingspace',
+      },
+    ];
+
+    const xml = await getOutputDocXml(zip, [], changes);
+
+    // After LINK-006 then CLEAN-008, both should end up as "Contacts_and_Support"
+    expect(xml).toContain('w:anchor="Contacts_and_Support"');
+    expect(xml).toContain('w:name="Contacts_and_Support"');
+    // Neither should retain the leading-underscore form
+    expect(xml).not.toContain('w:anchor="_Contacts_and_Support"');
+    expect(xml).not.toContain('w:anchor="_Contacts_and_support"');
+    expect(xml).not.toContain('w:name="_Contacts_and_Support"');
+  });
+
+  it('Case 1: suffix-stripped fix — final anchor and bookmark both become "Responsiveness_criteria"', async () => {
+    // LINK-006 fixes _Responsiveness_criteria_1 → _Responsiveness_criteria (Pass 2).
+    // CLEAN-008 then renames the bookmark and updates the hyperlink so both become
+    // Responsiveness_criteria (leading underscore removed by space-strip).
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingBookmarkDocXml({
+        headingText: ' Responsiveness criteria',
+        bookmarkName: '_Responsiveness_criteria',
+        hyperlinkAnchor: '_Responsiveness_criteria_1',
+      })
+    );
+
+    const changes: AutoAppliedChange[] = [
+      {
+        ruleId: 'LINK-006',
+        description: 'Retargeted "#_Responsiveness_criteria_1" → "#_Responsiveness_criteria"',
+        targetField: 'link.bookmark._Responsiveness_criteria_1',
+        value: '_Responsiveness_criteria',
+      },
+      {
+        ruleId: 'CLEAN-008',
+        description: 'Removed leading spaces from headings',
+        targetField: 'heading.leadingspace',
+      },
+    ];
+
+    const xml = await getOutputDocXml(zip, [], changes);
+
+    expect(xml).toContain('w:anchor="Responsiveness_criteria"');
+    expect(xml).toContain('w:name="Responsiveness_criteria"');
+    expect(xml).not.toContain('w:anchor="_Responsiveness_criteria"');
+    expect(xml).not.toContain('w:anchor="_Responsiveness_criteria_1"');
+    expect(xml).not.toContain('w:name="_Responsiveness_criteria"');
+  });
+
+  it('LINK-006 without CLEAN-008 — anchor and bookmark both retain leading underscore', async () => {
+    // When CLEAN-008 is not active (heading has no leading space), the bookmark
+    // keeps its leading underscore and the LINK-006-fixed anchor must match it.
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeHeadingBookmarkDocXml({
+        headingText: 'Contacts and Support',
+        bookmarkName: '_Contacts_and_Support',
+        hyperlinkAnchor: '_Contacts_and_support',
+      })
+    );
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Retargeted "#_Contacts_and_support" → "#_Contacts_and_Support"',
+      targetField: 'link.bookmark._Contacts_and_support',
+      value: '_Contacts_and_Support',
+    };
+
+    const xml = await getOutputDocXml(zip, [], [change]);
+
+    // Anchor correctly updated to match the existing bookmark
+    expect(xml).toContain('w:anchor="_Contacts_and_Support"');
+    expect(xml).toContain('w:name="_Contacts_and_Support"');
+    expect(xml).not.toContain('w:anchor="_Contacts_and_support"');
+  });
+});
+
+// ─── applyRemoveDghtScaffolding (CLEAN-007) ──────────────────────────────────
+
+const W_NS_PREAMBLE = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+/** Build a paragraph with an optional heading style and text. */
+function makeParaXml(text: string, headingStyle?: string): string {
+  const pPr = headingStyle
+    ? `<w:pPr><w:pStyle w:val="${headingStyle}"/></w:pPr>`
+    : '';
+  return `<w:p>${pPr}<w:r><w:t>${text}</w:t></w:r></w:p>`;
+}
+
+/** Build a minimal table with one cell containing the given text. */
+function makeTableXml(text: string): string {
+  return (
+    `<w:tbl>` +
+    `<w:tr><w:tc><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc></w:tr>` +
+    `</w:tbl>`
+  );
+}
+
+/**
+ * Build a document.xml with optional preamble elements, the Step 1 anchor
+ * heading, and optional following content.
+ */
+function makePreambleDocXml(parts: {
+  preamble?: string[];
+  preambleTables?: string[];
+  step1Style?: string;
+  after?: string[];
+}): string {
+  const { preamble = [], preambleTables = [], step1Style = 'Heading2', after = [] } = parts;
+  const preParas = preamble.map(t => makeParaXml(t)).join('');
+  const preTables = preambleTables.map(t => makeTableXml(t)).join('');
+  const step1 = makeParaXml('Step 1: Review the Opportunity', step1Style);
+  const afterParas = after.map(t => makeParaXml(t)).join('');
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_PREAMBLE}">` +
+    `<w:body>${preParas}${preTables}${step1}${afterParas}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+const PREAMBLE_REMOVAL_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-007',
+  description: 'CDC preamble removed from beginning of document.',
+  targetField: 'struct.dght.removescaffolding',
+};
+
+describe('buildDocx — CLEAN-007: CDC preamble removal', () => {
+  it('removes paragraphs before the Step 1 heading and preserves the heading', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePreambleDocXml({
+        preamble: ['Here is the color coding for the doc: green = required', 'Editorial notes'],
+        after: ['NOFO content paragraph'],
+      })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PREAMBLE_REMOVAL_CHANGE]);
+    expect(outXml).not.toContain('color coding');
+    expect(outXml).not.toContain('Editorial notes');
+    expect(outXml).toContain('Step 1: Review the Opportunity');
+    expect(outXml).toContain('NOFO content paragraph');
+  });
+
+  it('removes a table that precedes the Step 1 heading', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePreambleDocXml({
+        preambleTables: ['CDC/DGHT Content Guide reference table'],
+        after: ['Body content'],
+      })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PREAMBLE_REMOVAL_CHANGE]);
+    expect(outXml).not.toContain('reference table');
+    expect(outXml).toContain('Step 1: Review the Opportunity');
+  });
+
+  it('removes mixed paragraphs and tables before Step 1', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePreambleDocXml({
+        preamble: ['Preamble paragraph'],
+        preambleTables: ['Preamble table'],
+        after: ['Post-Step1 content'],
+      })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PREAMBLE_REMOVAL_CHANGE]);
+    expect(outXml).not.toContain('Preamble paragraph');
+    expect(outXml).not.toContain('Preamble table');
+    expect(outXml).toContain('Step 1: Review the Opportunity');
+    expect(outXml).toContain('Post-Step1 content');
+  });
+
+  it('Step 1 heading is the first body paragraph in the output', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePreambleDocXml({
+        preamble: ['Preamble A', 'Preamble B'],
+        after: ['Body content'],
+      })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PREAMBLE_REMOVAL_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+    const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p')).filter(
+      p => Array.from(p.getElementsByTagName('w:t')).some(t => (t.textContent ?? '').trim())
+    );
+    expect(paragraphs[0]?.textContent?.trim()).toBe('Step 1: Review the Opportunity');
+  });
+
+  it('detection is case-insensitive — removes preamble when Step 1 heading text is upper-cased', async () => {
+    const zip = new JSZip();
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_PREAMBLE}"><w:body>` +
+      makeParaXml('Preamble content') +
+      makeParaXml('STEP 1: REVIEW THE OPPORTUNITY', 'Heading2') +
+      makeParaXml('Body content') +
+      `<w:sectPr/></w:body></w:document>`;
+    zip.file('word/document.xml', xml);
+
+    const outXml = await getOutputDocXml(zip, [], [PREAMBLE_REMOVAL_CHANGE]);
+    expect(outXml).not.toContain('Preamble content');
+    expect(outXml).toContain('STEP 1: REVIEW THE OPPORTUNITY');
+  });
+
+  it('preserves all content when Step 1 heading is not present (safety guard)', async () => {
+    const zip = new JSZip();
+    // Deliberately no Step 1 heading — use raw XML to avoid the helper auto-inserting it
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_PREAMBLE}"><w:body>` +
+      makeParaXml('Content without any Step 1 heading') +
+      `<w:sectPr/></w:body></w:document>`
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PREAMBLE_REMOVAL_CHANGE]);
+    expect(outXml).toContain('Content without any Step 1 heading');
+  });
+
+  it('does not modify the document when targetField is absent from autoAppliedChanges', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePreambleDocXml({ preamble: ['Should survive'], after: ['Body'] })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    expect(outXml).toContain('Should survive');
+  });
+});
+
+// ─── applyTrailingPeriodBoldFix (CLEAN-016) ──────────────────────────────────
+
+const W_NS_PERIOD = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function makeTrailingPeriodDocXml(body: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_PERIOD}">` +
+    `<w:body>${body}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+const TRAILING_PERIOD_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-016',
+  description: 'Bold removed from 1 trailing period.',
+  targetField: 'text.trailing.period.unbold',
+};
+
+describe('buildDocx — CLEAN-016: trailing period bold removal', () => {
+  it('removes w:b from the period run when the period is in its own run', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:t>Hello world</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>.</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeTrailingPeriodDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [TRAILING_PERIOD_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    expect(runs).toHaveLength(2);
+
+    const periodRun = runs[1]!;
+    const rPr = Array.from(periodRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(rPr?.getElementsByTagName('w:b').length ?? 0).toBe(0);
+    expect(periodRun.getElementsByTagName('w:t')[0]?.textContent).toBe('.');
+  });
+
+  it('removes w:b and w:bCs together when both are present on the period run', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:t>Hello</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/><w:bCs/></w:rPr><w:t>.</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeTrailingPeriodDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [TRAILING_PERIOD_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    const periodRun = runs[1]!;
+    const rPr = Array.from(periodRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(rPr?.getElementsByTagName('w:b').length ?? 0).toBe(0);
+    expect(rPr?.getElementsByTagName('w:bCs').length ?? 0).toBe(0);
+  });
+
+  it('splits the run when the period is attached to other bold text', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:t>Normal</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>end.</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeTrailingPeriodDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [TRAILING_PERIOD_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    // Original two-run paragraph becomes three runs: "Normal", "end" (bold), "." (not bold)
+    expect(runs).toHaveLength(3);
+
+    const boldPrefixRun = runs[1]!;
+    const periodRun = runs[2]!;
+
+    const boldRpr = Array.from(boldPrefixRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(boldRpr?.getElementsByTagName('w:b').length ?? 0).toBe(1);
+    expect(boldPrefixRun.getElementsByTagName('w:t')[0]?.textContent).toBe('end');
+
+    const periodRpr = Array.from(periodRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(periodRpr?.getElementsByTagName('w:b').length ?? 0).toBe(0);
+    expect(periodRun.getElementsByTagName('w:t')[0]?.textContent).toBe('.');
+  });
+
+  it('does not modify the document when the preceding run is also bold', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>Bold text</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>.</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeTrailingPeriodDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [TRAILING_PERIOD_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    expect(runs).toHaveLength(2);
+    const periodRun = runs[1]!;
+    const rPr = Array.from(periodRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(rPr?.getElementsByTagName('w:b').length ?? 0).toBe(1);
+  });
+});
+
+// ─── applyBoldBulletFix (CLEAN-015) ──────────────────────────────────────────
+
+const W_NS_BULLET = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+/**
+ * Build a minimal document.xml containing a list paragraph whose paragraph-level
+ * w:pPr/w:rPr has the given bold elements, plus an optional text-run w:rPr with
+ * its own bold element (to verify run-level bold is never touched).
+ */
+function makeBoldBulletDocXml({
+  paraRprContent = '',
+  runRprContent = '',
+  numId = '1',
+  nonListPara = '',
+}: {
+  paraRprContent?: string;
+  runRprContent?: string;
+  numId?: string;
+  nonListPara?: string;
+}): string {
+  const paraRpr = paraRprContent ? `<w:rPr>${paraRprContent}</w:rPr>` : '';
+  const runRpr = runRprContent ? `<w:rPr>${runRprContent}</w:rPr>` : '';
+  const listPara =
+    `<w:p>` +
+    `<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="${numId}"/></w:numPr>${paraRpr}</w:pPr>` +
+    `<w:r>${runRpr}<w:t>List item text</w:t></w:r>` +
+    `</w:p>`;
+  const extra = nonListPara
+    ? `<w:p><w:r><w:rPr>${nonListPara}</w:rPr><w:t>Body text</w:t></w:r></w:p>`
+    : '';
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_BULLET}">` +
+    `<w:body>${listPara}${extra}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+const BOLD_BULLET_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-015',
+  description: 'Bold removed from 1 list item bullet.',
+  targetField: 'list.bullet.unbold',
+};
+
+describe('buildDocx — CLEAN-015: bold bullet removal', () => {
+  it('removes w:b from paragraph-level w:pPr/w:rPr of a list paragraph', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeBoldBulletDocXml({ paraRprContent: '<w:b/>' }));
+
+    const outXml = await getOutputDocXml(zip, [], [BOLD_BULLET_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const pPr = Array.from(wP!.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:pPr'
+    ) as Element | undefined;
+    const pRpr = pPr
+      ? (Array.from(pPr.childNodes).find(
+          n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+        ) as Element | undefined)
+      : undefined;
+
+    expect(pRpr?.getElementsByTagName('w:b').length ?? 0).toBe(0);
+  });
+
+  it('removes w:bCs from paragraph-level w:pPr/w:rPr of a list paragraph', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeBoldBulletDocXml({ paraRprContent: '<w:bCs/>' }));
+
+    const outXml = await getOutputDocXml(zip, [], [BOLD_BULLET_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const pPr = Array.from(wP!.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:pPr'
+    ) as Element | undefined;
+    const pRpr = pPr
+      ? (Array.from(pPr.childNodes).find(
+          n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+        ) as Element | undefined)
+      : undefined;
+
+    expect(pRpr?.getElementsByTagName('w:bCs').length ?? 0).toBe(0);
+  });
+
+  it('removes both w:b and w:bCs together when both are present', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeBoldBulletDocXml({ paraRprContent: '<w:b/><w:bCs/>' })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [BOLD_BULLET_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const pPr = Array.from(wP!.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:pPr'
+    ) as Element | undefined;
+    const pRpr = pPr
+      ? (Array.from(pPr.childNodes).find(
+          n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+        ) as Element | undefined)
+      : undefined;
+
+    expect(pRpr?.getElementsByTagName('w:b').length ?? 0).toBe(0);
+    expect(pRpr?.getElementsByTagName('w:bCs').length ?? 0).toBe(0);
+  });
+
+  it('preserves w:b on the text run w:rPr when paragraph-level bold is removed', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeBoldBulletDocXml({ paraRprContent: '<w:b/>', runRprContent: '<w:b/>' })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [BOLD_BULLET_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const wR = Array.from(wP!.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element | undefined;
+    const runRpr = wR
+      ? (Array.from(wR.childNodes).find(
+          n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+        ) as Element | undefined)
+      : undefined;
+
+    expect(runRpr?.getElementsByTagName('w:b').length ?? 0).toBe(1);
+  });
+
+  it('does not modify a non-list paragraph with bold text when the change is present', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeBoldBulletDocXml({ paraRprContent: '', nonListPara: '<w:b/>' })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [BOLD_BULLET_CHANGE]);
+    expect(outXml).toContain('<w:b/>');
+  });
+
+  it('does not modify document.xml when the targetField is absent from autoAppliedChanges', async () => {
+    const zip = new JSZip();
+    const originalXml = makeBoldBulletDocXml({ paraRprContent: '<w:b/><w:bCs/>' });
+    zip.file('word/document.xml', originalXml);
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    // Bold elements survive because the fix was not triggered
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const pPr = Array.from(wP!.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:pPr'
+    ) as Element | undefined;
+    const pRpr = pPr
+      ? (Array.from(pPr.childNodes).find(
+          n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+        ) as Element | undefined)
+      : undefined;
+
+    expect(pRpr?.getElementsByTagName('w:b').length ?? 0).toBe(1);
+  });
+});
+
+// ─── applyPartialHyperlinkFix (LINK-009) ────────────────────────────────────
+
+const PARTIAL_HYPERLINK_CHANGE: AutoAppliedChange = {
+  ruleId: 'LINK-009',
+  description: 'Partial hyperlink text corrected for 1 link.',
+  targetField: 'link.partial.fix',
+  value: '1',
+};
+
+const HL_INNER_RUN =
+  `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>link text</w:t></w:r>`;
+
+function makePartialHlDocXml(before: string, after: string, inner: string = HL_INNER_RUN): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}">` +
+    `<w:body><w:p>` +
+    before +
+    `<w:hyperlink r:id="rId1" w:history="1">${inner}</w:hyperlink>` +
+    after +
+    `</w:p><w:sectPr/></w:body></w:document>`
+  );
+}
+
+function directParaRuns(xml: string): Element[] {
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xml, 'application/xml');
+  const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  return Array.from(wP!.childNodes).filter(
+    n => n.nodeType === 1 && (n as Element).localName === 'r'
+  ) as Element[];
+}
+
+describe('buildDocx — LINK-009: partial hyperlink fix', () => {
+  it('moves trailing non-ws char from preceding run into hyperlink and removes emptied run', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePartialHlDocXml(`<w:r><w:t>(</w:t></w:r>`, ``));
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('(link text');
+    expect(directParaRuns(outXml)).toHaveLength(0);
+  });
+
+  it('moves leading non-ws char from following run into hyperlink and removes emptied run', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePartialHlDocXml(``, `<w:r><w:t>)</w:t></w:r>`));
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('link text)');
+    expect(directParaRuns(outXml)).toHaveLength(0);
+  });
+
+  it('handles both leading and trailing moves on the same hyperlink', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePartialHlDocXml(`<w:r><w:t>(</w:t></w:r>`, `<w:r><w:t>)</w:t></w:r>`)
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('(link text)');
+    expect(directParaRuns(outXml)).toHaveLength(0);
+  });
+
+  it('trims only trailing non-ws from preceding run, preserving whitespace remainder', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePartialHlDocXml(`<w:r><w:t xml:space="preserve">Hello (</w:t></w:r>`, ``)
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('(link text');
+    const remaining = directParaRuns(outXml);
+    expect(remaining).toHaveLength(1);
+    const text = Array.from((remaining[0] as Element).getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '')
+      .join('');
+    expect(text).toBe('Hello ');
+  });
+
+  it('skips bookmark elements between preceding run and hyperlink and still applies fix', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePartialHlDocXml(
+        `<w:r><w:t>(</w:t></w:r><w:bookmarkEnd w:id="0"/>`,
+        ``
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('(link text');
+  });
+
+  it('does not apply fix when a non-bookmark element blocks adjacency', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePartialHlDocXml(
+        `<w:r><w:t>(</w:t></w:r><w:proofErr w:type="spellStart"/>`,
+        ``
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('link text');
+  });
+
+  it('inserts the moved run with w:rStyle w:val="Hyperlink" for correct rendering', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePartialHlDocXml(`<w:r><w:t>(</w:t></w:r>`, ``));
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    const hl = hyperlinks.find(el => el.getAttributeNS(R_NS, 'id') === 'rId1')!;
+    const runs = Array.from(hl.children).filter(c => c.localName === 'r');
+    const insertedRun = runs[0]!;
+    const rPr = Array.from(insertedRun.children).find(c => c.localName === 'rPr');
+    const rStyle = rPr ? Array.from(rPr.children).find(c => c.localName === 'rStyle') : undefined;
+    expect(rStyle?.getAttributeNS(W_NS, 'val')).toBe('Hyperlink');
+  });
+
+  it('does not modify the document when autoAppliedChanges does not include LINK-009', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePartialHlDocXml(`<w:r><w:t>(</w:t></w:r>`, ``));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('link text');
+    expect(directParaRuns(outXml)).toHaveLength(1);
+  });
+});
+
+// ─── applyEmailMailtoFixes (LINK-008) ────────────────────────────────────────
+
+function makeEmailDocXml(body: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}">` +
+    `<w:body>${body}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+function makeEmptyRelsXml(): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="${RELS_NS}"></Relationships>`
+  );
+}
+
+function makeEmailChange(email: string): AutoAppliedChange {
+  return {
+    ruleId: 'LINK-008',
+    description: `Email address converted to a mailto: link — ${email}`,
+    targetField: 'email.mailto',
+    value: email,
+  };
+}
+
+describe('buildDocx — LINK-008: email mailto conversion', () => {
+  it('wraps a plain-text email run in a w:hyperlink element', async () => {
+    const email = 'user@example.com';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t>${email}</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    const outZip = await getOutputZip(zip, [], [makeEmailChange(email)]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(1);
+
+    const hlText = Array.from(hyperlinks[0]!.getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '')
+      .join('');
+    expect(hlText).toBe(email);
+
+    // No direct w:r children on the paragraph — run was moved inside hyperlink
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const directRuns = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).localName === 'r'
+    );
+    expect(directRuns).toHaveLength(0);
+  });
+
+  it('adds a Relationship entry with correct Type, Target, and TargetMode to rels', async () => {
+    const email = 'contact@example.org';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t>${email}</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    const outZip = await getOutputZip(zip, [], [makeEmailChange(email)]);
+    const relsXml = await outZip.file('word/_rels/document.xml.rels')!.async('string');
+
+    const parser = new DOMParser();
+    const relsDoc = parser.parseFromString(relsXml, 'application/xml');
+    const rels = Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'));
+
+    expect(rels).toHaveLength(1);
+    expect(rels[0]!.getAttribute('Type')).toBe(HYPERLINK_TYPE_URI);
+    expect(rels[0]!.getAttribute('Target')).toBe(`mailto:${email}`);
+    expect(rels[0]!.getAttribute('TargetMode')).toBe('External');
+  });
+
+  it('r:id on the new hyperlink element matches the Relationship Id in rels', async () => {
+    const email = 'match@example.com';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t>${email}</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    const outZip = await getOutputZip(zip, [], [makeEmailChange(email)]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+    const relsXml = await outZip.file('word/_rels/document.xml.rels')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+    const relsDoc = parser.parseFromString(relsXml, 'application/xml');
+
+    const hl = xmlDoc.getElementsByTagName('w:hyperlink')[0]!;
+    const relId = hl.getAttributeNS(R_NS, 'id');
+    expect(relId).toBeTruthy();
+
+    const rels = Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'));
+    const matchingRel = rels.find(r => r.getAttribute('Id') === relId);
+    expect(matchingRel).toBeDefined();
+    expect(matchingRel!.getAttribute('Target')).toBe(`mailto:${email}`);
+  });
+
+  it('adds w:rStyle w:val="Hyperlink" to the run inside the new hyperlink', async () => {
+    const email = 'style@example.com';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t>${email}</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    const outZip = await getOutputZip(zip, [], [makeEmailChange(email)]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+    const hl = xmlDoc.getElementsByTagName('w:hyperlink')[0]!;
+    const run = Array.from(hl.children).find(c => c.localName === 'r')!;
+    const rPr = Array.from(run.children).find(c => c.localName === 'rPr');
+    const rStyle = rPr ? Array.from(rPr.children).find(c => c.localName === 'rStyle') : undefined;
+    expect(rStyle?.getAttributeNS(W_NS, 'val')).toBe('Hyperlink');
+  });
+
+  it('does not double-wrap a run already inside a w:hyperlink', async () => {
+    const email = 'already@example.com';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p>` +
+      `<w:hyperlink r:id="rId1" w:history="1">` +
+      `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>${email}</w:t></w:r>` +
+      `</w:hyperlink>` +
+      `</w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makePdfRelsXml(
+      'rId1', `mailto:${email}`, 'External', HYPERLINK_TYPE_URI
+    ));
+
+    const outZip = await getOutputZip(zip, [], [makeEmailChange(email)]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+
+    // Still exactly one hyperlink — no double-wrapping
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(1);
+
+    // The hyperlink's parent is the paragraph, not another hyperlink
+    expect(hyperlinks[0]!.parentElement?.localName).not.toBe('hyperlink');
+  });
+
+  it('allocates a new rId that does not collide with existing relationships', async () => {
+    const email = 'new@example.com';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t>${email}</w:t></w:r></w:p>`
+    ));
+    // Pre-existing relationships occupy rId1 and rId2
+    zip.file('word/_rels/document.xml.rels', (
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="${RELS_NS}">` +
+      `<Relationship Id="rId1" Type="${HYPERLINK_TYPE_URI}" Target="https://example.com" TargetMode="External"/>` +
+      `<Relationship Id="rId2" Type="${HYPERLINK_TYPE_URI}" Target="https://other.com" TargetMode="External"/>` +
+      `</Relationships>`
+    ));
+
+    const outZip = await getOutputZip(zip, [], [makeEmailChange(email)]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+    const relsXml = await outZip.file('word/_rels/document.xml.rels')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+    const relsDoc = parser.parseFromString(relsXml, 'application/xml');
+
+    // The new email hyperlink is the last one in document order
+    const emailHl = Array.from(xmlDoc.getElementsByTagName('w:hyperlink')).find(
+      h => Array.from(h.getElementsByTagName('w:t')).some(t => t.textContent === email)
+    )!;
+    const newRelId = emailHl.getAttributeNS(R_NS, 'id')!;
+
+    // Must not be rId1 or rId2
+    expect(newRelId).not.toBe('rId1');
+    expect(newRelId).not.toBe('rId2');
+
+    // The rels file must contain a matching entry
+    const rels = Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'));
+    const newRel = rels.find(r => r.getAttribute('Id') === newRelId);
+    expect(newRel?.getAttribute('Target')).toBe(`mailto:${email}`);
+  });
+
+  it('converts an email embedded in a longer text run by splitting the run at the email boundary', async () => {
+    const email = 'embedded@example.com';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t xml:space="preserve">Contact ${email} for help</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    const outZip = await getOutputZip(zip, [], [makeEmailChange(email)]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+
+    // Email must now be inside a w:hyperlink
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(1);
+    const hlText = Array.from(hyperlinks[0]!.getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '')
+      .join('');
+    expect(hlText).toBe(email);
+
+    // The paragraph should have three children: before run, hyperlink, after run
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const children = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1
+    ) as Element[];
+    expect(children).toHaveLength(3);
+    expect(children[0]!.localName).toBe('r');
+    expect(children[1]!.localName).toBe('hyperlink');
+    expect(children[2]!.localName).toBe('r');
+
+    const beforeText = Array.from((children[0] as Element).getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '').join('');
+    const afterText = Array.from((children[2] as Element).getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '').join('');
+    expect(beforeText).toBe('Contact ');
+    expect(afterText).toBe(' for help');
+  });
+
+  it('does not modify the document when autoAppliedChanges does not include LINK-008', async () => {
+    const email = 'noop@example.com';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t>${email}</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    const outZip = await getOutputZip(zip, [], []);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+    const relsXml = await outZip.file('word/_rels/document.xml.rels')!.async('string');
+
+    const parser = new DOMParser();
+    expect(parser.parseFromString(docXml, 'application/xml').getElementsByTagName('w:hyperlink'))
+      .toHaveLength(0);
+    expect(parser.parseFromString(relsXml, 'application/xml')
+      .getElementsByTagNameNS(RELS_NS, 'Relationship'))
+      .toHaveLength(0);
+  });
+
+  it('converts two different email addresses in separate runs — both get hyperlinked with distinct rels entries', async () => {
+    const email1 = 'alice@example.com';
+    const email2 = 'bob@example.org';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t>${email1}</w:t></w:r></w:p>` +
+      `<w:p><w:r><w:t>${email2}</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    const outZip = await getOutputZip(zip, [], [
+      makeEmailChange(email1),
+      makeEmailChange(email2),
+    ]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+    const relsXml = await outZip.file('word/_rels/document.xml.rels')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+    const relsDoc = parser.parseFromString(relsXml, 'application/xml');
+
+    // Both paragraphs should have a hyperlink
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(2);
+
+    const hlTexts = hyperlinks.map(hl =>
+      Array.from(hl.getElementsByTagName('w:t')).map(t => t.textContent ?? '').join('')
+    );
+    expect(hlTexts).toContain(email1);
+    expect(hlTexts).toContain(email2);
+
+    // Two separate rels entries, one per email
+    const rels = Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'));
+    expect(rels).toHaveLength(2);
+    const targets = rels.map(r => r.getAttribute('Target') ?? '');
+    expect(targets).toContain(`mailto:${email1}`);
+    expect(targets).toContain(`mailto:${email2}`);
+  });
+
+  it('converts both occurrences of the same email address appearing in different paragraphs', async () => {
+    const email = 'repeat@example.com';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t>${email}</w:t></w:r></w:p>` +
+      `<w:p><w:r><w:t>${email}</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    // Rule emits one change per occurrence — two changes for two occurrences
+    const outZip = await getOutputZip(zip, [], [
+      makeEmailChange(email),
+      makeEmailChange(email),
+    ]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+    const relsXml = await outZip.file('word/_rels/document.xml.rels')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+    const relsDoc = parser.parseFromString(relsXml, 'application/xml');
+
+    // Both runs should be wrapped — two hyperlinks in the document
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(2);
+
+    // Both hyperlinks should carry the same email text
+    for (const hl of hyperlinks) {
+      const text = Array.from(hl.getElementsByTagName('w:t'))
+        .map(t => t.textContent ?? '').join('');
+      expect(text).toBe(email);
+    }
+
+    // Only ONE relationship entry is needed for the same email
+    const rels = Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'));
+    expect(rels).toHaveLength(1);
+    expect(rels[0]!.getAttribute('Target')).toBe(`mailto:${email}`);
+
+    // Both hyperlinks reference the same rId
+    const relId = rels[0]!.getAttribute('Id');
+    for (const hl of hyperlinks) {
+      expect(hl.getAttributeNS(R_NS, 'id')).toBe(relId);
+    }
+  });
+
+  it('converts two different emails embedded in the same text run — both get hyperlinked', async () => {
+    const email1 = 'first@example.com';
+    const email2 = 'second@example.org';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeEmailDocXml(
+      `<w:p><w:r><w:t xml:space="preserve">${email1} or ${email2}</w:t></w:r></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', makeEmptyRelsXml());
+
+    const outZip = await getOutputZip(zip, [], [
+      makeEmailChange(email1),
+      makeEmailChange(email2),
+    ]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(2);
+
+    const hlTexts = hyperlinks.map(hl =>
+      Array.from(hl.getElementsByTagName('w:t')).map(t => t.textContent ?? '').join('')
+    );
+    expect(hlTexts).toContain(email1);
+    expect(hlTexts).toContain(email2);
+  });
+});
+
+// ─── TABLE-004: applyImportantPublicHeadingFix ────────────────────────────────
+
+const W_NS_T4 = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+const TABLE_004_CHANGE: AutoAppliedChange = {
+  ruleId: 'TABLE-004',
+  description: 'Heading style applied to "Important: public information" in 1 table.',
+  targetField: 'table.importantpublic.heading',
+  value: '1',
+};
+
+function makeT4DocXml(bodyInner: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_T4}">` +
+    `<w:body>${bodyInner}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+function t4HeadingPara(level: number): string {
+  return (
+    `<w:p>` +
+    `<w:pPr><w:pStyle w:val="Heading${level}"/></w:pPr>` +
+    `<w:r><w:t>Section heading</w:t></w:r>` +
+    `</w:p>`
+  );
+}
+
+function t4SingleCellTable(firstParaText: string, extraParas = 1): string {
+  const extras = Array.from({ length: extraParas }, () =>
+    `<w:p><w:r><w:t>Body text.</w:t></w:r></w:p>`
+  ).join('');
+  return (
+    `<w:tbl><w:tr><w:tc>` +
+    `<w:p><w:r><w:t>${firstParaText}</w:t></w:r></w:p>` +
+    extras +
+    `</w:tc></w:tr></w:tbl>`
+  );
+}
+
+function t4MultiCellTable(firstParaText: string): string {
+  return (
+    `<w:tbl><w:tr>` +
+    `<w:tc><w:p><w:r><w:t>${firstParaText}</w:t></w:r></w:p><w:p><w:r><w:t>extra</w:t></w:r></w:p></w:tc>` +
+    `<w:tc><w:p><w:r><w:t>Cell 2</w:t></w:r></w:p></w:tc>` +
+    `</w:tr></w:tbl>`
+  );
+}
+
+async function t4GetFirstParaStyle(docXml: string): Promise<string | null> {
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+  const tbl = xmlDoc.getElementsByTagName('w:tbl')[0];
+  if (!tbl) return null;
+  const tc = tbl.getElementsByTagName('w:tc')[0];
+  if (!tc) return null;
+  const firstPara = Array.from(tc.childNodes).find(
+    n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'p'
+  ) as Element | undefined;
+  if (!firstPara) return null;
+  const pStyle = firstPara.getElementsByTagName('w:pStyle')[0];
+  return pStyle ? pStyle.getAttribute('w:val') : null;
+}
+
+describe('buildDocx — TABLE-004: important public information heading fix', () => {
+  it('applies heading style matching nearest preceding heading level', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(3) +
+      t4SingleCellTable('Important: public information')
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBe('Heading3');
+  });
+
+  it('defaults to Heading5 when no preceding heading exists', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4SingleCellTable('Important: public information')
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBe('Heading5');
+  });
+
+  it('picks the nearest preceding heading when multiple precede the table', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(2) +
+      `<w:p><w:r><w:t>Intro paragraph.</w:t></w:r></w:p>` +
+      t4HeadingPara(4) +
+      t4SingleCellTable('Important: public information')
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBe('Heading4');
+  });
+
+  it('is case-insensitive — applies style for "IMPORTANT: PUBLIC INFORMATION"', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(2) +
+      t4SingleCellTable('IMPORTANT: PUBLIC INFORMATION')
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBe('Heading2');
+  });
+
+  it('does not modify a table whose first paragraph has no body content', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(3) +
+      t4SingleCellTable('Important: public information', 0)
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBeNull();
+  });
+
+  it('does not modify a multi-cell table even if first cell text matches', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(3) +
+      t4MultiCellTable('Important: public information')
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+    const firstPara = Array.from(
+      xmlDoc.getElementsByTagName('w:tc')[0]!.childNodes
+    ).find(
+      n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'p'
+    ) as Element | undefined;
+    const pStyle = firstPara?.getElementsByTagName('w:pStyle')[0];
+    expect(pStyle).toBeUndefined();
+  });
+
+  it('does not modify a table with non-matching first paragraph text', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(3) +
+      t4SingleCellTable('Note: This is informational only')
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBeNull();
+  });
+
+  it('does not modify anything when TABLE-004 change is absent', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(3) +
+      t4SingleCellTable('Important: public information')
+    ));
+    const docXml = await getOutputDocXml(zip, [], []);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBeNull();
+  });
+
+  it('preserves existing w:pPr children when adding w:pStyle', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(3) +
+      `<w:tbl><w:tr><w:tc>` +
+      `<w:p><w:pPr><w:ind w:left="720"/></w:pPr><w:r><w:t>Important: public information</w:t></w:r></w:p>` +
+      `<w:p><w:r><w:t>Body text.</w:t></w:r></w:p>` +
+      `</w:tc></w:tr></w:tbl>`
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(docXml, 'application/xml');
+    const tc = xmlDoc.getElementsByTagName('w:tc')[0]!;
+    const firstPara = Array.from(tc.childNodes).find(
+      n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'p'
+    ) as Element;
+    const pPr = Array.from(firstPara.childNodes).find(
+      n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'pPr'
+    ) as Element;
+    expect(pPr.getElementsByTagName('w:pStyle')[0]?.getAttribute('w:val')).toBe('Heading3');
+    expect(pPr.getElementsByTagName('w:ind')[0]).toBeTruthy();
+  });
+
+  it('preserves spaced style ID format "Heading 3" from preceding heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      `<w:p><w:pPr><w:pStyle w:val="Heading 3"/></w:pPr><w:r><w:t>Section</w:t></w:r></w:p>` +
+      t4SingleCellTable('Important: public information')
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBe('Heading 3');
+  });
+
+  it('applies fix to outer single-cell table even when the cell contains a nested table', async () => {
+    const nestedTable =
+      `<w:tbl><w:tr>` +
+      `<w:tc><w:p><w:r><w:t>A</w:t></w:r></w:p></w:tc>` +
+      `<w:tc><w:p><w:r><w:t>B</w:t></w:r></w:p></w:tc>` +
+      `</w:tr></w:tbl>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeT4DocXml(
+      t4HeadingPara(2) +
+      `<w:tbl><w:tr><w:tc>` +
+      `<w:p><w:r><w:t>Important: public information</w:t></w:r></w:p>` +
+      `<w:p><w:r><w:t>Body text.</w:t></w:r></w:p>` +
+      nestedTable +
+      `</w:tc></w:tr></w:tbl>`
+    ));
+    const docXml = await getOutputDocXml(zip, [], [TABLE_004_CHANGE]);
+    const style = await t4GetFirstParaStyle(docXml);
+    expect(style).toBe('Heading2');
   });
 });
 

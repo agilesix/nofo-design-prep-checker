@@ -11,14 +11,54 @@ const MIN_GAP = 3;
 // Number of distinct signal categories that must have matched
 const MIN_SIGNAL_CATEGORIES = 2;
 
+function isDebugEnabled(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem('DEBUG_DETECT_GUIDE') === '1';
+  } catch {
+    return false;
+  }
+}
+
+function debugLog(msg: string, ...args: unknown[]): void {
+  if (isDebugEnabled()) console.log(`[detectContentGuide] ${msg}`, ...args);
+}
+
 export function detectContentGuide(rawText: string): ContentGuideDetectionResult {
   const text = rawText.toLowerCase();
+
+  debugLog(
+    'rawText metadata: length=%d, lines=%d',
+    rawText.length,
+    rawText === '' ? 0 : rawText.split(/\r?\n/).length,
+  );
 
   const hasCdcIdentifier =
     text.includes('centers for disease control') ||
     /\bcdc\b/i.test(rawText);
 
-  // Check for CDC/DGHT variants first (more specific than CDC standard or Research).
+  // Check for CDC DGHP first — signals are distinct from DGHT and mutually exclusive in practice.
+  // Requires a CDC identifier plus any 2 of the 8 DGHP-specific signals.
+  const dghpSignalChecks = [
+    { label: 'CDC/DGHP identifier detected',                             matched: /cdc\/dghp/i.test(rawText) },
+    { label: 'Division of Global Health Protection detected',            matched: /division of global health protection/i.test(rawText) },
+    { label: 'RFA-JG- opportunity number detected',                      matched: /\brfa-jg-/i.test(rawText) },
+    { label: 'DGHP-SPECIFIC INSTRUCTIONS detected',                      matched: /dghp-specific instructions/i.test(rawText) },
+    { label: 'DGHP NOFO Tracker detected',                               matched: /dghp nofo tracker/i.test(rawText) },
+    { label: 'Global Health Security (GHS) detected',                    matched: /global health security \(ghs\)/i.test(rawText) },
+    { label: 'Global Health Security Agenda (GHSA) detected',            matched: /global health security agenda \(ghsa\)/i.test(rawText) },
+    { label: 'GHS cooperative agreements boilerplate detected',          matched: /we fund all global health security \(ghs\) cooperative agreements/i.test(rawText) },
+  ];
+  const dghpMatched = dghpSignalChecks.filter(s => s.matched);
+  debugLog('hasCdcIdentifier=%s, dghpMatched=%d/%d: %o', hasCdcIdentifier, dghpMatched.length, dghpSignalChecks.length, dghpMatched.map(s => s.label));
+  if (hasCdcIdentifier && dghpMatched.length >= 2) {
+    return {
+      detectedId: 'cdc-dghp',
+      confidence: 'high',
+      signals: dghpMatched.map(s => s.label),
+    };
+  }
+
+  // Check for CDC/DGHT variants (more specific than CDC standard or Research).
   // Prefer cdc-dght-competitive when both competitive and SSJ signals are present.
   const hasDght = /\bdght\b/i.test(rawText);
 
@@ -73,6 +113,12 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
     if (guide.id === 'cdc-research') continue;
     if (guide.id === 'cdc-dght-ssj') continue;
     if (guide.id === 'cdc-dght-competitive') continue;
+    // cdc-dghp is detected exclusively via the fast-path above (2-of-8 DGHP signals +
+    // hasCdcIdentifier). Its detectionSignals entries (abbreviations: ['CDC', 'DGHP'],
+    // uniqueSections: ['DGHP Basic Information', 'Global Health Security']) would score
+    // against every CDC document if included here, inflating CDC scores and causing
+    // incorrect low-confidence results for standard CDC NOFOs.
+    if (guide.id === 'cdc-dghp') continue;
 
     const guideSignals: string[] = [];
     let score = 0;

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useFocusHeading } from '../hooks/useFocusHeading';
 import type { ParsedDocument, ReviewState, AcceptedFix, IssueResolution, Issue, ContentGuideId } from '../types';
 import { content } from '../content';
@@ -9,12 +9,15 @@ import ContentGuideBadge from './ContentGuideBadge';
 interface ReviewStepProps {
   doc: ParsedDocument;
   reviewState: ReviewState;
+  initialAcceptedFixes: AcceptedFix[];
   onComplete: (fixes: AcceptedFix[], resolutions: Record<string, IssueResolution>) => void;
   onGuideChange: (guideId: ContentGuideId) => void;
   onStartOver: () => void;
   bannerDismissed: boolean;
   onDismissBanner: (val: boolean) => void;
   isPreNofo: boolean;
+  /** Called whenever the in-progress accepted fixes change so App can persist them. */
+  onLiveFixesChange?: (fixes: AcceptedFix[]) => void;
 }
 
 type SeverityFilter = 'all' | 'error' | 'warning' | 'suggestion';
@@ -22,30 +25,58 @@ type SeverityFilter = 'all' | 'error' | 'warning' | 'suggestion';
 export default function ReviewStep({
   doc,
   reviewState,
+  initialAcceptedFixes,
   onComplete,
   onGuideChange,
   onStartOver,
   bannerDismissed,
   onDismissBanner,
   isPreNofo,
+  onLiveFixesChange,
 }: ReviewStepProps): React.ReactElement {
   const headingRef = useFocusHeading();
   const [resolutions, setResolutions] = useState<Record<string, IssueResolution>>(
     reviewState.resolutions
   );
-  const [acceptedFixes, setAcceptedFixes] = useState<AcceptedFix[]>([]);
+  const [acceptedFixes, setAcceptedFixes] = useState<AcceptedFix[]>(() => {
+    const validIssueIds = new Set(reviewState.issues.map((issue) => issue.id));
+    return initialAcceptedFixes.filter((fix) => validIssueIds.has(fix.issueId));
+  });
+  const acceptedFixMap = useMemo(
+    () => new Map(acceptedFixes.map(f => [f.issueId, f.value])),
+    [acceptedFixes]
+  );
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
   const [dismissedCategories, setDismissedCategories] = useState<Set<string>>(new Set());
+
+  // Track whether this is the first render so the effect below can distinguish
+  // between initial mount (back-navigation re-mount — do NOT reset) and a real
+  // guide change while the component is already mounted (DO reset).
+  const isInitialMount = useRef(true);
 
   // When the guide changes, App rebuilds reviewState with a fresh issues array and
   // new resolutions. Reset all local state so stale fixes and dismissed markers
   // from the previous guide run are not carried forward into the new one.
   // Both deps change atomically via the same setReviewState call in App.tsx.
+  // Skip on initial mount so that fixes restored from App state (back-navigation)
+  // are not wiped out by this effect firing after the first render.
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
     setResolutions(reviewState.resolutions);
     setAcceptedFixes([]);
     setDismissedCategories(new Set());
   }, [reviewState.issues, reviewState.resolutions]);
+
+  // Keep App's acceptedFixes in sync with local state so that navigating away
+  // (e.g. to the About page) and back does not lose in-progress accepted values.
+  // Sync on mount as well so the first user change cannot be dropped before the
+  // effect's initial execution.
+  useEffect(() => {
+    onLiveFixesChange?.(acceptedFixes);
+  }, [acceptedFixes, onLiveFixesChange]);
 
   const { issues, autoAppliedChanges, activeContentGuide } = reviewState;
 
@@ -220,9 +251,11 @@ export default function ReviewStep({
           <div className="usa-alert__body">
             <h2 className="usa-alert__heading">{content.review.autoApplied.heading}</h2>
             <p className="usa-alert__text">{content.review.autoApplied.intro}</p>
-            <ul className="usa-list">
+            <ul className="usa-list margin-top-2">
               {autoAppliedChanges.map((change, i) => (
-                <li key={i}>{change.description}</li>
+                <li key={i}>
+                  <strong>{getCategoryLabel(change.ruleId)}</strong> &mdash; {change.description}
+                </li>
               ))}
             </ul>
           </div>
@@ -333,6 +366,7 @@ export default function ReviewStep({
                       key={issue.id}
                       issue={issue}
                       resolution={resolutions[issue.id] ?? 'unreviewed'}
+                      acceptedValue={acceptedFixMap.get(issue.id)}
                       onAccept={handleAccept}
                       onSkip={() => handleSkip(issue.id)}
                       onKeepAsBold={

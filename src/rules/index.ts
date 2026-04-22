@@ -11,8 +11,10 @@ import LINK_004 from './universal/LINK-004';
 import LINK_006 from './universal/LINK-006';
 import LINK_007 from './universal/LINK-007';
 import LINK_008 from './universal/LINK-008';
+import LINK_009 from './universal/LINK-009';
 import TABLE_002 from './universal/TABLE-002';
 import TABLE_003 from './universal/TABLE-003';
+import TABLE_004 from './universal/TABLE-004';
 import NOTE_001 from './universal/NOTE-001';
 import NOTE_004 from './universal/NOTE-004';
 import IMG_001 from './universal/IMG-001';
@@ -27,7 +29,13 @@ import CLEAN_010 from './universal/CLEAN-010';
 import CLEAN_011 from './universal/CLEAN-011';
 import CLEAN_012 from './universal/CLEAN-012';
 import CLEAN_013 from './universal/CLEAN-013';
+import CLEAN_014 from './universal/CLEAN-014';
+import CLEAN_015 from './universal/CLEAN-015';
+import CLEAN_016 from './universal/CLEAN-016';
 import HEAD_001 from './universal/HEAD-001';
+import HEAD_002 from './universal/HEAD-002';
+import HEAD_003 from './universal/HEAD-003';
+import HEAD_004 from './universal/HEAD-004';
 
 // OpDiv-specific rules
 import STRUCT_001 from './opdiv/STRUCT-001';
@@ -66,12 +74,20 @@ export const allRules: Rule[] = [
   CLEAN_010,
   CLEAN_011,
   CLEAN_012,
+  CLEAN_014,
+  CLEAN_015,
+  CLEAN_016,
   LINK_007,
+  LINK_009,
+  TABLE_004,
   FORMAT_002,
   FORMAT_003,
 
   // Heading rules
   HEAD_001,
+  HEAD_002,
+  HEAD_003,
+  HEAD_004,
 
   // Metadata rules
   META_001,
@@ -124,15 +140,15 @@ export const allRules: Rule[] = [
 ];
 
 export {
-  HEAD_001,
+  HEAD_001, HEAD_002, HEAD_003, HEAD_004,
   META_001, META_002, META_003,
-  LINK_001, LINK_002, LINK_003, LINK_004, LINK_006, LINK_007, LINK_008,
-  TABLE_002, TABLE_003,
+  LINK_001, LINK_002, LINK_003, LINK_004, LINK_006, LINK_007, LINK_008, LINK_009,
+  TABLE_002, TABLE_003, TABLE_004,
   NOTE_001, NOTE_004,
   IMG_001,
   LIST_001,
   FORMAT_002, FORMAT_003,
-  CLEAN_004, CLEAN_005, CLEAN_006, CLEAN_007, CLEAN_008, CLEAN_009, CLEAN_010, CLEAN_011, CLEAN_012, CLEAN_013,
+  CLEAN_004, CLEAN_005, CLEAN_006, CLEAN_007, CLEAN_008, CLEAN_009, CLEAN_010, CLEAN_011, CLEAN_012, CLEAN_013, CLEAN_014, CLEAN_015, CLEAN_016,
   STRUCT_001, STRUCT_002, STRUCT_003, STRUCT_004, STRUCT_005, STRUCT_006,
   STRUCT_007, STRUCT_008, STRUCT_009, STRUCT_010,
   STRUCT_020, STRUCT_021, STRUCT_022, STRUCT_023, STRUCT_024, STRUCT_025, STRUCT_026,

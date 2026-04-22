@@ -4,35 +4,21 @@ import { buildLocationLookup } from '../../utils/locationContext';
 /**
  * LINK-006: Internal bookmark links
  *
- * Three-tier resolution:
- *  1. Exact match   — anchor ID exists in the HTML or as an OOXML bookmark → no issue
- *  2. Fuzzy match   — normalized anchor compared against OOXML bookmark names and
- *                     HTML element IDs (exact equality after normalization), or
- *                     contained within any normalized heading text
- *     a. Exactly one match → user-confirmed issue with pre-filled suggestion
- *     b. Multiple matches  → instructionOnly issue asking user to resolve manually
- *  3. No match      — unresolvable → instructionOnly broken-link issue
+ * Resolution tiers:
+ *  1. Exact match — anchor ID exists in the HTML or as an OOXML bookmark → no issue
+ *  2. OOXML bookmark fuzzy match — anchor normalizes to exactly one existing bookmark
+ *     name → user-accepted fix. The `w:anchor` value is rewritten to the exact
+ *     bookmark name in the downloaded docx. Internal links in Word are purely
+ *     `w:hyperlink w:anchor` → `w:bookmarkStart w:name`; no relationship entry is
+ *     needed. Writing the exact existing bookmark name produces a working link.
+ *  3. Source 2/3 fuzzy match (HTML id or heading text only) — instruction-only warning
+ *     directing the user to use Insert → Link → This Document in Word. We do not have
+ *     the exact OOXML bookmark name in these cases.
+ *  4. Ambiguous or no match — instruction-only warning.
  *
- * Fuzzy match candidate sources (in priority order):
- *  a. OOXML <w:bookmarkStart w:name="..."> entries from doc.documentXml
- *     — authoritative; returned verbatim as the suggested anchor
- *  b. HTML element IDs — mammoth maps Word bookmarks to id attributes
- *  c. HTML heading text — two checks applied in sequence per heading:
- *       i.  Direct containment: normalized anchor is a substring of normalized heading
- *       ii. Stop-word containment: both sides have common stop words removed, then
- *           the cleaned anchor is checked as a substring of the cleaned heading.
- *           Handles slugs where Word drops words like "and"/"or"/"the" (e.g.
- *           "#Program_requirements_expectations" → "Program requirements and expectations")
- *
- * Fuzzy matching passes (applied in order, return on first conclusive result):
- *  Pass 1 — anchor as-is through Sources a–c
- *  Pass 2 — strip Word's trailing _N suffix (duplicate-heading disambiguation),
- *            then Sources a–c again. Match sets hadNumericSuffix on the result.
- *  Pass 3 — numeric extraction fallback: extract integers from the anchor and
- *            find headings containing those integers preceded by a structural
- *            keyword (Attachment, Section, Step, …). Handles manually-created
- *            abbreviation bookmarks like "#Attach8OrgChart". Match sets
- *            matchedByNumericExtraction on the result.
+ * Link text suggestions (separate from anchor handling):
+ *  When the probable target heading is identified via fuzzy text matching (Source 3),
+ *  a suggestion is emitted if the link text does not reference that heading by name.
  */
 
 type FuzzyMatchResult =
@@ -42,45 +28,16 @@ type FuzzyMatchResult =
       headingText?: string;
       hadNumericSuffix?: boolean;
       matchedByNumericExtraction?: boolean;
+      /** True when the match came from Source 1 (OOXML bookmarks). The anchor
+       *  value is the exact w:name from an existing w:bookmarkStart element, so
+       *  writing it back produces a correctly-wired internal link. */
+      matchedByOoxmlBookmark?: boolean;
     }
   | { kind: 'ambiguous' }
   | { kind: 'none' };
 
 function cleanHeadingId(rawId: string): string {
   return rawId.replace(/^_+|_+$/g, '') || rawId;
-}
-
-/**
- * Returns true when the anchor and fuzzy target differ only by leading/trailing
- * underscores and/or capitalization — all deterministic formatting differences
- * that can be silently auto-fixed without surfacing an Issue.
- *
- * Leading underscores on anchors come from heading text with a leading space.
- * CLEAN-008 removes leading spaces from headings in the output, so the correct
- * anchor lacks the leading underscore. Trailing underscores come from heading
- * text with a trailing space; CLEAN-008 does not strip trailing heading spaces,
- * so trailing-underscore artifacts are handled here defensively.
- *
- * Covered cases (all treated as high-confidence):
- *  - Cap-only:        "eligibility"  → "Eligibility"
- *  - Underscore-only: "_Key_facts"   → "Key_facts"
- *  - Both combined:   "_key_facts"   → "Key_facts"
- */
-function isHighConfidenceAutoFix(anchor: string, fuzzy: string): boolean {
-  return cleanHeadingId(anchor).toLowerCase() === cleanHeadingId(fuzzy).toLowerCase();
-}
-
-/**
- * Returns true when the anchor is the correct target with all underscore word
- * separators removed — i.e. the only difference is missing underscores between
- * words. Case-insensitive.
- *
- * Common Word pattern: manually typed anchors omit the underscores that
- * NOFO Builder inserts between words when building bookmark slugs, for example
- * "#AppendixA" instead of "#Appendix_A".
- */
-function isWordSeparatorAutoFix(anchor: string, fuzzy: string): boolean {
-  return anchor.toLowerCase() === fuzzy.replace(/_/g, '').toLowerCase();
 }
 
 const LINK_006: Rule = {
@@ -110,20 +67,6 @@ const LINK_006: Rule = {
     // Cache fuzzy results — the same broken anchor may appear in many links
     const fuzzyCache = new Map<string, FuzzyMatchResult>();
     const getContext = buildLocationLookup(htmlDoc);
-    // De-duplicated old→new anchor map for high-confidence formatting fixes
-    // (capitalization and/or leading/trailing underscore differences).
-    // A separate occurrence counter drives the description; the map avoids writing
-    // duplicate {old,new} pairs into the JSON stored in value when the same broken
-    // anchor appears in multiple links.
-    const fmtFixMap = new Map<string, string>();
-    let fmtFixOccurrences = 0;
-
-    // De-duplicated map for word-separator-only fixes: the anchor equals the
-    // correct target with all underscores removed (e.g. #AppendixA → #Appendix_A).
-    // Tracked separately so the summary description names the fix type explicitly.
-    const wsFixMap = new Map<string, string>();
-    let wsFixOccurrences = 0;
-
     // Precompute clean heading slug → element map so Tier 1c can (a) validate
     // anchors that target headings with leading spaces (stripped by CLEAN-008)
     // or trailing spaces (not stripped by CLEAN-008, handled defensively) and
@@ -188,85 +131,37 @@ const LINK_006: Rule = {
       const fuzzyResult = fuzzyCache.get(anchor)!;
 
       if (fuzzyResult.kind === 'single') {
-        const fuzzy = fuzzyResult.anchor;
         const headingText = fuzzyResult.headingText;
         const sectionId = findSectionForElement(link, doc);
 
-        // High-confidence formatting fix: auto-fix silently, no Issue surfaced.
-        // Covers capitalization-only (#eligibility → #Eligibility), leading/trailing
-        // underscore-only (#_Key_facts → #Key_facts), and both combined.
-        // Each unique broken anchor is recorded in fmtFixMap (old → new) to
-        // de-duplicate the JSON patch payload; occurrences are counted separately
-        // so repeated broken anchors are reflected in the description count.
-        if (isHighConfidenceAutoFix(anchor, fuzzy)) {
-          fmtFixMap.set(anchor, fuzzy);
-          fmtFixOccurrences++;
-          // Still surface a link-text suggestion if the heading name isn't in the link text.
-          if (headingText && !linkTextContainsHeading(linkText, headingText)) {
-            const suppressSee = hasSeeBeforeLink(link as Element);
-            results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
-          }
-          return;
-        }
-
-        // Word-separator-only fix: the anchor is the correct target with all
-        // underscores removed (e.g. #AppendixA → #Appendix_A). Auto-fix silently.
-        if (isWordSeparatorAutoFix(anchor, fuzzy)) {
-          wsFixMap.set(anchor, fuzzy);
-          wsFixOccurrences++;
-          if (headingText && !linkTextContainsHeading(linkText, headingText)) {
-            const suppressSee = hasSeeBeforeLink(link as Element);
-            results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
-          }
-          return;
-        }
-
-        // Lower-confidence numeric-extraction matches get "possible" rather than "likely"
-        const confidence = fuzzyResult.matchedByNumericExtraction ? 'possible' : 'likely';
-        const description = headingText
-          ? `The anchor "#${anchor}" wasn't found, but a ${confidence} match was found via heading "${headingText}": "#${fuzzy}". Accept to update the link, or skip to leave it unchanged.`
-          : `The anchor "#${anchor}" wasn't found, but a ${confidence} match was found: "#${fuzzy}". Accept to update the link, or skip to leave it unchanged.`;
-        const numericSuffixWarning = fuzzyResult.hadNumericSuffix
-          ? ' The trailing numeric suffix on the original anchor was stripped during matching — there may be multiple headings with this name in the document. Verify you are targeting the correct one.'
-          : '';
-        let prefillNote: string;
-        if (fuzzyResult.matchedByNumericExtraction) {
-          prefillNote = `Matched by number extraction — a number in the anchor was found in a structural heading ("${headingText ?? ''}"). This is a lower-confidence match; verify this is the correct target before accepting.`;
-        } else {
-          prefillNote = headingText
-            ? `Matched via heading text: "${headingText}". Confirm this is the correct heading before accepting.${numericSuffixWarning}`
-            : `Matched by normalizing the anchor against content in the document (e.g., bookmarks, IDs, or headings). Edit if needed.${numericSuffixWarning}`;
-        }
-        results.push({
-          id: `LINK-006-${index}`,
-          ruleId: 'LINK-006',
-          title: 'Internal link anchor may need updating',
-          severity: 'warning',
-          sectionId,
-          nearestHeading: linkNearestHeading,
-          location: href,
-          description,
-          suggestedFix: `Retarget "#${anchor}" → "#${fuzzy}"`,
-          inputRequired: {
-            type: 'text',
-            label: 'Replacement anchor',
-            fieldDescription: `Current anchor: #${anchor}`,
-            prefill: fuzzy,
-            prefillNote,
-            hint: headingText
-              ? 'Note: spaces and punctuation in heading text may be normalized (for example, converted to hyphens or underscores) in anchor links.'
-              : undefined,
+        if (fuzzyResult.matchedByOoxmlBookmark) {
+          // Source 1 OOXML match: the exact bookmark name is known, so the
+          // anchor can be rewritten without user confirmation.
+          results.push({
+            ruleId: 'LINK-006',
+            description: `Retargeted internal link "#${anchor}" → "#${fuzzyResult.anchor}"`,
             targetField: `link.bookmark.${anchor}`,
-          },
-        } as Issue);
+            value: fuzzyResult.anchor,
+          } as AutoAppliedChange);
+        } else {
+          // Source 2/3 match: derived from HTML id or heading text — we don't
+          // have the exact OOXML bookmark name, so instruct the user to fix manually.
+          results.push({
+            id: `LINK-006-${index}`,
+            ruleId: 'LINK-006',
+            title: 'Internal link may not work in NOFO Builder',
+            severity: 'warning',
+            sectionId,
+            nearestHeading: linkNearestHeading,
+            location: href,
+            description: `This internal link may be broken. To fix it, select the link text in Word, go to Insert → Link → This Document, and select the correct heading. Do not edit the link URL directly.`,
+            instructionOnly: true,
+          } as Issue);
+        }
 
-        // If the anchor resolved to a heading via fuzzy text matching, also
-        // surface a link-text suggestion when the link text doesn't already
-        // reference that heading by name.
+        // Link-text suggestion when heading text is known (Source 3 only) and
+        // the link text doesn't already reference the heading by name.
         if (headingText && !linkTextContainsHeading(linkText, headingText)) {
-          // If the word "see" already appears in the text immediately preceding
-          // this link, omit it from the suggestion to avoid redundant phrasing
-          // like "see X (see Y)".
           const suppressSee = hasSeeBeforeLink(link as Element);
           results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
         }
@@ -279,12 +174,12 @@ const LINK_006: Rule = {
         results.push({
           id: `LINK-006-${index}`,
           ruleId: 'LINK-006',
-          title: 'Internal link anchor is ambiguous',
+          title: 'Internal link may not work in NOFO Builder',
           severity: 'warning',
           sectionId,
           nearestHeading: linkNearestHeading,
           location: href,
-          description: `The anchor "#${anchor}" wasn't found, and multiple possible matches exist in the document. Resolve this link manually in Word before handoff.`,
+          description: `This internal link may be broken. To fix it, select the link text in Word, go to Insert → Link → This Document, and select the correct heading. Do not edit the link URL directly.`,
           instructionOnly: true,
         } as Issue);
         return;
@@ -295,39 +190,15 @@ const LINK_006: Rule = {
       results.push({
         id: `LINK-006-${index}`,
         ruleId: 'LINK-006',
-        title: 'Internal bookmark link target not found',
+        title: 'Internal link may not work in NOFO Builder',
         severity: 'warning',
         sectionId,
         nearestHeading: linkNearestHeading,
-        description: `The link "${linkText}" points to "#${anchor}" but no matching anchor was found in the document. This link may be broken.`,
-        suggestedFix: 'Verify the bookmark exists in the document, or update the link to point to the correct section.',
         location: href,
+        description: `This internal link may be broken. To fix it, select the link text in Word, go to Insert → Link → This Document, and select the correct heading. Do not edit the link URL directly.`,
         instructionOnly: true,
       } as Issue);
     });
-
-    if (fmtFixMap.size > 0) {
-      const count = fmtFixOccurrences;
-      results.push({
-        ruleId: 'LINK-006',
-        description: `${count} internal link anchor${count === 1 ? '' : 's'} corrected for capitalization or leading/trailing underscores.`,
-        targetField: 'link.anchor.fmt',
-        // De-duplicated map serialized as an array of {old,new} pairs. Each entry
-        // represents a distinct broken anchor → correct anchor mapping; one entry
-        // may cover many link elements that shared the same broken anchor.
-        value: JSON.stringify(Array.from(fmtFixMap, ([old, newAnchor]) => ({ old, new: newAnchor }))),
-      } as AutoAppliedChange);
-    }
-
-    if (wsFixMap.size > 0) {
-      const count = wsFixOccurrences;
-      results.push({
-        ruleId: 'LINK-006',
-        description: `${count} internal link anchor${count === 1 ? '' : 's'} corrected for missing word separators.`,
-        targetField: 'link.anchor.fmt',
-        value: JSON.stringify(Array.from(wsFixMap, ([old, newAnchor]) => ({ old, new: newAnchor }))),
-      } as AutoAppliedChange);
-    }
 
     return results;
   },
@@ -512,7 +383,7 @@ function matchByNormalizedValue(
   if (xmlDoc) {
     const names = getOoxmlBookmarkNames(xmlDoc);
     const matches = names.filter(n => normalizeAnchor(n) === normalizedAnchor);
-    if (matches.length === 1) return { kind: 'single', anchor: matches[0]! };
+    if (matches.length === 1) return { kind: 'single', anchor: matches[0]!, matchedByOoxmlBookmark: true };
     if (matches.length > 1) return { kind: 'ambiguous' };
   }
 

@@ -2,45 +2,58 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
 import { DGHT_STEP1_ANCHOR } from './CLEAN-007-constants';
 
 /**
- * CLEAN-007: Remove CDC/DGHT editorial scaffolding (auto-apply)
+ * CLEAN-007: Remove CDC preamble content (auto-apply)
  *
- * Some CDC/DGHT content guide documents begin with editorial instructions
- * (color-coding guide, template notes, a content-guide reference table) that
- * are not part of the NOFO content itself. This rule detects that preamble by
- * checking whether the document's first paragraph begins with the phrase
- * "Here is the color coding for the doc:" and, when found, silently removes
- * everything from the start of the document up to — but not including — the
- * heading whose text is exactly "Step 1: Review the Opportunity" (any heading
- * level, case-insensitive).
+ * CDC NOFO templates often begin with editorial instructions, content-guide
+ * reference tables, or other scaffolding that is not part of the NOFO itself.
+ * This rule detects that preamble by checking whether any non-empty content
+ * appears before the heading whose text is exactly "Step 1: Review the
+ * Opportunity" (any heading level, case-insensitive) and, when found, silently
+ * removes everything from the start of the document up to — but not including
+ * — that heading.
  *
- * Scoped to CDC/DGHT content guides only (cdc-dght-ssj, cdc-dght-competitive).
+ * Safe to apply across all CDC content guides because CDC NOFO metadata
+ * (Author, Subject, Keywords, Tagline) lives inside the document body under
+ * the Step 1 heading, not before it.
+ *
+ * Scoped to all CDC content guides: cdc, cdc-research, cdc-dght-ssj,
+ * cdc-dght-competitive, cdc-dghp.
  */
 const CLEAN_007: Rule = {
   id: 'CLEAN-007',
   autoApply: true,
-  contentGuideIds: ['cdc-dght-ssj', 'cdc-dght-competitive'],
+  contentGuideIds: ['cdc', 'cdc-research', 'cdc-dght-ssj', 'cdc-dght-competitive', 'cdc-dghp'],
   check(doc: ParsedDocument, _options: RuleRunnerOptions): AutoAppliedChange[] {
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
 
-    // Trigger: first paragraph must begin with the color-coding instructions phrase.
-    const firstPara = htmlDoc.querySelector('p');
-    if (!firstPara) return [];
-
-    const firstParaText = (firstPara.textContent ?? '').trim().toLowerCase();
-    if (!firstParaText.startsWith('here is the color coding for the doc:')) return [];
-
-    // Safety: only remove if the exact Step 1 anchor heading is present.
-    const headings = Array.from(htmlDoc.querySelectorAll('h1, h2, h3, h4, h5, h6'));
-    const hasStep1 = headings.some(
-      h => (h.textContent ?? '').trim().toLowerCase() === DGHT_STEP1_ANCHOR
+    // Find the Step 1 anchor heading among direct body children.
+    const bodyChildren = Array.from(htmlDoc.body.children);
+    const step1Idx = bodyChildren.findIndex(
+      el =>
+        /^h[1-6]$/i.test(el.tagName) &&
+        (el.textContent ?? '').trim().toLowerCase() === DGHT_STEP1_ANCHOR
     );
-    if (!hasStep1) return [];
+
+    // Safety: only remove if the Step 1 heading is present.
+    if (step1Idx === -1) return [];
+
+    // No-op: Step 1 is already the first body element — nothing to remove.
+    if (step1Idx === 0) return [];
+
+    // Only fire when at least one non-empty element precedes Step 1.
+    const hasPreamble = bodyChildren
+      .slice(0, step1Idx)
+      .some(el => (el.textContent ?? '').trim().length > 0);
+    if (!hasPreamble) return [];
 
     return [
       {
         ruleId: 'CLEAN-007',
-        description: 'CDC/DGHT editorial instructions removed from beginning of document.',
+        description: 'CDC preamble removed from beginning of document.',
+        // Intentionally retain the legacy DGHT-specific key for backward
+        // compatibility with downstream consumers (for example buildDocx and
+        // existing filtering/analytics) that still recognize this targetField.
         targetField: 'struct.dght.removescaffolding',
       },
     ];

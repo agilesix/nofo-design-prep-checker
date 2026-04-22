@@ -44,6 +44,7 @@ export default function App(): React.ReactElement {
   const handleFileSelected = useCallback(async (file: File) => {
     setUploadedFile(file);
     setParseError(null);
+    setAcceptedFixes([]);
     setIsProcessing(true);
     setReviewBannerDismissed(false);
     setStep('parsing');
@@ -133,6 +134,7 @@ export default function App(): React.ReactElement {
       resolutions[issue.id] = 'unreviewed';
     }
 
+    setAcceptedFixes([]);
     setReviewState({
       issues: result.issues,
       autoAppliedChanges: result.autoAppliedChanges,
@@ -175,6 +177,12 @@ export default function App(): React.ReactElement {
     }
     setStep('summary');
   }, [reviewState]);
+
+  // Sync in-progress accepted fixes from ReviewStep to App state so that
+  // navigating away (e.g. About page) and back does not lose user-entered values.
+  const handleLiveFixesChange = useCallback((fixes: AcceptedFix[]) => {
+    setAcceptedFixes(fixes);
+  }, []);
 
   const handleProceedToDownload = useCallback(() => {
     setStep('download');
@@ -249,12 +257,14 @@ export default function App(): React.ReactElement {
           <ReviewStep
             doc={parsedDoc}
             reviewState={reviewState}
+            initialAcceptedFixes={acceptedFixes}
             onComplete={handleReviewComplete}
             onGuideChange={handleGuideChangeFromReview}
             onStartOver={handleStartOver}
             bannerDismissed={reviewBannerDismissed}
             onDismissBanner={setReviewBannerDismissed}
             isPreNofo={isPreNofo}
+            onLiveFixesChange={handleLiveFixesChange}
           />
         )}
 
@@ -409,6 +419,7 @@ function GuideSelectionStep({ doc, onConfirm }: GuideSelectionStepProps): React.
           id="content-guide-select"
           value={selectedId}
           onChange={e => setSelectedId(e.target.value as ContentGuideId | '')}
+          aria-describedby={selectedId.startsWith('cdc') ? 'content-guide-cdc-hint' : undefined}
         >
           <option value="">{content.guideSelection.selectPlaceholder}</option>
           {contentGuides.map(guide => (
@@ -417,6 +428,11 @@ function GuideSelectionStep({ doc, onConfirm }: GuideSelectionStepProps): React.
             </option>
           ))}
         </select>
+        {selectedId.startsWith('cdc') && (
+          <span id="content-guide-cdc-hint" className="usa-hint display-block font-body-xs margin-top-1">
+            {content.guideSelection.cdcHint}
+          </span>
+        )}
       </div>
 
       <div className="margin-top-4">

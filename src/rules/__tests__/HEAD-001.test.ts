@@ -696,6 +696,48 @@ describe('HEAD-001: labeled component references are exempt from the title-case 
     expect(issues).toHaveLength(0);
   });
 
+  it('does not flag an H3 containing "Phase II" (new label word + Roman numeral)', () => {
+    const doc = makeDoc('<h3>Requirements for Phase II</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "Objective III" (new label word + multi-char Roman numeral)', () => {
+    const doc = makeDoc('<h3>Funding for Objective III</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "Figure 10" (multi-digit Arabic number)', () => {
+    const doc = makeDoc('<h3>Results shown in Figure 10</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "Components A" (plural label word)', () => {
+    const doc = makeDoc('<h3>Criteria for Components A and B</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 "Appendix A: Eligibility requirements"', () => {
+    // "Appendix" is the sentence start; "A:" triggers a colon restart so
+    // "Eligibility" is treated as a sentence start; "requirements" is lowercase.
+    const doc = makeDoc('<h3>Appendix A: Eligibility requirements</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
   it('still flags an H3 where the label word is not followed by a single letter or digit', () => {
     // "Component" here is not a labeled reference — it has no single-letter
     // identifier after it. It is a genuine title-case word and should be flagged.

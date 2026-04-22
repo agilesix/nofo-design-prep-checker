@@ -18,6 +18,48 @@ The OOXML packaging convention (ECMA-376, Part 2 §13) expects `[Content_Types].
 
 ---
 
+## 2026-04-20 — Accepted text input values lifted to App state to survive back-navigation
+
+**Decision:** Accepted text input values (metadata subject, metadata keywords, revised heading text, etc.) are stored in App-level `acceptedFixes` state rather than in local `ReviewStep` state. `App.tsx` passes `acceptedFixes` down to `ReviewStep` as `initialAcceptedFixes`, and `ReviewStep` initializes its local copy from that prop on mount. `IssueCard` receives the previously-accepted value via `acceptedValue` prop and uses it (over the rule's original prefill) when initializing `inputValue` state.
+
+**Reason:** `ReviewStep` unmounts and remounts when the user navigates forward to the Summary page and then back. Without this fix, accepted text input values were lost on remount because (a) `ReviewStep`'s local `acceptedFixes` state always initialized to `[]`, and (b) each `IssueCard`'s `inputValue` always initialized from `issue.inputRequired.prefill`. The "Value recorded" success state disappeared and the entered text was gone.
+
+**Implementation note:** The guide-change reset logic in `ReviewStep` uses a `useRef(true)` initial-mount guard so that the `useEffect` that resets `acceptedFixes` to `[]` only fires on real guide changes (component already mounted) and not on the initial mount after back-navigation. Without this guard, the effect would fire on mount and immediately wipe the restored values.
+
+**Scope:** `resolutions` (accepted/skipped/dismissed decisions) were already persisted correctly — `App.tsx` saves them via `setReviewState({ ...reviewState, resolutions })` in `handleReviewComplete`, and `ReviewStep` initializes from `reviewState.resolutions`. Only text input values were missing. Summary page stat counts derive from `reviewState.resolutions` (App state) and are unaffected by this change.
+
+---
+
+## 2026-04-16 — LINK-006: stop rewriting internal link anchors; surface instruction-only warnings instead
+
+**Decision:** LINK-006 now uses a two-tier approach based on the source of the fuzzy match:
+
+1. **OOXML bookmark match → user-accepted fix.** When the broken anchor normalizes to exactly one existing `w:bookmarkStart w:name` in the document XML, a Review card is shown pre-filled with that exact bookmark name. Accepting rewrites `w:anchor` in the downloaded docx. Internal links in Word are purely `w:hyperlink w:anchor` → `w:bookmarkStart w:name` — no relationship entry, no other mechanism. Writing the exact existing bookmark name produces a working link.
+
+2. **All other fuzzy matches and no-match → instruction-only warning.** When we only have a Source 2 (HTML id) or Source 3 (heading text) match, we do not have the exact OOXML bookmark name, so we cannot safely write a correct anchor. The instruction directs the user to use Insert → Link → This Document in Word.
+
+**Reason (original decision to use instruction-only for everything):** The original thinking was that NOFO Builder had a proprietary linking mechanism. An earlier implementation failed — links were rewritten but still broken in Builder. Investigation revealed the actual causes: (a) `setAttributeNS` caused XMLSerializer to inject redundant `xmlns:w` declarations that corrupted the XML, and (b) our `slugifyHeading()` function was generating anchor values that didn't match the actual bookmark names (no leading underscore, special characters like colons and commas converted to underscores rather than preserved). Both issues have been fixed.
+
+**Reason (revised decision to use accept-to-fix for OOXML matches):** Examination of real NOFO documents confirmed the format — internal links are `w:anchor` matching `w:bookmarkStart w:name`, with no other mechanism. When we read the bookmark name directly from the XML, we have the exact correct value. With the namespace fix in place, writing it back produces a correctly-wired link.
+
+---
+
+## 2026-04-20 — Pre-NOFO detection expanded to cover CDC/DGHT SSJ templates
+
+**Decision:** Extended `detectPreNofo.ts` to catch CDC/DGHT Sole Source Justification (SSJ) pre-NOFO templates, which share some signals with the original DGHP/PEPFAR pre-NOFOs but use a different heading structure.
+
+Two new signals were added (bringing the total to seven):
+- Signal 3: An H1 heading containing "NOFO content" (case-insensitive) — SSJ pre-NOFOs use this as their top-level heading instead of the standard "Step 1: Review the Opportunity" structure
+- Signal 4: Document body text containing "Sole Source Justification" anywhere (case-insensitive)
+
+A Step 1 exclusion guard was also added: if any heading in the document contains "Step 1" (case-insensitive), detection is suppressed entirely and the document is treated as a content guide or NOFO. This prevents false positives on CDC/DGHT content guides (e.g., Haiti_JG-26-0141) that may contain "NOFO Content Guide" in an H1 heading or SSJ-like language in the body.
+
+**Reason:** SSJ pre-NOFOs (observed in South Africa and Ethiopia CDC/DGHT grants) use "NOFO content" as their H1 and include "Sole Source Justification" language in the body. Neither signal appeared in the original five. The Step 1 guard was needed because CDC/DGHT content guides use "NOFO Content Guide" as their H1, which would match the new Signal 3 without the guard. Content guides always have a Step 1 heading; pre-NOFOs never do.
+
+**Outcome:** SSJ pre-NOFOs are now correctly flagged. CDC/DGHT content guides with similar language are correctly excluded. All original DGHP/PEPFAR detection continues to work unchanged.
+
+---
+
 ## 2026-04-13 — Pre-NOFO document detection added
 
 **Decision:** Added a document-level validity check (`src/utils/detectPreNofo.ts`) that runs immediately after parsing — before any content rules execute — to detect whether the uploaded document is a pre-NOFO template rather than a content guide. If two or more signals are present, a blocking error alert is displayed at the top of the Review page, the issue list is visually muted and non-interactive, and the "Continue to summary" button is hidden.

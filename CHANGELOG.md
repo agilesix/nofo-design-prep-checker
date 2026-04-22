@@ -1,5 +1,117 @@
 # Changelog
 
+## [1.5.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.4.1...v1.5.0) (2026-04-21)
+
+
+### Features
+
+* **rules:** add CLEAN-016 auto-fix for bold trailing periods ([960666d](https://github.com/agilesix/nofo-design-prep-checker/commit/960666d2528b1e5b2dcfe1c4ae185281fa87ad2e))
+* **rules:** add CLEAN-016 auto-fix for bold trailing periods ([c33f250](https://github.com/agilesix/nofo-design-prep-checker/commit/c33f25084ecdc2d78101e0f976117850c91c9421))
+* **rules:** add LINK-009 auto-fix for partial hyperlinks ([c83fc5f](https://github.com/agilesix/nofo-design-prep-checker/commit/c83fc5fd3b0693e94464c79a7252acc8079babed))
+* **rules:** add LINK-009 auto-fix for partial hyperlinks ([0ba9c4b](https://github.com/agilesix/nofo-design-prep-checker/commit/0ba9c4b9e87db1dbbc4c58ae0ee39cadc607ce75))
+* **TABLE-004:** auto-apply heading style to "Important: public information" callout tables ([f83bf30](https://github.com/agilesix/nofo-design-prep-checker/commit/f83bf308d635460f92c64bdacc0d83704e34be44))
+* **TABLE-004:** auto-apply heading style to Important: public info ([0a439be](https://github.com/agilesix/nofo-design-prep-checker/commit/0a439be68dac7166f15893187fc5d6b0dbbb15f8))
+
+
+### Bug Fixes
+
+* **buildDocx:** handle emails embedded in longer runs for LINK-008 mailto fix ([e2e0013](https://github.com/agilesix/nofo-design-prep-checker/commit/e2e001330741a942a70830942a7e1504723e5850))
+* **buildDocx:** handle emails embedded in longer runs for mailto fix ([30888b9](https://github.com/agilesix/nofo-design-prep-checker/commit/30888b9a539672bdf993fb448e31298a07c81553))
+* **TABLE-004:** preserve heading style format, fix cell/sdt scoping ([998dbe8](https://github.com/agilesix/nofo-design-prep-checker/commit/998dbe86365c87aedb698c36ccef266ace809861))
+
+## [1.4.1](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.4.0...v1.4.1) (2026-04-21)
+
+
+### Bug Fixes
+
+* clear input value and gate display on accepted when user skips a text input issue ([3181c47](https://github.com/agilesix/nofo-design-prep-checker/commit/3181c47e49c9ff86dfa4ae55686ef29170e194a1))
+
+## [1.4.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.3.0...v1.4.0) (2026-04-20)
+
+
+### Features
+
+* **CLEAN-007:** extend preamble removal to all CDC content guides ([5a1e8f9](https://github.com/agilesix/nofo-design-prep-checker/commit/5a1e8f9d9aa305f28b98984fa62b8a188c9540fe))
+* **CLEAN-007:** extend preamble removal to all CDC content guides ([6422158](https://github.com/agilesix/nofo-design-prep-checker/commit/64221585414dc68078c7a0474b435d8d4fd84d49))
+
+
+### Bug Fixes
+
+* **App:** clear acceptedFixes when starting a new review run ([a4d1b7a](https://github.com/agilesix/nofo-design-prep-checker/commit/a4d1b7a90beac3f1d0f6efd24d1b17867c5ec0ac))
+* **App:** persist accepted fix values across review page navigation ([25305af](https://github.com/agilesix/nofo-design-prep-checker/commit/25305af8297bd15509ba5f7f8a5df934b7a1427e))
+* **App:** persist accepted fix values across review page navigation ([59f7cb3](https://github.com/agilesix/nofo-design-prep-checker/commit/59f7cb3e596f709ee5d92caa245bb55362141949))
+* **buildDocx:** apply HEAD-004 text fix even when HEAD-003 changed ([5f4c443](https://github.com/agilesix/nofo-design-prep-checker/commit/5f4c4432883c962fccab659d2773eda39a0237fd))
+* **buildDocx:** apply HEAD-004 text fix even when HEAD-003 changed the level first ([166639b](https://github.com/agilesix/nofo-design-prep-checker/commit/166639bb1e6d0cb6f15726f3d9ed7ca8531b6e49))
+
+## [1.3.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.2.0...v1.3.0) (2026-04-20)
+
+
+### Features
+
+* add CDC DGHP competitive content guide ([24ceaf7](https://github.com/agilesix/nofo-design-prep-checker/commit/24ceaf796ed0167fe6c0996f56aea3358851652f)), ([71e5bc2](https://github.com/agilesix/nofo-design-prep-checker/commit/71e5bc23cb15af6b9a090a2a46c20b45a285dcea))
+* **clean-014:** strip wrapping quotes from tagline value ([3e301c0](https://github.com/agilesix/nofo-design-prep-checker/commit/3e301c035eb378b28086c53582b559f8eed031ce)), ([93e6ecc](https://github.com/agilesix/nofo-design-prep-checker/commit/93e6eccb388445b6eefba1ad487f86478a563600))
+* **detect:** expand CDC DGHP detection signals to 8 ([2892899](https://github.com/agilesix/nofo-design-prep-checker/commit/2892899e5b772415ebe06b56154fb87d664eb695)), ([1b6bf57](https://github.com/agilesix/nofo-design-prep-checker/commit/1b6bf57a3d46eae5a11596e2e4b4c00821f6ec5e))
+* **detectPreNofo:** add CDC/DGHT SSJ pre-NOFO detection signals ([6f3940e](https://github.com/agilesix/nofo-design-prep-checker/commit/6f3940eeecf439389a3dfa93f2e7be49889ed6e7)), ([ed884e2](https://github.com/agilesix/nofo-design-prep-checker/commit/ed884e26b1d30f9382c0138e5d643ebc0cb9a53d))
+* **download:** reorder page content and apply brand button colors ([1143e0d](https://github.com/agilesix/nofo-design-prep-checker/commit/1143e0d8f8b7ca91b87b128a52b5f289e856112d)), ([9065b6c](https://github.com/agilesix/nofo-design-prep-checker/commit/9065b6c7596fea4e4dfac20119ee4a5f313367ad))
+* **guide-selection:** add CDC NOFO ID helper text below dropdown ([17258ff](https://github.com/agilesix/nofo-design-prep-checker/commit/17258ff9ee8bb9574d2b2c86b10186a4a7d7a18b)), ([94cbdba](https://github.com/agilesix/nofo-design-prep-checker/commit/94cbdbac9f7f0f61ac497b46f6be88a82c2bb9ce))
+* **head-004:** flag headings that may be too long ([144edcf](https://github.com/agilesix/nofo-design-prep-checker/commit/144edcfce5cee71522cd244eefb1ff44692d5bb9)), ([10312fc](https://github.com/agilesix/nofo-design-prep-checker/commit/10312fcb298cf8f23c75914996650c9e047642f3))
+* **rules:** add CLEAN-015 to remove bold from list bullet characters ([8aeadc7](https://github.com/agilesix/nofo-design-prep-checker/commit/8aeadc798cdd13f9c073a578dda56e3b3e27ce69)), ([6b6eaa0](https://github.com/agilesix/nofo-design-prep-checker/commit/6b6eaa02bf9f1193d40aa8c7d3a110abb34d76d3))
+
+
+### Bug Fixes
+
+* **detectContentGuide:** broaden RFA-JG- signal and add debug logging for DGHP detection ([e3e8a40](https://github.com/agilesix/nofo-design-prep-checker/commit/e3e8a40f19b279398dd5086031c5247bf96f5af6), [5c40b7c](https://github.com/agilesix/nofo-design-prep-checker/commit/5c40b7c930487065377686e07006c9a02b71d629))
+* **detectContentGuide:** gate DGHP fast-path on hasCdcIdentifier ([1269c67](https://github.com/agilesix/nofo-design-prep-checker/commit/1269c673d3814b0261a348d2a0758129fbc91418))
+* **detectContentGuide:** resolve merge conflicts in DGHP detection ([ba13956](https://github.com/agilesix/nofo-design-prep-checker/commit/ba139565b4f309536d0b09472ea58fe39b3dd1a0))
+* **download:** update bold text reminder copy ([97230ca](https://github.com/agilesix/nofo-design-prep-checker/commit/97230ca1fd5fe07c4b817dd7141aedd6951bbd5b), [4925e11](https://github.com/agilesix/nofo-design-prep-checker/commit/4925e11f3ce0f5f355f1bd17c6b6d3c05d229115))
+* **guide-selection:** associate CDC hint with select via aria-describedby ([52b732c](https://github.com/agilesix/nofo-design-prep-checker/commit/52b732c7b4760c3dae1bd305118f1f49c7b6b304))
+* **head-004:** tailor description to the threshold(s) exceeded ([d7ee794](https://github.com/agilesix/nofo-design-prep-checker/commit/d7ee794b3ba6bc177625a24181e74f3e62d71f71))
+* **ReviewStep:** persist accepted text input values across back-navigation ([34e59d0](https://github.com/agilesix/nofo-design-prep-checker/commit/34e59d0a60917748455c3100eaa3bd36f0294ed9), [6bdaba4](https://github.com/agilesix/nofo-design-prep-checker/commit/6bdaba440a440549b4176b8dc5dc60580daaf9d0))
+* **tests:** update CLEAN-007 and RuleRunner tests for cdc-dghp guide ([a144b0b](https://github.com/agilesix/nofo-design-prep-checker/commit/a144b0b11487ab659d973381a572abd897e952df), [8321a84](https://github.com/agilesix/nofo-design-prep-checker/commit/8321a84b7bf7533f94a05cd24c619f15f8da9fb2))
+
+## [1.2.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.1.0...v1.2.0) (2026-04-16)
+
+
+### Features
+
+* add labeled component reference exceptions to HEAD-001 and TABLE-002 ([c6f95a8](https://github.com/agilesix/nofo-design-prep-checker/commit/c6f95a8e232ec34bb0433b999b46786870ad29da))
+* add labeled component reference exceptions to HEAD-001 and TABLE-002 ([43523dd](https://github.com/agilesix/nofo-design-prep-checker/commit/43523dd47104e08c3836091a99472a8b7b8bdaae))
+* exempt structured designator patterns from cap checks ([7d90465](https://github.com/agilesix/nofo-design-prep-checker/commit/7d90465d1e20d5fe90c4823bbb5335091d73d788))
+* exempt structured designator patterns from cap checks ([8150aca](https://github.com/agilesix/nofo-design-prep-checker/commit/8150aca02dc41a813fb94c66c38024b4c6c1b476))
+* **LINK-006:** auto-fix anchors missing word-separator underscores ([92ea9ef](https://github.com/agilesix/nofo-design-prep-checker/commit/92ea9efbc1fd71f463d7dc5cdc135140fc5ac9e4))
+* **LINK-006:** auto-fix OOXML bookmark anchor mismatches silently ([b96311d](https://github.com/agilesix/nofo-design-prep-checker/commit/b96311d6a5eea1d049e381065784911ee41c3798))
+* **LINK-006:** auto-fix OOXML bookmark anchor mismatches silently ([b53792e](https://github.com/agilesix/nofo-design-prep-checker/commit/b53792e6722f0728747dc168f1c4eba69ea5926a))
+* **LINK-006:** reinstate accept-to-fix for OOXML bookmark matches ([9e7c7da](https://github.com/agilesix/nofo-design-prep-checker/commit/9e7c7da64e0cbeffab7681b498f5e8b698d36934))
+* **LINK-006:** reinstate accept-to-fix for OOXML bookmark matches ([35cf890](https://github.com/agilesix/nofo-design-prep-checker/commit/35cf890d74423a53e6c7df3eba25455feef48f96))
+* **LINK-006:** replace anchor auto-fix with instruction-only warnings ([be16c5c](https://github.com/agilesix/nofo-design-prep-checker/commit/be16c5c99781159ecbf9b528a567ddb49efec67c))
+* **LINK-006:** replace anchor auto-fix with instruction-only warnings ([b426150](https://github.com/agilesix/nofo-design-prep-checker/commit/b426150e57884de9693abbd969395b3c5291f95c))
+* **review:** add bold category prefix to auto-applied changes list ([225a847](https://github.com/agilesix/nofo-design-prep-checker/commit/225a847b51c6113b1d1eb536cd889d90376b038e))
+* **review:** add bold category prefix to auto-applied changes list ([5e3b963](https://github.com/agilesix/nofo-design-prep-checker/commit/5e3b963cfea9e63e3fccfa8e1b91212167d3fb1e))
+* **rules:** add HEAD-002 (multiple H1s) and HEAD-003 (skipped heading levels) ([2a01880](https://github.com/agilesix/nofo-design-prep-checker/commit/2a01880d5f294bb0d0528165a2c115c43e162766))
+* **rules:** add HEAD-002 (multiple H1s) and HEAD-003 (skipped heading levels) ([ed0ad2d](https://github.com/agilesix/nofo-design-prep-checker/commit/ed0ad2d8956b82c31718d356d07982add9ab552b))
+
+
+### Bug Fixes
+
+* additional HEAD-001 and TABLE-002 updates ([18463b5](https://github.com/agilesix/nofo-design-prep-checker/commit/18463b595d5acaa0d34ca138a673e45e19fcb01b))
+* additional HEAD-001 and TABLE-002 updates ([128ebef](https://github.com/agilesix/nofo-design-prep-checker/commit/128ebef7cd786b2f7bdfb2ea7bfa3e6104deff3b))
+* additional HEAD-001 and TABLE-002 updates ([687309a](https://github.com/agilesix/nofo-design-prep-checker/commit/687309add64f9384b59b790978ed234436645b5b))
+* **buildDocx:** address Copilot review feedback on CLEAN-008 logging and NS lookups ([221d4a0](https://github.com/agilesix/nofo-design-prep-checker/commit/221d4a008a9bb8852b8079240b7c56029c0f7391))
+* **buildDocx:** correct bookmark cleanup order and harden DIAG-4 assertion ([15d00ba](https://github.com/agilesix/nofo-design-prep-checker/commit/15d00baccd4c0c6255bc32e8cec689cd963e6eae))
+* **buildDocx:** strip redundant xmlns:w from serialized hyperlinks ([24d2365](https://github.com/agilesix/nofo-design-prep-checker/commit/24d2365704a913b88d493af6c15bb5e789355a96))
+* **buildDocx:** strip redundant xmlns:w from serialized hyperlinks ([0583cb5](https://github.com/agilesix/nofo-design-prep-checker/commit/0583cb55b8287bc2d26900fbee42cbf817f3496b))
+* **buildDocx:** use setAttribute for anchor writes; drop xmlns strip ([50b320c](https://github.com/agilesix/nofo-design-prep-checker/commit/50b320c2aa686e593a64d463fc407f13c9be68a5))
+* **clean-008:** harden CLEAN-008 hyperlink/bookmark anchor update against browser DOM differences ([3c47ed5](https://github.com/agilesix/nofo-design-prep-checker/commit/3c47ed5d1f4284551fc6f27c7686d3d8bc53fb50))
+* download step and buildDocx updates ([0d2848c](https://github.com/agilesix/nofo-design-prep-checker/commit/0d2848c3d378cd4df68afa2daac715df24cf4c34))
+* download step and buildDocx updates ([ddf5fdb](https://github.com/agilesix/nofo-design-prep-checker/commit/ddf5fdb8be5901bb1eac4842d5d24e17aea9e721))
+* **HEAD-003:** disambiguate targetField by heading ordinal index ([28014ef](https://github.com/agilesix/nofo-design-prep-checker/commit/28014efba3db536365e3ef35027970b3f727dff1))
+* **HEAD-003:** disambiguate targetField by heading ordinal index ([80faecd](https://github.com/agilesix/nofo-design-prep-checker/commit/80faecdae456fce8dcd5a41b1082097a1f365413))
+* merge origin/main into branch ([ed6bd04](https://github.com/agilesix/nofo-design-prep-checker/commit/ed6bd04beafb645b0699cfee527c931974164e95))
+* remove unused warning constants from LINK-006 ([01d0e90](https://github.com/agilesix/nofo-design-prep-checker/commit/01d0e90f458d7f2b47dc22f5d25ed0e196bb024d))
+* resolve merge conflicts ([b32b840](https://github.com/agilesix/nofo-design-prep-checker/commit/b32b840dc0ff4ce2e1b1551a469ca1254dd83259))
+* **test:** remove process.env — not available without @types/node ([eccddb8](https://github.com/agilesix/nofo-design-prep-checker/commit/eccddb847422a03fdc4ca536b433d4f3f69f7d93))
+* **test:** remove process.env usage from buildDocx-clean008-diag.test.ts ([87bf9ef](https://github.com/agilesix/nofo-design-prep-checker/commit/87bf9ef3420c935f04bd72d1bbed603f5b8c2c24))
+
 ## [1.1.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.0.4...v1.1.0) (2026-04-15)
 
 
