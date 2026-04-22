@@ -4047,3 +4047,336 @@ describe('buildDocx — ZIP compression settings (iOS compatibility)', () => {
     expect(compressions.get('word/_rels/document.xml.rels'),  'word/_rels/document.xml.rels must be STORE').toBe(0);
   });
 });
+
+// ─── ZIP round-trip integrity ─────────────────────────────────────────────────
+//
+// These tests cover the investigations requested in the iOS Word compatibility
+// report: zero-change round-trip file preservation, binary file integrity,
+// word/settings.xml passthrough, and XML namespace validity after LINK-006.
+
+const W_OOXML = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+const R_OOXML = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+
+/** Minimal but structurally complete docx-like ZIP fixture. */
+async function makeFullDocxZip(opts: {
+  documentXml?: string;
+  includeImage?: boolean;
+} = {}): Promise<JSZip> {
+  const zip = new JSZip();
+
+  const documentXml = opts.documentXml ?? [
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+    `<w:document`,
+    ` xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"`,
+    ` xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"`,
+    ` xmlns:r="${R_OOXML}"`,
+    ` xmlns:w="${W_OOXML}"`,
+    ` xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"`,
+    ` xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"`,
+    ` mc:Ignorable="w14 w15"`,
+    `>`,
+    `<w:body>`,
+    `<w:p>`,
+    `<w:hyperlink w:anchor="_bookmark1" r:id="" w:history="1">`,
+    `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>See section</w:t></w:r>`,
+    `</w:hyperlink>`,
+    `</w:p>`,
+    `<w:p><w:r><w:t>Body paragraph text.</w:t></w:r></w:p>`,
+    `<w:sectPr/>`,
+    `</w:body></w:document>`,
+  ].join('');
+
+  zip.file('word/document.xml', documentXml);
+
+  zip.file('[Content_Types].xml', [
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+    `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">`,
+    `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>`,
+    `<Default Extension="xml" ContentType="application/xml"/>`,
+    `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>`,
+    `<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>`,
+    `<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>`,
+    `</Types>`,
+  ].join(''));
+
+  zip.file('_rels/.rels', [
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`,
+    `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>`,
+    `</Relationships>`,
+  ].join(''));
+
+  zip.file('word/_rels/document.xml.rels', [
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`,
+    `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`,
+    `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>`,
+    `</Relationships>`,
+  ].join(''));
+
+  // Realistic word/settings.xml with compatibilityMode (the element Word checks
+  // to determine whether a document is from a pre-release version).
+  zip.file('word/settings.xml', [
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+    `<w:settings xmlns:w="${W_OOXML}">`,
+    `<w:compat>`,
+    `<w:compatibilityMode w:val="15"/>`,
+    `</w:compat>`,
+    `</w:settings>`,
+  ].join(''));
+
+  zip.file('word/styles.xml', [
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+    `<w:styles xmlns:w="${W_OOXML}">`,
+    `<w:style w:type="character" w:styleId="Hyperlink">`,
+    `<w:name w:val="Hyperlink"/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr>`,
+    `</w:style>`,
+    `</w:styles>`,
+  ].join(''));
+
+  if (opts.includeImage) {
+    // Fake PNG — 1×1 pixel minimal valid PNG (89 bytes), stored as binary.
+    const pngBytes = new Uint8Array([
+      0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a, // PNG signature
+      0x00,0x00,0x00,0x0d,0x49,0x48,0x44,0x52, // IHDR length + type
+      0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x01, // width=1, height=1
+      0x08,0x02,0x00,0x00,0x00,0x90,0x77,0x53, // bitDepth=8,colorType=2,crc...
+      0xde,0x00,0x00,0x00,0x0c,0x49,0x44,0x41, // IDAT length + type
+      0x54,0x08,0xd7,0x63,0xf8,0xcf,0xc0,0x00, // compressed pixel
+      0x00,0x00,0x02,0x00,0x01,0xe2,0x21,0xbc, // crc
+      0x33,0x00,0x00,0x00,0x00,0x49,0x45,0x4e, // IEND length + type
+      0x44,0xae,0x42,0x60,0x82,               // IEND crc
+    ]);
+    zip.file('word/media/image1.png', pngBytes.buffer);
+  }
+
+  return zip;
+}
+
+describe('buildDocx — ZIP round-trip integrity', () => {
+  // ── 1. Zero-change round-trip: all files preserved ─────────────────────────
+
+  it('zero-change round-trip: all input files are present in the output', async () => {
+    const zip = await makeFullDocxZip({ includeImage: true });
+    const inputFiles = new Set(Object.keys(zip.files).filter(k => !zip.files[k]!.dir));
+
+    const blob = await buildDocx(zip, [], []);
+    const outZip = await JSZip.loadAsync(blob);
+    const outputFiles = new Set(Object.keys(outZip.files).filter(k => !outZip.files[k]!.dir));
+
+    for (const path of inputFiles) {
+      expect(outputFiles.has(path), `Missing from output: ${path}`).toBe(true);
+    }
+  });
+
+  it('zero-change round-trip: no extra files are added to the output', async () => {
+    const zip = await makeFullDocxZip({ includeImage: true });
+    const inputFiles = new Set(Object.keys(zip.files).filter(k => !zip.files[k]!.dir));
+
+    const blob = await buildDocx(zip, [], []);
+    const outZip = await JSZip.loadAsync(blob);
+    const outputFiles = new Set(Object.keys(outZip.files).filter(k => !outZip.files[k]!.dir));
+
+    for (const path of outputFiles) {
+      expect(inputFiles.has(path), `Unexpected file added to output: ${path}`).toBe(true);
+    }
+  });
+
+  // ── 2. word/settings.xml passes through unmodified ─────────────────────────
+
+  it('word/settings.xml content is identical before and after buildDocx', async () => {
+    const zip = await makeFullDocxZip();
+    const originalSettings = await zip.file('word/settings.xml')!.async('string');
+
+    const blob = await buildDocx(zip, [], []);
+    const outZip = await JSZip.loadAsync(blob);
+
+    const outputSettingsFile = outZip.file('word/settings.xml');
+    expect(outputSettingsFile, 'word/settings.xml must be present in output').not.toBeNull();
+
+    const outputSettings = await outputSettingsFile!.async('string');
+    expect(outputSettings).toBe(originalSettings);
+  });
+
+  it('word/settings.xml contains compatibilityMode w:val="15" after round-trip', async () => {
+    const zip = await makeFullDocxZip();
+    const blob = await buildDocx(zip, [], []);
+    const outZip = await JSZip.loadAsync(blob);
+    const settings = await outZip.file('word/settings.xml')!.async('string');
+
+    // Verify the compatibilityMode value survives unchanged — if this is
+    // modified or stripped, Word reports "pre-release version of Word 2007".
+    expect(settings).toContain('w:compatibilityMode');
+    expect(settings).toContain('w:val="15"');
+    expect(settings).not.toContain('w:val="11"');
+    expect(settings).not.toContain('w:val="12"');
+  });
+
+  // ── 3. Binary file integrity ───────────────────────────────────────────────
+
+  it('binary image file bytes are identical before and after buildDocx', async () => {
+    const zip = await makeFullDocxZip({ includeImage: true });
+    const originalBytes = new Uint8Array(await zip.file('word/media/image1.png')!.async('arraybuffer'));
+
+    const blob = await buildDocx(zip, [], []);
+    const outZip = await JSZip.loadAsync(blob);
+
+    const outImageFile = outZip.file('word/media/image1.png');
+    expect(outImageFile, 'word/media/image1.png must be present in output').not.toBeNull();
+
+    const outputBytes = new Uint8Array(await outImageFile!.async('arraybuffer'));
+    expect(outputBytes.length).toBe(originalBytes.length);
+    for (let i = 0; i < originalBytes.length; i++) {
+      expect(outputBytes[i], `Byte mismatch at index ${i}`).toBe(originalBytes[i]);
+    }
+  });
+
+  // ── 4. word/document.xml is well-formed XML after LINK-006 ─────────────────
+
+  it('LINK-006 bookmark retarget produces well-formed XML (no DOMParser error)', async () => {
+    const zip = await makeFullDocxZip();
+
+    const fix: AcceptedFix = {
+      issueId: 'LINK-006-0',
+      ruleId: 'LINK-006',
+      targetField: 'link.bookmark._bookmark1',
+      value: '_corrected_bookmark',
+    };
+
+    const blob = await buildDocx(zip, [fix], []);
+    const outZip = await JSZip.loadAsync(blob);
+    const xml = await outZip.file('word/document.xml')!.async('string');
+
+    // DOMParser signals a parse error by returning a document whose root
+    // element is <parsererror> — not <w:document>.
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xml, 'application/xml');
+    const rootTag = doc.documentElement.tagName;
+    expect(rootTag, `DOMParser returned ${rootTag} — XML is malformed`).not.toBe('parsererror');
+    expect(rootTag).toBe('w:document');
+  });
+
+  it('LINK-006 bookmark retarget produces no xmlns:w="" namespace undeclaration', async () => {
+    const zip = await makeFullDocxZip();
+
+    const fix: AcceptedFix = {
+      issueId: 'LINK-006-0',
+      ruleId: 'LINK-006',
+      targetField: 'link.bookmark._bookmark1',
+      value: '_corrected_bookmark',
+    };
+
+    const blob = await buildDocx(zip, [fix], []);
+    const outZip = await JSZip.loadAsync(blob);
+    const xml = await outZip.file('word/document.xml')!.async('string');
+
+    // xmlns:w="" on any element would undeclare the w: prefix for that subtree,
+    // making every w:* child element unrecognized — causing Word for iOS to
+    // report "unreadable content" / "pre-release Word 2007".
+    expect(xml).not.toContain('xmlns:w=""');
+    expect(xml).not.toContain("xmlns:w=''");
+  });
+
+  it('LINK-006 bookmark retarget updates the w:anchor value correctly', async () => {
+    const zip = await makeFullDocxZip();
+
+    const fix: AcceptedFix = {
+      issueId: 'LINK-006-0',
+      ruleId: 'LINK-006',
+      targetField: 'link.bookmark._bookmark1',
+      value: '_corrected_bookmark',
+    };
+
+    const blob = await buildDocx(zip, [fix], []);
+    const outZip = await JSZip.loadAsync(blob);
+    const xml = await outZip.file('word/document.xml')!.async('string');
+
+    expect(xml).toContain('w:anchor="_corrected_bookmark"');
+    expect(xml).not.toContain('w:anchor="_bookmark1"');
+  });
+
+  it('LINK-006 link-text update produces no xmlns:w="" namespace undeclaration', async () => {
+    const zip = await makeFullDocxZip();
+
+    const fix: AcceptedFix = {
+      issueId: 'LINK-006-1',
+      ruleId: 'LINK-006',
+      targetField: 'link.text._bookmark1',
+      value: 'Updated link text',
+    };
+
+    const blob = await buildDocx(zip, [fix], []);
+    const outZip = await JSZip.loadAsync(blob);
+    const xml = await outZip.file('word/document.xml')!.async('string');
+
+    expect(xml).not.toContain('xmlns:w=""');
+    expect(xml).not.toContain("xmlns:w=''");
+  });
+
+  // ── 5. Namespace declarations in document root are preserved ────────────────
+
+  it('all namespace declarations on the document root are present after round-trip', async () => {
+    // A realistic OOXML document declares many namespaces on the root element.
+    // If the serializer drops any that are referenced in attributes or elements
+    // deeper in the document, Word will report unresolvable prefixes.
+    const zip = await makeFullDocxZip();
+    const originalXml = await zip.file('word/document.xml')!.async('string');
+
+    // Extract all xmlns:* declarations from the original root open tag.
+    const rootTag = originalXml.match(/<w:document[^>]*>/)?.[0] ?? '';
+    const nsDeclPattern = /xmlns:[a-zA-Z0-9]+=["'][^"']*["']/g;
+    const originalDecls = rootTag.match(nsDeclPattern) ?? [];
+
+    // Apply a fix that rewrites document.xml so the serializer runs.
+    const fix: AcceptedFix = {
+      issueId: 'LINK-006-0',
+      ruleId: 'LINK-006',
+      targetField: 'link.bookmark._bookmark1',
+      value: '_corrected_bookmark',
+    };
+    const blob = await buildDocx(zip, [fix], []);
+    const outZip = await JSZip.loadAsync(blob);
+    const outputXml = await outZip.file('word/document.xml')!.async('string');
+
+    for (const decl of originalDecls) {
+      // Extract just the prefix name (e.g. "xmlns:w") for the error message.
+      const prefix = decl.split('=')[0]!;
+      expect(outputXml, `${prefix} declaration missing from output`).toContain(decl);
+    }
+  });
+
+  // ── 6. [Content_Types].xml has correct entries after round-trip ─────────────
+
+  it('[Content_Types].xml preserves all Override entries after zero-change round-trip', async () => {
+    const zip = await makeFullDocxZip();
+    const originalCT = await zip.file('[Content_Types].xml')!.async('string');
+
+    // Extract all PartName values from the original.
+    const partNames = [...originalCT.matchAll(/PartName="([^"]+)"/g)].map(m => m[1]!);
+    expect(partNames.length).toBeGreaterThan(0);
+
+    const blob = await buildDocx(zip, [], []);
+    const outZip = await JSZip.loadAsync(blob);
+    const outputCT = await outZip.file('[Content_Types].xml')!.async('string');
+
+    for (const part of partNames) {
+      expect(outputCT, `PartName "${part}" missing from [Content_Types].xml`).toContain(part);
+    }
+  });
+
+  // ── 7. word/_rels/document.xml.rels has correct entries ─────────────────────
+
+  it('word/_rels/document.xml.rels preserves all relationships after zero-change round-trip', async () => {
+    const zip = await makeFullDocxZip();
+    const originalRels = await zip.file('word/_rels/document.xml.rels')!.async('string');
+    const relIds = [...originalRels.matchAll(/Id="([^"]+)"/g)].map(m => m[1]!);
+
+    const blob = await buildDocx(zip, [], []);
+    const outZip = await JSZip.loadAsync(blob);
+    const outputRels = await outZip.file('word/_rels/document.xml.rels')!.async('string');
+
+    for (const id of relIds) {
+      expect(outputRels, `Relationship Id="${id}" missing from document.xml.rels`).toContain(`Id="${id}"`);
+    }
+  });
+});
