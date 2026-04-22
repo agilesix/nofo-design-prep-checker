@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
 import CLEAN_007 from '../opdiv/CLEAN-007';
-import type { ParsedDocument, AutoAppliedChange } from '../../types';
+import type { ParsedDocument, Issue, AutoAppliedChange } from '../../types';
 
 function makeDoc(html: string): ParsedDocument {
   return {
@@ -222,10 +222,14 @@ function makeDocWithXml(html: string, documentXml: string): ParsedDocument {
   };
 }
 
+function toAutoAppliedChanges(results: (Issue | AutoAppliedChange)[]): AutoAppliedChange[] {
+  return results.filter((r): r is AutoAppliedChange => !('severity' in r));
+}
+
 describe('CLEAN-007: instruction box detection', () => {
   it('detects a DGHT instruction box and returns the correct AutoAppliedChange', () => {
     const doc = makeDocWithXml('', makeInstructionBoxDocXml({}));
-    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as unknown as AutoAppliedChange[];
+    const results = toAutoAppliedChanges(CLEAN_007.check(doc, OPTIONS_SSJ) as (Issue | AutoAppliedChange)[]);
     const change = results.find(r => r.targetField === 'struct.dght.removeinstructionboxes');
     expect(change).toBeDefined();
     expect(change!.ruleId).toBe('CLEAN-007');
@@ -235,7 +239,7 @@ describe('CLEAN-007: instruction box detection', () => {
 
   it('detects a DGHP instruction box', () => {
     const doc = makeDocWithXml('', makeInstructionBoxDocXml({ prefix: 'DGHP-SPECIFIC INSTRUCTIONS' }));
-    const results = CLEAN_007.check(doc, OPTIONS_DGHP) as unknown as AutoAppliedChange[];
+    const results = toAutoAppliedChanges(CLEAN_007.check(doc, OPTIONS_DGHP) as (Issue | AutoAppliedChange)[]);
     const change = results.find(r => r.targetField === 'struct.dght.removeinstructionboxes');
     expect(change).toBeDefined();
     expect(change!.value).toBe('1');
@@ -256,7 +260,7 @@ describe('CLEAN-007: instruction box detection', () => {
       `</w:tc></w:tr></w:tbl>` +
       `<w:sectPr/></w:body></w:document>`;
     const doc = makeDocWithXml('', twoBoxDocXml);
-    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as unknown as AutoAppliedChange[];
+    const results = toAutoAppliedChanges(CLEAN_007.check(doc, OPTIONS_SSJ) as (Issue | AutoAppliedChange)[]);
     const change = results.find(r => r.targetField === 'struct.dght.removeinstructionboxes');
     expect(change).toBeDefined();
     expect(change!.value).toBe('2');
@@ -265,37 +269,37 @@ describe('CLEAN-007: instruction box detection', () => {
 
   it('is case-insensitive for the fill color attribute', () => {
     const doc = makeDocWithXml('', makeInstructionBoxDocXml({ fill: 'bcd6f4' }));
-    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as unknown as AutoAppliedChange[];
+    const results = toAutoAppliedChanges(CLEAN_007.check(doc, OPTIONS_SSJ) as (Issue | AutoAppliedChange)[]);
     expect(results.find(r => r.targetField === 'struct.dght.removeinstructionboxes')).toBeDefined();
   });
 
   it('is case-insensitive for the instruction prefix', () => {
     const doc = makeDocWithXml('', makeInstructionBoxDocXml({ prefix: 'dght-specific instructions' }));
-    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as unknown as AutoAppliedChange[];
+    const results = toAutoAppliedChanges(CLEAN_007.check(doc, OPTIONS_SSJ) as (Issue | AutoAppliedChange)[]);
     expect(results.find(r => r.targetField === 'struct.dght.removeinstructionboxes')).toBeDefined();
   });
 
   it('does not detect a table without blue shading', () => {
     const doc = makeDocWithXml('', makeInstructionBoxDocXml({ fill: 'FFFFFF' }));
-    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as unknown as AutoAppliedChange[];
+    const results = toAutoAppliedChanges(CLEAN_007.check(doc, OPTIONS_SSJ) as (Issue | AutoAppliedChange)[]);
     expect(results.find(r => r.targetField === 'struct.dght.removeinstructionboxes')).toBeUndefined();
   });
 
   it('does not detect a table whose text does not start with the instruction prefix', () => {
     const doc = makeDocWithXml('', makeInstructionBoxDocXml({ prefix: 'Some other content' }));
-    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as unknown as AutoAppliedChange[];
+    const results = toAutoAppliedChanges(CLEAN_007.check(doc, OPTIONS_SSJ) as (Issue | AutoAppliedChange)[]);
     expect(results.find(r => r.targetField === 'struct.dght.removeinstructionboxes')).toBeUndefined();
   });
 
   it('does not detect a multi-cell table even if shading and prefix match', () => {
     const doc = makeDocWithXml('', makeInstructionBoxDocXml({ cellCount: 2 }));
-    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as unknown as AutoAppliedChange[];
+    const results = toAutoAppliedChanges(CLEAN_007.check(doc, OPTIONS_SSJ) as (Issue | AutoAppliedChange)[]);
     expect(results.find(r => r.targetField === 'struct.dght.removeinstructionboxes')).toBeUndefined();
   });
 
   it('returns no instruction box change when documentXml is empty', () => {
     const doc = makeDocWithXml('', '');
-    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as unknown as AutoAppliedChange[];
+    const results = toAutoAppliedChanges(CLEAN_007.check(doc, OPTIONS_SSJ) as (Issue | AutoAppliedChange)[]);
     expect(results.find(r => r.targetField === 'struct.dght.removeinstructionboxes')).toBeUndefined();
   });
 
@@ -303,7 +307,7 @@ describe('CLEAN-007: instruction box detection', () => {
     const docXml = makeInstructionBoxDocXml({});
     const html = PREAMBLE_HTML;
     const doc = makeDocWithXml(html, docXml);
-    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as unknown as AutoAppliedChange[];
+    const results = toAutoAppliedChanges(CLEAN_007.check(doc, OPTIONS_SSJ) as (Issue | AutoAppliedChange)[]);
     expect(results.find(r => r.targetField === 'struct.dght.removescaffolding')).toBeDefined();
     expect(results.find(r => r.targetField === 'struct.dght.removeinstructionboxes')).toBeDefined();
   });
