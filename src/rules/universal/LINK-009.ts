@@ -12,9 +12,9 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
  *   Trailing: the run immediately following the hyperlink starts with [a-zA-Z0-9]
  *             AND the hyperlink's own text ends with non-whitespace.
  *
- * Only alphanumeric characters are considered partial — punctuation (., ,, ;,
- * :, !, ?, ), ], etc.) immediately adjacent to a link is sentence/list
- * punctuation and must never be pulled inside the hyperlink.
+ * Only alphanumeric characters are considered partial — punctuation such as
+ * ".", ",", ";", ":", "!", "?", ")", and "]" immediately adjacent to a link
+ * is sentence/list punctuation and must never be pulled inside the hyperlink.
  *
  * "Immediately adjacent" means a direct paragraph-level sibling with no
  * intervening elements other than w:bookmarkStart / w:bookmarkEnd.
