@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 
 // Tell React this is a test environment so act() works without warnings
 (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
@@ -72,13 +72,17 @@ describe('IssueCard – skip with a recorded text input value', () => {
   let container: HTMLDivElement;
   let root: Root;
 
-  beforeEach(() => {
+  beforeAll(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
   });
 
   afterEach(() => {
+    act(() => { root.render(null); });
+  });
+
+  afterAll(() => {
     act(() => { root.unmount(); });
     document.body.removeChild(container);
   });
