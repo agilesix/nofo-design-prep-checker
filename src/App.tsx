@@ -230,7 +230,9 @@ export default function App(): React.ReactElement {
         };
         reader.readAsDataURL(blob);
       });
-      window.location.href = dataUrl;
+      // replace() avoids pushing the large data URI onto the history stack,
+      // preventing memory bloat and broken Back navigation.
+      window.location.replace(dataUrl);
       return;
     }
 
