@@ -190,55 +190,13 @@ export default function App(): React.ReactElement {
 
   const handleDownload = useCallback(async () => {
     if (!parsedDoc) return;
-
-    // Detect iOS synchronously before any await. iOS blocks window.open() calls
-    // that occur after an async gap, so we must open the target window here —
-    // within the synchronous user-gesture context — and navigate it to the blob
-    // URL once the document is ready.
-    const isLegacyIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    const isIPadOSDesktopMode = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-    const isIOS = (isLegacyIOSDevice || isIPadOSDesktopMode) && !(window as unknown as Record<string, unknown>).MSStream;
-    const iosWindow = isIOS ? window.open('about:blank', '_blank') : null;
-    if (iosWindow) {
-      iosWindow.opener = null;
-    }
-
-    let blob: Blob;
-    try {
-      blob = await buildDocx(
-        parsedDoc.zipArchive,
-        acceptedFixes,
-        reviewState?.autoAppliedChanges ?? []
-      );
-    } catch (err) {
-      iosWindow?.close();
-      throw err;
-    }
-
+    const blob = await buildDocx(
+      parsedDoc.zipArchive,
+      acceptedFixes,
+      reviewState?.autoAppliedChanges ?? []
+    );
     const originalName = uploadedFile?.name ?? 'nofo.docx';
     const downloadName = originalName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
-
-    if (isIOS) {
-      // Use a binary blob URL (not a data URI) so iOS gets the actual DOCX bytes.
-      // iOS opens the blob in its built-in document viewer, where the user can
-      // tap Share → Open in Word / Save to Files.
-      const url = URL.createObjectURL(blob);
-      let navigated = false;
-      if (iosWindow && !iosWindow.closed) {
-        try {
-          iosWindow.location.href = url;
-          navigated = true;
-        } catch {
-          // Window was closed or cross-origin blocked between open and navigate.
-        }
-      }
-      if (!navigated) {
-        // Pre-opened window unavailable; fall back to the current tab.
-        window.location.href = url;
-      }
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-      return;
-    }
 
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -247,7 +205,10 @@ export default function App(): React.ReactElement {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Delay revocation — iOS fetches blob URLs asynchronously after the click.
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    setTimeout(() => URL.revokeObjectURL(url), isIOS ? 60000 : 0);
   }, [parsedDoc, acceptedFixes, reviewState, uploadedFile]);
 
   const handleBack = useCallback(() => {
