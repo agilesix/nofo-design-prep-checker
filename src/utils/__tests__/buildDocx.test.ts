@@ -4058,10 +4058,10 @@ const W_OOXML = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const R_OOXML = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 
 /** Minimal but structurally complete docx-like ZIP fixture. */
-async function makeFullDocxZip(opts: {
+function makeFullDocxZip(opts: {
   documentXml?: string;
   includeImage?: boolean;
-} = {}): Promise<JSZip> {
+} = {}): JSZip {
   const zip = new JSZip();
 
   const documentXml = opts.documentXml ?? [
@@ -4157,7 +4157,7 @@ describe('buildDocx — ZIP round-trip integrity', () => {
   // ── 1. Zero-change round-trip: all files preserved ─────────────────────────
 
   it('zero-change round-trip: all input files are present in the output', async () => {
-    const zip = await makeFullDocxZip({ includeImage: true });
+    const zip = makeFullDocxZip({ includeImage: true });
     const inputFiles = new Set(Object.keys(zip.files).filter(k => !zip.files[k]!.dir));
 
     const blob = await buildDocx(zip, [], []);
@@ -4170,7 +4170,7 @@ describe('buildDocx — ZIP round-trip integrity', () => {
   });
 
   it('zero-change round-trip: no extra files are added to the output', async () => {
-    const zip = await makeFullDocxZip({ includeImage: true });
+    const zip = makeFullDocxZip({ includeImage: true });
     const inputFiles = new Set(Object.keys(zip.files).filter(k => !zip.files[k]!.dir));
 
     const blob = await buildDocx(zip, [], []);
@@ -4185,7 +4185,7 @@ describe('buildDocx — ZIP round-trip integrity', () => {
   // ── 2. word/settings.xml passes through unmodified ─────────────────────────
 
   it('word/settings.xml content is identical before and after buildDocx', async () => {
-    const zip = await makeFullDocxZip();
+    const zip = makeFullDocxZip();
     const originalSettings = await zip.file('word/settings.xml')!.async('string');
 
     const blob = await buildDocx(zip, [], []);
@@ -4199,7 +4199,7 @@ describe('buildDocx — ZIP round-trip integrity', () => {
   });
 
   it('word/settings.xml contains compatibilityMode w:val="15" after round-trip', async () => {
-    const zip = await makeFullDocxZip();
+    const zip = makeFullDocxZip();
     const blob = await buildDocx(zip, [], []);
     const outZip = await JSZip.loadAsync(blob);
     const settings = await outZip.file('word/settings.xml')!.async('string');
@@ -4215,7 +4215,7 @@ describe('buildDocx — ZIP round-trip integrity', () => {
   // ── 3. Binary file integrity ───────────────────────────────────────────────
 
   it('binary image file bytes are identical before and after buildDocx', async () => {
-    const zip = await makeFullDocxZip({ includeImage: true });
+    const zip = makeFullDocxZip({ includeImage: true });
     const originalBytes = new Uint8Array(await zip.file('word/media/image1.png')!.async('arraybuffer'));
 
     const blob = await buildDocx(zip, [], []);
@@ -4234,7 +4234,7 @@ describe('buildDocx — ZIP round-trip integrity', () => {
   // ── 4. word/document.xml is well-formed XML after LINK-006 ─────────────────
 
   it('LINK-006 bookmark retarget produces well-formed XML (no DOMParser error)', async () => {
-    const zip = await makeFullDocxZip();
+    const zip = makeFullDocxZip();
 
     const fix: AcceptedFix = {
       issueId: 'LINK-006-0',
@@ -4257,7 +4257,7 @@ describe('buildDocx — ZIP round-trip integrity', () => {
   });
 
   it('LINK-006 bookmark retarget produces no xmlns:w="" namespace undeclaration', async () => {
-    const zip = await makeFullDocxZip();
+    const zip = makeFullDocxZip();
 
     const fix: AcceptedFix = {
       issueId: 'LINK-006-0',
@@ -4278,7 +4278,7 @@ describe('buildDocx — ZIP round-trip integrity', () => {
   });
 
   it('LINK-006 bookmark retarget updates the w:anchor value correctly', async () => {
-    const zip = await makeFullDocxZip();
+    const zip = makeFullDocxZip();
 
     const fix: AcceptedFix = {
       issueId: 'LINK-006-0',
@@ -4296,7 +4296,7 @@ describe('buildDocx — ZIP round-trip integrity', () => {
   });
 
   it('LINK-006 link-text update produces no xmlns:w="" namespace undeclaration', async () => {
-    const zip = await makeFullDocxZip();
+    const zip = makeFullDocxZip();
 
     const fix: AcceptedFix = {
       issueId: 'LINK-006-1',
@@ -4319,7 +4319,7 @@ describe('buildDocx — ZIP round-trip integrity', () => {
     // A realistic OOXML document declares many namespaces on the root element.
     // If the serializer drops any that are referenced in attributes or elements
     // deeper in the document, Word will report unresolvable prefixes.
-    const zip = await makeFullDocxZip();
+    const zip = makeFullDocxZip();
     const originalXml = await zip.file('word/document.xml')!.async('string');
 
     // Extract all xmlns:* declarations from the original root open tag.
@@ -4348,7 +4348,7 @@ describe('buildDocx — ZIP round-trip integrity', () => {
   // ── 6. [Content_Types].xml has correct entries after round-trip ─────────────
 
   it('[Content_Types].xml preserves all Override entries after zero-change round-trip', async () => {
-    const zip = await makeFullDocxZip();
+    const zip = makeFullDocxZip();
     const originalCT = await zip.file('[Content_Types].xml')!.async('string');
 
     // Extract all PartName values from the original.
@@ -4367,7 +4367,7 @@ describe('buildDocx — ZIP round-trip integrity', () => {
   // ── 7. word/_rels/document.xml.rels has correct entries ─────────────────────
 
   it('word/_rels/document.xml.rels preserves all relationships after zero-change round-trip', async () => {
-    const zip = await makeFullDocxZip();
+    const zip = makeFullDocxZip();
     const originalRels = await zip.file('word/_rels/document.xml.rels')!.async('string');
     const relIds = [...originalRels.matchAll(/Id="([^"]+)"/g)].map(m => m[1]!);
 
