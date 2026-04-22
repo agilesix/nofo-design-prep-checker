@@ -4156,6 +4156,21 @@ function makeFullDocxZip(opts: {
 describe('buildDocx — ZIP round-trip integrity', () => {
   // ── 1. Zero-change round-trip: all files preserved ─────────────────────────
 
+  it('output ZIP contains exactly the same number of files as the input ZIP', async () => {
+    // Regression test for binary file loss: the previous generateAsync→loadAsync
+    // clone silently dropped binary entries (images, fonts, theme files) in
+    // certain browser environments, producing an output ZIP roughly half the
+    // size of the input.  Explicit per-file copying preserves the file count.
+    const zip = makeFullDocxZip({ includeImage: true });
+    const inputCount = Object.keys(zip.files).filter(k => !zip.files[k]!.dir).length;
+
+    const blob = await buildDocx(zip, [], []);
+    const outZip = await JSZip.loadAsync(blob);
+    const outputCount = Object.keys(outZip.files).filter(k => !outZip.files[k]!.dir).length;
+
+    expect(outputCount).toBe(inputCount);
+  });
+
   it('zero-change round-trip: all input files are present in the output', async () => {
     const zip = makeFullDocxZip({ includeImage: true });
     const inputFiles = new Set(Object.keys(zip.files).filter(k => !zip.files[k]!.dir));
