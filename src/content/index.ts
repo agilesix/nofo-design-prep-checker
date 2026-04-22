@@ -65,7 +65,7 @@ export const content = {
       heading: 'A few things to check first',
       items: [
         'Make sure all comments in your Word document have been addressed',
-        'In Word, check that bold text hasn’t been used in place of a heading style — the tool can’t detect this, and NOFO Builder won’t convert bold text to headings',
+        'In Word, check that bold text hasn\'t been used in place of a heading style — the tool can\'t detect this, and NOFO Builder won\'t convert bold text to headings',
       ],
     },
   },
