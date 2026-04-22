@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.5.2](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.5.1...v1.5.2) (2026-04-22)
+
+
+### Bug Fixes
+
+* address Copilot review comments on PR [#220](https://github.com/agilesix/nofo-design-prep-checker/issues/220) ([5a57a7e](https://github.com/agilesix/nofo-design-prep-checker/commit/5a57a7e6815548858b9baf34dc4663c28a547167))
+* append anchor to DOM and delay URL revocation for iOS download ([9de8224](https://github.com/agilesix/nofo-design-prep-checker/commit/9de822498f802352d4617d5ef8108214b32bdbed))
+* copy binary ZIP entries as uint8array to prevent file loss ([c47fc71](https://github.com/agilesix/nofo-design-prep-checker/commit/c47fc718f436939ac6df63862a2a6c05503ea469))
+* gate 30s blob URL revocation delay to iOS only ([324a093](https://github.com/agilesix/nofo-design-prep-checker/commit/324a0933c0176b153b8655c32a94e01e53b7d443))
+* remove all anchor attribute variants before setAttributeNS in link.bookmark path ([7336c5b](https://github.com/agilesix/nofo-design-prep-checker/commit/7336c5b2f7b04df22e3101a1c262ed80b858b0b3))
+* use setAttributeNS for all w: attribute writes to prevent xmlns:w corruption ([8aa9dad](https://github.com/agilesix/nofo-design-prep-checker/commit/8aa9dad5ebc1960add745d804a908f3e02b4f14a))
+* use setAttributeNS for all w: attribute writes to prevent xmlns:w corruption ([00fc8fe](https://github.com/agilesix/nofo-design-prep-checker/commit/00fc8fe91a523069cf7e03996dde46aefa8e6ed1))
+
 ## [1.5.1](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.5.0...v1.5.1) (2026-04-22)
 
 
