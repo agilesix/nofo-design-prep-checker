@@ -214,8 +214,18 @@ export default function App(): React.ReactElement {
     const isIOS = (isLegacyIOSDevice || isIPadOSDesktopMode) && !(window as unknown as Record<string, unknown>).MSStream;
 
     if (isIOS) {
-      // iOS does not support anchor-click downloads; navigate to a base64 data URI
-      // so the system file handler can offer to open the file in Word.
+      // iOS 13.4+ honours the download attribute on data URIs (not blob URLs),
+      // which preserves the filename. On iOS, the Safari Version/x.y token does
+      // not necessarily match the iOS version (for example, iOS 13.4 commonly
+      // reports Version/13.1), so gate this behaviour on the iOS OS version
+      // segment instead. Older Safari and embedded WKWebViews may omit the OS
+      // version token, so fall back conservatively to window.location.replace()
+      // there to avoid pushing the large data URI onto the history stack.
+      const iosVersionMatch = navigator.userAgent.match(/OS (\d+)[._](\d+)/);
+      const iosMajor = iosVersionMatch ? parseInt(iosVersionMatch[1]!, 10) : 0;
+      const iosMinor = iosVersionMatch ? parseInt(iosVersionMatch[2]!, 10) : 0;
+      const supportsDataUriDownload = iosMajor > 13 || (iosMajor === 13 && iosMinor >= 4);
+
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onerror = () => {
@@ -230,9 +240,18 @@ export default function App(): React.ReactElement {
         };
         reader.readAsDataURL(blob);
       });
-      // replace() avoids pushing the large data URI onto the history stack,
-      // preventing memory bloat and broken Back navigation.
-      window.location.replace(dataUrl);
+
+      if (supportsDataUriDownload) {
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = downloadName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        // Older iOS / WKWebView: replace avoids a history entry for the data URI.
+        window.location.replace(dataUrl);
+      }
       return;
     }
 
