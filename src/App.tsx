@@ -223,10 +223,17 @@ export default function App(): React.ReactElement {
       // iOS opens the blob in its built-in document viewer, where the user can
       // tap Share → Open in Word / Save to Files.
       const url = URL.createObjectURL(blob);
-      if (iosWindow) {
-        iosWindow.location.href = url;
-      } else {
-        // window.open was blocked; fall back to navigating the current tab.
+      let navigated = false;
+      if (iosWindow && !iosWindow.closed) {
+        try {
+          iosWindow.location.href = url;
+          navigated = true;
+        } catch {
+          // Window was closed or cross-origin blocked between open and navigate.
+        }
+      }
+      if (!navigated) {
+        // Pre-opened window unavailable; fall back to the current tab.
         window.location.href = url;
       }
       setTimeout(() => URL.revokeObjectURL(url), 60000);
