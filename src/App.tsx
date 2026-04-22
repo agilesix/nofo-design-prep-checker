@@ -201,8 +201,12 @@ export default function App(): React.ReactElement {
     const a = document.createElement('a');
     a.href = url;
     a.download = downloadName;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    // Delay revocation so iOS (Safari/WKWebView) has time to fetch the blob
+    // before the URL is invalidated — immediate revocation produces an empty file.
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
   }, [parsedDoc, acceptedFixes, reviewState, uploadedFile]);
 
   const handleBack = useCallback(() => {
