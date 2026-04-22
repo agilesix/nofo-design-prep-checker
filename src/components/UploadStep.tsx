@@ -173,6 +173,17 @@ export default function UploadStep({
           aria-label={content.accessibility.fileInput.label}
         />
       </div>
+
+      <div className="margin-top-4">
+        <p className="font-body-sm text-base-dark margin-bottom-1">
+          <strong>{content.upload.preUploadChecklist.heading}</strong>
+        </p>
+        <ul className="usa-list font-body-sm text-base-dark margin-top-0">
+          {content.upload.preUploadChecklist.items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
