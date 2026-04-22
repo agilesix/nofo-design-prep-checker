@@ -214,14 +214,17 @@ export default function App(): React.ReactElement {
     const isIOS = (isLegacyIOSDevice || isIPadOSDesktopMode) && !(window as unknown as Record<string, unknown>).MSStream;
 
     if (isIOS) {
-      // Safari 13.4+ honours the download attribute on data URIs (not blob URLs),
-      // which preserves the filename. Older Safari and embedded WKWebViews (which
-      // omit the Version/ token) do not, so fall back to window.location.replace()
+      // iOS 13.4+ honours the download attribute on data URIs (not blob URLs),
+      // which preserves the filename. On iOS, the Safari Version/x.y token does
+      // not necessarily match the iOS version (for example, iOS 13.4 commonly
+      // reports Version/13.1), so gate this behaviour on the iOS OS version
+      // segment instead. Older Safari and embedded WKWebViews may omit the OS
+      // version token, so fall back conservatively to window.location.replace()
       // there to avoid pushing the large data URI onto the history stack.
-      const versionMatch = navigator.userAgent.match(/Version\/(\d+)\.(\d+)/);
-      const safariMajor = versionMatch ? parseInt(versionMatch[1]!, 10) : 0;
-      const safariMinor = versionMatch ? parseInt(versionMatch[2]!, 10) : 0;
-      const supportsDataUriDownload = safariMajor > 13 || (safariMajor === 13 && safariMinor >= 4);
+      const iosVersionMatch = navigator.userAgent.match(/OS (\d+)[._](\d+)/);
+      const iosMajor = iosVersionMatch ? parseInt(iosVersionMatch[1]!, 10) : 0;
+      const iosMinor = iosVersionMatch ? parseInt(iosVersionMatch[2]!, 10) : 0;
+      const supportsDataUriDownload = iosMajor > 13 || (iosMajor === 13 && iosMinor >= 4);
 
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
