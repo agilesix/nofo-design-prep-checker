@@ -160,10 +160,10 @@ describe('IMG-001: CDC/DGHT preamble exemption', () => {
     expect(issues.map(i => i.id)).toContain('IMG-001-2');
   });
 
-  it('does NOT exempt a preamble image for plain cdc guide (no preamble removal)', () => {
+  it('does not flag a preamble image for plain cdc guide', () => {
     const doc = makeDoc(PREAMBLE_AND_BODY_XML);
     const issues = IMG_001.check(doc, OPTIONS_CDC) as Issue[];
-    expect(issues.map(i => i.id)).toContain('IMG-001-1');
+    expect(issues.map(i => i.id)).not.toContain('IMG-001-1');
   });
 
   it('does NOT exempt a preamble image for a non-CDC guide', () => {
