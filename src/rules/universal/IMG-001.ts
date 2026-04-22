@@ -36,7 +36,7 @@ function isInCdcDghtPreamble(xmlDoc: Document, docPr: Element): boolean {
       .join('')
       .toLowerCase()
       .trim();
-    return text.includes(DGHT_STEP1_ANCHOR);
+    return text === DGHT_STEP1_ANCHOR;
   });
 
   if (step1Index === -1) return false;
