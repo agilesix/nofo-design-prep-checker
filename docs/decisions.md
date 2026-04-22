@@ -4,6 +4,20 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
+## 2026-04-21 — iOS Word compatibility: DEFLATE for XML parts, STORE for ZIP infrastructure files
+
+**Decision:** `buildDocx`'s final `zip.generateAsync()` call uses `compression: 'DEFLATE', compressionOptions: { level: 6 }` so modified XML content parts are compressed. Immediately before `generateAsync`, an unconditional loop re-adds `[Content_Types].xml` and every `*.rels` file with `{ compression: 'STORE' }`, regardless of whether any fix path previously rewrote them.
+
+**Reason:** Microsoft Word for iOS is stricter than desktop Word when validating the downloaded `.docx` ZIP structure. Users reported that files downloaded from Safari for iOS could not be opened in Word for iOS, producing two sequential error dialogs: "Word found unreadable content" followed by "This file was created in a pre-release version of Word 2007." Desktop Word opened the same files with just a recoverable warning.
+
+The OOXML packaging convention (ECMA-376, Part 2 §13) expects `[Content_Types].xml` and relationship (`.rels`) files to be stored uncompressed (STORE). While desktop Word tolerates DEFLATE-compressed infrastructure files, Word for iOS rejects the document outright. The global DEFLATE option would re-compress any infrastructure file loaded from the original archive but never touched by a fix path, so the unconditional enforcement loop is required to cover all documents regardless of which fixes run.
+
+**Alternative considered:** Setting `{ compression: 'STORE' }` only on the explicit `zip.file()` calls that rewrite those files (accept-changes cleanup, email fix). This was insufficient: documents that don't trigger those paths had their infrastructure files re-compressed by the global DEFLATE option.
+
+**Outcome:** Output docx files open without errors in Microsoft Word for iOS. Modified XML content parts are DEFLATE-compressed (level 6); `[Content_Types].xml` and all `*.rels` files are unconditionally STORE.
+
+---
+
 ## 2026-04-20 — Accepted text input values lifted to App state to survive back-navigation
 
 **Decision:** Accepted text input values (metadata subject, metadata keywords, revised heading text, etc.) are stored in App-level `acceptedFixes` state rather than in local `ReviewStep` state. `App.tsx` passes `acceptedFixes` down to `ReviewStep` as `initialAcceptedFixes`, and `ReviewStep` initializes its local copy from that prop on mount. `IssueCard` receives the previously-accepted value via `acceptedValue` prop and uses it (over the rule's original prefill) when initializing `inputValue` state.

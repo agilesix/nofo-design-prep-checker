@@ -3895,3 +3895,155 @@ describe('buildDocx — TABLE-004: important public information heading fix', ()
     expect(style).toBe('Heading2');
   });
 });
+
+// ─── ZIP compression (iOS compatibility) ─────────────────────────────────────
+
+/**
+ * Walk the ZIP central directory and return a map of filename → compression
+ * method code (0 = STORE, 8 = DEFLATE).  We read the central directory rather
+ * than local file headers so we get the correct sizes even when JSZip uses
+ * data descriptors (flag bit 3 set) for on-the-fly DEFLATE streams.
+ */
+function parseZipCompressions(buffer: ArrayBuffer): Map<string, number> {
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  const result = new Map<string, number>();
+
+  // Locate EOCD: scan backwards for signature 0x06054b50
+  let eocdOffset = -1;
+  for (let i = bytes.length - 22; i >= 0; i--) {
+    if (
+      bytes[i]     === 0x50 && bytes[i + 1] === 0x4b &&
+      bytes[i + 2] === 0x05 && bytes[i + 3] === 0x06
+    ) {
+      eocdOffset = i;
+      break;
+    }
+  }
+  if (eocdOffset === -1) return result;
+
+  const cdTotalEntries = view.getUint16(eocdOffset + 10, true);
+  const cdOffset       = view.getUint32(eocdOffset + 16, true);
+
+  let i = cdOffset;
+  for (let e = 0; e < cdTotalEntries; e++) {
+    if (i + 46 > bytes.length) break;
+    // Central directory file header signature 0x02014b50
+    if (!(bytes[i] === 0x50 && bytes[i+1] === 0x4b && bytes[i+2] === 0x01 && bytes[i+3] === 0x02)) break;
+
+    const compressionMethod = view.getUint16(i + 10, true);
+    const fileNameLength    = view.getUint16(i + 28, true);
+    const extraFieldLength  = view.getUint16(i + 30, true);
+    const fileCommentLength = view.getUint16(i + 32, true);
+
+    const fileName = new TextDecoder('utf-8').decode(bytes.slice(i + 46, i + 46 + fileNameLength));
+    result.set(fileName, compressionMethod);
+
+    i += 46 + fileNameLength + extraFieldLength + fileCommentLength;
+  }
+  return result;
+}
+
+describe('buildDocx — ZIP compression settings (iOS compatibility)', () => {
+  it('stores [Content_Types].xml and word/_rels/document.xml.rels with STORE, document.xml with DEFLATE', async () => {
+    const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const zip = new JSZip();
+
+    // document.xml with a content control so applyRemoveContentControls rewrites it.
+    // Repeated padding ensures DEFLATE can actually compress the content.
+    const padding = `<w:p><w:r><w:t>padding paragraph</w:t></w:r></w:p>`.repeat(40);
+    zip.file('word/document.xml', [
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+      `<w:document xmlns:w="${W}"><w:body>`,
+      `<w:sdt><w:sdtContent><w:p><w:r><w:t>sdt content</w:t></w:r></w:p></w:sdtContent></w:sdt>`,
+      padding,
+      `<w:sectPr/></w:body></w:document>`,
+    ].join(''));
+
+    // [Content_Types].xml with a /word/comments.xml override so
+    // applyAcceptTrackedChangesAndRemoveComments removes it and rewrites the file.
+    zip.file('[Content_Types].xml', [
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+      `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">`,
+      `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>`,
+      `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>`,
+      `<Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/>`,
+      `</Types>`,
+    ].join(''));
+
+    // word/_rels/document.xml.rels — applyEmailMailtoFixes always rewrites this
+    // when given an email address, even when the rels file has no prior mailto entries.
+    zip.file('word/_rels/document.xml.rels', [
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`,
+    ].join(''));
+
+    // word/comments.xml must exist so the accept-changes cleanup can remove it
+    zip.file('word/comments.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:comments xmlns:w="${W}"/>`);
+
+    const autoAppliedChanges: AutoAppliedChange[] = [
+      // Triggers applyEmailMailtoFixes → always rewrites word/_rels/document.xml.rels
+      { ruleId: 'LINK-008', description: 'email fix', targetField: 'email.mailto', value: 'contact@example.com' },
+      // Triggers applyAcceptTrackedChangesAndRemoveComments → rewrites [Content_Types].xml
+      { ruleId: 'CLEAN-008', description: 'accept changes', targetField: 'doc.acceptchanges' },
+    ];
+
+    const blob = await buildDocx(zip, [], autoAppliedChanges);
+    const buffer = await blob.arrayBuffer();
+    const compressions = parseZipCompressions(buffer);
+
+    // Infrastructure files must use STORE (method 0) for Word for iOS compatibility
+    expect(compressions.get('[Content_Types].xml'),         '[Content_Types].xml must be STORE').toBe(0);
+    expect(compressions.get('word/_rels/document.xml.rels'), 'rels must be STORE').toBe(0);
+
+    // Content XML parts must use DEFLATE (method 8)
+    expect(compressions.get('word/document.xml'), 'document.xml must be DEFLATE').toBe(8);
+  });
+
+  it('keeps [Content_Types].xml and .rels as STORE even when no fix path rewrites them', async () => {
+    // This test covers the regression identified in review: the global DEFLATE
+    // in generateAsync would re-compress infrastructure files that were loaded
+    // from the original archive but never touched by any conditional fix path.
+    // The unconditional enforcement loop before generateAsync prevents that.
+    const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const zip = new JSZip();
+
+    // Minimal document — no content controls, so applyRemoveContentControls is a no-op.
+    zip.file('word/document.xml', [
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+      `<w:document xmlns:w="${W}"><w:body>`,
+      `${'<w:p><w:r><w:t>plain paragraph</w:t></w:r></w:p>'.repeat(40)}`,
+      `<w:sectPr/></w:body></w:document>`,
+    ].join(''));
+
+    // Infrastructure files — no auto-applied change will touch them.
+    zip.file('[Content_Types].xml', [
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+      `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">`,
+      `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>`,
+      `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>`,
+      `</Types>`,
+    ].join(''));
+    zip.file('_rels/.rels', [
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`,
+      `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>`,
+      `</Relationships>`,
+    ].join(''));
+    zip.file('word/_rels/document.xml.rels', [
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`,
+    ].join(''));
+
+    // No accepted fixes, no auto-applied changes — none of the conditional
+    // code paths that previously wrote these files with { compression: 'STORE' }
+    // will run.
+    const blob = await buildDocx(zip, [], []);
+    const buffer = await blob.arrayBuffer();
+    const compressions = parseZipCompressions(buffer);
+
+    expect(compressions.get('[Content_Types].xml'),          '[Content_Types].xml must be STORE').toBe(0);
+    expect(compressions.get('_rels/.rels'),                   '_rels/.rels must be STORE').toBe(0);
+    expect(compressions.get('word/_rels/document.xml.rels'),  'word/_rels/document.xml.rels must be STORE').toBe(0);
+  });
+});
