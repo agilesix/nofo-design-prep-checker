@@ -204,9 +204,10 @@ export default function App(): React.ReactElement {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    // Delay revocation so iOS (Safari/WKWebView) has time to fetch the blob
-    // before the URL is invalidated — immediate revocation produces an empty file.
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    // iOS (Safari/WKWebView) fetches blob URLs asynchronously after click;
+    // immediate revocation produces an empty file. Other browsers are fine immediately.
+    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
+    setTimeout(() => URL.revokeObjectURL(url), isIOS ? 30000 : 0);
   }, [parsedDoc, acceptedFixes, reviewState, uploadedFile]);
 
   const handleBack = useCallback(() => {
