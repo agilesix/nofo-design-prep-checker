@@ -61,6 +61,13 @@ export const content = {
       mammoth: 'Some document elements may not have been parsed correctly.',
     },
     buttonHelperText: 'Checking usually takes a few seconds. Only .docx files are supported. If you have a .doc file, save it as .docx in Word first (File → Save As → Word Document).',
+    preUploadChecklist: {
+      heading: 'Before you upload',
+      items: [
+        'Resolve all tracked changes and comments in your Word document',
+        'Check that headings are styled as headings in the Style Pane — not bolded normal text',
+      ],
+    },
   },
 
   parsing: {
