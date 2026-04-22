@@ -199,6 +199,9 @@ export default function App(): React.ReactElement {
     const isIPadOSDesktopMode = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
     const isIOS = (isLegacyIOSDevice || isIPadOSDesktopMode) && !(window as unknown as Record<string, unknown>).MSStream;
     const iosWindow = isIOS ? window.open('about:blank', '_blank') : null;
+    if (iosWindow) {
+      iosWindow.opener = null;
+    }
 
     let blob: Blob;
     try {
