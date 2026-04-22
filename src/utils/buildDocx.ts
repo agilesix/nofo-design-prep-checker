@@ -13,10 +13,23 @@ export async function buildDocx(
   acceptedFixes: AcceptedFix[],
   autoAppliedChanges: AutoAppliedChange[] = []
 ): Promise<Blob> {
-  // Deep-clone the archive: re-serialize to arraybuffer then reload into a fresh
-  // JSZip instance so the original parsedDoc.zipArchive is never mutated.
-  const clonedBuffer = await originalArchive.generateAsync({ type: 'arraybuffer' });
-  const zip = await JSZip.loadAsync(clonedBuffer);
+  // Deep-clone the archive by explicitly copying each file with the appropriate
+  // data type.  The prior approach (generateAsync → loadAsync round-trip) silently
+  // corrupts or drops binary entries — images, fonts, theme files, and embedded
+  // objects — in certain browser environments, producing an output ZIP that is
+  // missing those files.  Reading XML parts as strings and binary parts as
+  // Uint8Arrays and re-adding them individually avoids that path entirely.
+  const zip = new JSZip();
+  for (const filename of Object.keys(originalArchive.files)) {
+    const entry = originalArchive.files[filename];
+    if (!entry || entry.dir) continue;
+    const isXml = filename.endsWith('.xml') || filename.endsWith('.rels');
+    if (isXml) {
+      zip.file(filename, await entry.async('string'));
+    } else {
+      zip.file(filename, await entry.async('uint8array'));
+    }
+  }
 
   // Separate fixes by type for safe ordering
   const metaFixes = acceptedFixes.filter(f => f.targetField?.startsWith('metadata.'));
