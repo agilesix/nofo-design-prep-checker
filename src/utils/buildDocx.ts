@@ -850,8 +850,6 @@ async function applyRemoveDghtInstructionBoxes(zip: JSZip): Promise<void> {
   if (!docFile) return;
 
   const xmlStr = await docFile.async('string');
-  const lower = xmlStr.toLowerCase();
-  if (!lower.includes('bcd6f4') || !lower.includes('specific instructions')) return;
 
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
