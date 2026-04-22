@@ -425,15 +425,9 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
             el.removeChild(runs[i]!);
           }
 
-          // Re-assert w:anchor after modifying the run text so XMLSerializer
-          // always emits the attribute with its qualified name.  setAttribute
-          // (not setAttributeNS) is used deliberately: setAttributeNS causes
-          // XMLSerializer to inject a redundant xmlns:w declaration on this
-          // child element; setAttribute stores the qualified name directly and
-          // produces clean output without extra namespace re-declarations.
-          el.removeAttributeNS(W, 'anchor');
-          el.removeAttribute('anchor');
-          el.setAttribute('w:anchor', anchor);
+          // w:anchor is not changed by the text update — leave the attribute
+          // untouched so XMLSerializer emits the original namespace-aware
+          // attribute without any extra xmlns declarations.
         }
       }
     }
@@ -448,8 +442,8 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
         for (const el of hyperlinks) {
           const elAnchor = el.getAttribute('w:anchor') ?? el.getAttributeNS(W, 'anchor');
           if (elAnchor === oldAnchor) {
-            el.removeAttributeNS(W, 'anchor');
-            el.removeAttribute('anchor');
+            // Preserve the existing OOXML prefix binding without triggering serializer
+            // namespace corruption such as xmlns:w="" on output.
             el.setAttribute('w:anchor', normalizedNewAnchor);
           }
         }
@@ -972,14 +966,8 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
       if (anchor && matched) {
         const newVal = anchorRemap.get(anchor)!;
         dbg(`[CLEAN-008]     → Updating anchor "${anchor}" to "${newVal}"`);
-        // Remove all stale variants so the output carries exactly one anchor
-        // attribute.  setAttribute (not setAttributeNS) is used so XMLSerializer
-        // does not inject a redundant xmlns:w declaration on this child element,
-        // which would shadow the root namespace declaration and break downstream
-        // OOXML consumers (including NOFO Builder).
-        link.removeAttributeNS(W, 'anchor');
         link.removeAttribute('anchor');
-        link.setAttribute('w:anchor', newVal);
+        link.setAttributeNS(W, 'w:anchor', newVal);
       }
     }
 
@@ -998,9 +986,8 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
       if (name && matched) {
         const newVal = anchorRemap.get(name)!;
         dbg(`[CLEAN-008]     → Updating bookmark name "${name}" to "${newVal}"`);
-        bm.removeAttributeNS(W, 'name');
         bm.removeAttribute('name');
-        bm.setAttribute('w:name', newVal);
+        bm.setAttributeNS(W, 'w:name', newVal);
       }
     }
   }
@@ -1189,6 +1176,7 @@ async function applyHeadingLevelCorrections(zip: JSZip, fixes: AcceptedFix[]): P
   const xmlStr = await docFile.async('string');
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
   const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
   let headingCount = 0;
@@ -1211,9 +1199,9 @@ async function applyHeadingLevelCorrections(zip: JSZip, fixes: AcceptedFix[]): P
     const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
     if (!pStyle) continue;
 
-    const originalVal = pStyle.getAttribute('w:val') ?? '';
+    const originalVal = pStyle.getAttribute('w:val') ?? pStyle.getAttributeNS(W, 'val') ?? '';
     const newVal = originalVal.replace(/\d+$/, String(fix.to));
-    pStyle.setAttribute('w:val', newVal);
+    pStyle.setAttributeNS(W, 'w:val', newVal);
     changed = true;
   }
 
@@ -2503,6 +2491,7 @@ async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
   const xmlStr = await docFile.async('string');
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
   const tables = checklistFindTables(xmlDoc);
   let changed = false;
@@ -2536,7 +2525,7 @@ async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
         if (pPr) {
           const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
           if (pStyle) {
-            pStyle.setAttribute('w:val', 'Normal');
+            pStyle.setAttributeNS(W, 'w:val', 'Normal');
             changed = true;
           }
         }
@@ -2843,10 +2832,10 @@ function t4ApplyPStyle(xmlDoc: Document, W: string, wP: Element, styleVal: strin
   }
   const existing = directChildEl(pPr, 'w:pStyle');
   if (existing) {
-    existing.setAttribute('w:val', styleVal);
+    existing.setAttributeNS(W, 'w:val', styleVal);
   } else {
     const pStyle = xmlDoc.createElementNS(W, 'w:pStyle');
-    pStyle.setAttribute('w:val', styleVal);
+    pStyle.setAttributeNS(W, 'w:val', styleVal);
     pPr.insertBefore(pStyle, pPr.firstChild);
   }
 }
