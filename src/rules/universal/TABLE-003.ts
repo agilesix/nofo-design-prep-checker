@@ -4,6 +4,10 @@ import { buildLocationLookup } from '../../utils/locationContext';
 /**
  * TABLE-003: Merged cells in tables
  * Flags tables that use colspan or rowspan, which can create accessibility issues.
+ *
+ * Exempt tables:
+ *  - CDC/DGHT and CDC/DGHP "Before you begin" scaffolding tables — removed by
+ *    CLEAN-007 at build time but TABLE-003 runs against the original doc.html.
  */
 const TABLE_003: Rule = {
   id: 'TABLE-003',
@@ -16,6 +20,15 @@ const TABLE_003: Rule = {
     const getContext = buildLocationLookup(htmlDoc);
 
     tables.forEach((table, index) => {
+      // CDC/DGHT and CDC/DGHP scaffolding table — exempt for the same reason as
+      // TABLE-002: CLEAN-007 removes it from the output DOCX but this rule runs
+      // against the unmodified doc.html.
+      const firstCellText = (table.querySelector('td, th')?.textContent ?? '')
+        .replace(/\u00a0/g, ' ')
+        .trim()
+        .toLowerCase();
+      if (/^cdc\/dg(?:ht|hp)/.test(firstCellText)) return;
+
       const mergedCells = Array.from(table.querySelectorAll('[colspan],[rowspan]')).filter(cell => {
         const colspan = parseInt(cell.getAttribute('colspan') ?? '1', 10);
         const rowspan = parseInt(cell.getAttribute('rowspan') ?? '1', 10);
