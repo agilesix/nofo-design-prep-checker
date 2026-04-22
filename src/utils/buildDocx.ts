@@ -442,7 +442,9 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
         for (const el of hyperlinks) {
           const elAnchor = el.getAttribute('w:anchor') ?? el.getAttributeNS(W, 'anchor');
           if (elAnchor === oldAnchor) {
-            el.removeAttribute('anchor');
+            el.removeAttributeNS(W, 'anchor');
+            el.removeAttributeNS(null, 'anchor');
+            el.removeAttribute('w:anchor');
             el.setAttributeNS(W, 'w:anchor', normalizedNewAnchor);
           }
         }
