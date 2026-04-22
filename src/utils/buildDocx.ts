@@ -55,6 +55,9 @@ export async function buildDocx(
   const hasRemoveDghtScaffolding = autoAppliedChanges.some(
     c => c.targetField === 'struct.dght.removescaffolding'
   );
+  const hasRemoveDghtInstructionBoxes = autoAppliedChanges.some(
+    c => c.targetField === 'struct.dght.removeinstructionboxes'
+  );
   const hasDateCorrection = autoAppliedChanges.some(
     c => c.targetField === 'format.date.correct'
   );
@@ -150,6 +153,14 @@ export async function buildDocx(
   // discarded rather than relocated into the body of the document.
   if (hasRemoveDghtScaffolding) {
     await applyRemoveDghtScaffolding(zip);
+  }
+
+  // Remove DGHT/DGHP instruction box tables (single-cell, BCD6F4 shading,
+  // text starting with "DGHT-SPECIFIC INSTRUCTIONS" / "DGHP-SPECIFIC
+  // INSTRUCTIONS") — runs after scaffolding removal so boxes in the preamble
+  // are not double-processed.
+  if (hasRemoveDghtInstructionBoxes) {
+    await applyRemoveDghtInstructionBoxes(zip);
   }
 
   // Apply tagline relocation
@@ -821,6 +832,64 @@ async function applyRemoveDghtScaffolding(zip: JSZip): Promise<void> {
 
   const serializer = new XMLSerializer();
   zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+}
+
+// ─── CLEAN-007 (instruction boxes): Remove DGHT/DGHP instruction box tables ──
+
+/**
+ * Remove all w:tbl elements from word/document.xml that match the DGHT/DGHP
+ * instruction box pattern:
+ *   1. Exactly one w:tc element in the table
+ *   2. The cell has a w:shd element with w:fill="BCD6F4" (case-insensitive)
+ *   3. The concatenated cell text starts with "DGHT-SPECIFIC INSTRUCTIONS" or
+ *      "DGHP-SPECIFIC INSTRUCTIONS" (case-insensitive, after NBSP normalisation
+ *      and trimming)
+ */
+async function applyRemoveDghtInstructionBoxes(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const lower = xmlStr.toLowerCase();
+  if (!lower.includes('bcd6f4') || !lower.includes('specific instructions')) return;
+
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  let changed = false;
+  for (const tbl of Array.from(xmlDoc.getElementsByTagName('w:tbl'))) {
+    if (isInstructionBoxTbl(tbl)) {
+      tbl.parentNode?.removeChild(tbl);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    const serializer = new XMLSerializer();
+    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  }
+}
+
+function isInstructionBoxTbl(tbl: Element): boolean {
+  const cells = Array.from(tbl.getElementsByTagName('w:tc'));
+  if (cells.length !== 1) return false;
+
+  const cell = cells[0]!;
+
+  const shd = cell.getElementsByTagName('w:shd')[0];
+  if (!shd) return false;
+  if ((shd.getAttribute('w:fill') ?? '').toLowerCase() !== 'bcd6f4') return false;
+
+  const cellText = Array.from(cell.getElementsByTagName('w:t'))
+    .map(t => t.textContent ?? '')
+    .join('')
+    .replace(/\u00a0/g, ' ')
+    .trim()
+    .toLowerCase();
+  return (
+    cellText.startsWith('dght-specific instructions') ||
+    cellText.startsWith('dghp-specific instructions')
+  );
 }
 
 // ─── CLEAN-008: Remove leading spaces from heading text ──────────────────────

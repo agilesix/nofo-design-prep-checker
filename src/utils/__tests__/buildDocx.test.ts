@@ -2869,6 +2869,137 @@ describe('buildDocx — CLEAN-007: CDC preamble removal', () => {
   });
 });
 
+// ─── applyRemoveDghtInstructionBoxes (CLEAN-007) ─────────────────────────────
+
+const W_NS_IB = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function makeInstructionBoxDocXmlBD(opts: {
+  fill?: string;
+  prefix?: string;
+  extraCells?: number;
+  extraParaAfter?: string;
+}): string {
+  const { fill = 'BCD6F4', prefix = 'DGHT-SPECIFIC INSTRUCTIONS', extraCells = 0, extraParaAfter } = opts;
+  const extra = Array.from({ length: extraCells })
+    .map(() => `<w:tc><w:p><w:r><w:t>extra</w:t></w:r></w:p></w:tc>`)
+    .join('');
+  const afterPara = extraParaAfter
+    ? `<w:p><w:r><w:t>${extraParaAfter}</w:t></w:r></w:p>`
+    : '';
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_IB}"><w:body>` +
+    `<w:tbl>` +
+    `<w:tr>` +
+    `<w:tc>` +
+    `<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="${fill}"/></w:tcPr>` +
+    `<w:p><w:r><w:t>${prefix} Do not include this in the output.</w:t></w:r></w:p>` +
+    `</w:tc>` +
+    extra +
+    `</w:tr>` +
+    `</w:tbl>` +
+    afterPara +
+    `<w:sectPr/></w:body></w:document>`
+  );
+}
+
+const INSTRUCTION_BOX_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-007',
+  description: 'Removed 1 DGHT/DGHP instruction box.',
+  targetField: 'struct.dght.removeinstructionboxes',
+  value: '1',
+};
+
+describe('buildDocx — CLEAN-007: DGHT/DGHP instruction box removal', () => {
+  it('removes a single-cell BCD6F4-shaded table starting with "DGHT-SPECIFIC INSTRUCTIONS"', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeInstructionBoxDocXmlBD({}));
+
+    const outXml = await getOutputDocXml(zip, [], [INSTRUCTION_BOX_CHANGE]);
+
+    expect(outXml).not.toContain('DGHT-SPECIFIC INSTRUCTIONS');
+    expect(outXml).not.toContain('w:tbl');
+  });
+
+  it('removes a DGHP variant instruction box', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeInstructionBoxDocXmlBD({ prefix: 'DGHP-SPECIFIC INSTRUCTIONS' }));
+
+    const outXml = await getOutputDocXml(zip, [], [INSTRUCTION_BOX_CHANGE]);
+
+    expect(outXml).not.toContain('DGHP-SPECIFIC INSTRUCTIONS');
+    expect(outXml).not.toContain('w:tbl');
+  });
+
+  it('preserves surrounding content when removing the instruction box', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeInstructionBoxDocXmlBD({ extraParaAfter: 'Keep this paragraph.' })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [INSTRUCTION_BOX_CHANGE]);
+
+    expect(outXml).not.toContain('DGHT-SPECIFIC INSTRUCTIONS');
+    expect(outXml).toContain('Keep this paragraph.');
+  });
+
+  it('does not remove a table without BCD6F4 shading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeInstructionBoxDocXmlBD({ fill: 'FFFFFF' }));
+
+    const outXml = await getOutputDocXml(zip, [], [INSTRUCTION_BOX_CHANGE]);
+
+    expect(outXml).toContain('DGHT-SPECIFIC INSTRUCTIONS');
+    expect(outXml).toContain('w:tbl');
+  });
+
+  it('does not remove a multi-cell table even with matching shading and prefix', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeInstructionBoxDocXmlBD({ extraCells: 1 }));
+
+    const outXml = await getOutputDocXml(zip, [], [INSTRUCTION_BOX_CHANGE]);
+
+    expect(outXml).toContain('DGHT-SPECIFIC INSTRUCTIONS');
+    expect(outXml).toContain('w:tbl');
+  });
+
+  it('removes all matching instruction boxes when multiple are present', async () => {
+    const tblXml =
+      `<w:tbl><w:tr><w:tc>` +
+      `<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="BCD6F4"/></w:tcPr>` +
+      `<w:p><w:r><w:t>DGHT-SPECIFIC INSTRUCTIONS Box content.</w:t></w:r></w:p>` +
+      `</w:tc></w:tr></w:tbl>`;
+    const docXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_IB}"><w:body>` +
+      tblXml + tblXml +
+      `<w:p><w:r><w:t>Preserve this.</w:t></w:r></w:p>` +
+      `<w:sectPr/></w:body></w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', docXml);
+
+    const outXml = await getOutputDocXml(zip, [], [{
+      ruleId: 'CLEAN-007',
+      description: 'Removed 2 DGHT/DGHP instruction boxes.',
+      targetField: 'struct.dght.removeinstructionboxes',
+      value: '2',
+    }]);
+
+    expect(outXml).not.toContain('DGHT-SPECIFIC INSTRUCTIONS');
+    expect(outXml).toContain('Preserve this.');
+  });
+
+  it('does not modify the document when targetField is absent from autoAppliedChanges', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeInstructionBoxDocXmlBD({}));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+
+    expect(outXml).toContain('DGHT-SPECIFIC INSTRUCTIONS');
+  });
+});
+
 // ─── applyTrailingPeriodBoldFix (CLEAN-016) ──────────────────────────────────
 
 const W_NS_PERIOD = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';

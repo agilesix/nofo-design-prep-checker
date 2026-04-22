@@ -2,7 +2,7 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
 import { DGHT_STEP1_ANCHOR } from './CLEAN-007-constants';
 
 /**
- * CLEAN-007: Remove CDC preamble content (auto-apply)
+ * CLEAN-007: Remove CDC preamble content and DGHT/DGHP instruction boxes (auto-apply)
  *
  * CDC NOFO templates often begin with editorial instructions, content-guide
  * reference tables, or other scaffolding that is not part of the NOFO itself.
@@ -11,6 +11,11 @@ import { DGHT_STEP1_ANCHOR } from './CLEAN-007-constants';
  * Opportunity" (any heading level, case-insensitive) and, when found, silently
  * removes everything from the start of the document up to — but not including
  * — that heading.
+ *
+ * Additionally, DGHT and DGHP templates embed "DGHT-SPECIFIC INSTRUCTIONS" /
+ * "DGHP-SPECIFIC INSTRUCTIONS" boxes throughout the document body. These are
+ * single-cell tables with a light-blue cell shading (fill BCD6F4). This rule
+ * also detects and removes them from the output DOCX.
  *
  * Safe to apply across all CDC content guides because CDC NOFO metadata
  * (Author, Subject, Keywords, Tagline) lives inside the document body under
@@ -24,6 +29,9 @@ const CLEAN_007: Rule = {
   autoApply: true,
   contentGuideIds: ['cdc', 'cdc-research', 'cdc-dght-ssj', 'cdc-dght-competitive', 'cdc-dghp'],
   check(doc: ParsedDocument, _options: RuleRunnerOptions): AutoAppliedChange[] {
+    const results: AutoAppliedChange[] = [];
+
+    // ── Preamble detection (from doc.html) ───────────────────────────────────
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
 
@@ -35,29 +43,88 @@ const CLEAN_007: Rule = {
         (el.textContent ?? '').trim().toLowerCase() === DGHT_STEP1_ANCHOR
     );
 
-    // Safety: only remove if the Step 1 heading is present.
-    if (step1Idx === -1) return [];
+    // Only fire when the Step 1 heading exists and non-empty content precedes it.
+    if (step1Idx > 0) {
+      const hasPreamble = bodyChildren
+        .slice(0, step1Idx)
+        .some(el => (el.textContent ?? '').trim().length > 0);
+      if (hasPreamble) {
+        results.push({
+          ruleId: 'CLEAN-007',
+          description: 'CDC preamble removed from beginning of document.',
+          // Intentionally retain the legacy DGHT-specific key for backward
+          // compatibility with downstream consumers (for example buildDocx and
+          // existing filtering/analytics) that still recognize this targetField.
+          targetField: 'struct.dght.removescaffolding',
+        });
+      }
+    }
 
-    // No-op: Step 1 is already the first body element — nothing to remove.
-    if (step1Idx === 0) return [];
-
-    // Only fire when at least one non-empty element precedes Step 1.
-    const hasPreamble = bodyChildren
-      .slice(0, step1Idx)
-      .some(el => (el.textContent ?? '').trim().length > 0);
-    if (!hasPreamble) return [];
-
-    return [
-      {
+    // ── Instruction box detection (from doc.documentXml) ─────────────────────
+    // DGHT/DGHP instruction boxes are single-cell tables shaded BCD6F4 whose
+    // first cell text starts with "DGHT-SPECIFIC INSTRUCTIONS" or
+    // "DGHP-SPECIFIC INSTRUCTIONS". Detection requires OOXML because mammoth.js
+    // does not surface cell background shading in the rendered HTML.
+    const instructionBoxCount = countInstructionBoxes(doc.documentXml);
+    if (instructionBoxCount > 0) {
+      results.push({
         ruleId: 'CLEAN-007',
-        description: 'CDC preamble removed from beginning of document.',
-        // Intentionally retain the legacy DGHT-specific key for backward
-        // compatibility with downstream consumers (for example buildDocx and
-        // existing filtering/analytics) that still recognize this targetField.
-        targetField: 'struct.dght.removescaffolding',
-      },
-    ];
+        description: `Removed ${instructionBoxCount} DGHT/DGHP instruction box${instructionBoxCount === 1 ? '' : 'es'}.`,
+        targetField: 'struct.dght.removeinstructionboxes',
+        value: String(instructionBoxCount),
+      });
+    }
+
+    return results;
   },
 };
+
+/**
+ * Count DGHT/DGHP instruction box tables in the given OOXML string.
+ * A table qualifies when it has exactly one w:tc whose w:shd fill is BCD6F4
+ * and whose concatenated text starts with "DGHT-SPECIFIC INSTRUCTIONS" or
+ * "DGHP-SPECIFIC INSTRUCTIONS" (case-insensitive).
+ */
+function countInstructionBoxes(xml: string): number {
+  if (!xml) return 0;
+  const lower = xml.toLowerCase();
+  if (!lower.includes('bcd6f4')) return 0;
+  if (!lower.includes('specific instructions')) return 0;
+
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xml, 'application/xml');
+
+  let count = 0;
+  for (const tbl of Array.from(xmlDoc.getElementsByTagName('w:tbl'))) {
+    if (isInstructionBoxElement(tbl)) count++;
+  }
+  return count;
+}
+
+/** Returns true when a w:tbl element matches the instruction box criteria. */
+export function isInstructionBoxElement(tbl: Element): boolean {
+  const cells = Array.from(tbl.getElementsByTagName('w:tc'));
+  if (cells.length !== 1) return false;
+
+  const cell = cells[0]!;
+
+  // Cell shading must be BCD6F4
+  const shd = cell.getElementsByTagName('w:shd')[0];
+  if (!shd) return false;
+  const fill = (shd.getAttribute('w:fill') ?? '').toLowerCase();
+  if (fill !== 'bcd6f4') return false;
+
+  // First cell text must start with instruction box prefix
+  const cellText = Array.from(cell.getElementsByTagName('w:t'))
+    .map(t => t.textContent ?? '')
+    .join('')
+    .replace(/\u00a0/g, ' ')
+    .trim()
+    .toLowerCase();
+  return (
+    cellText.startsWith('dght-specific instructions') ||
+    cellText.startsWith('dghp-specific instructions')
+  );
+}
 
 export default CLEAN_007;
