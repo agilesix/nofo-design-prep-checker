@@ -193,9 +193,9 @@ describe('IMG-001: core alt text detection', () => {
     const doc = makeDoc(NO_STEP1_XML);
     const issues = IMG_001.check(doc, OPTIONS_NONE) as Issue[];
     expect(issues).toHaveLength(1);
-    expect(issues[0].id).toBe('IMG-001-1');
-    expect(issues[0].severity).toBe('error');
-    expect(issues[0].title).toBe('Image is missing alt text');
+    expect(issues[0]!.id).toBe('IMG-001-1');
+    expect(issues[0]!.severity).toBe('error');
+    expect(issues[0]!.title).toBe('Image is missing alt text');
   });
 
   it('flags an image with an empty descr attribute as a suggestion', () => {
@@ -210,8 +210,8 @@ describe('IMG-001: core alt text detection', () => {
 </w:document>`;
     const issues = IMG_001.check(makeDoc(xml), OPTIONS_NONE) as Issue[];
     expect(issues).toHaveLength(1);
-    expect(issues[0].id).toBe('IMG-001-empty-3');
-    expect(issues[0].severity).toBe('suggestion');
+    expect(issues[0]!.id).toBe('IMG-001-empty-3');
+    expect(issues[0]!.severity).toBe('suggestion');
   });
 
   it('does not flag an image that has descriptive alt text', () => {
@@ -227,6 +227,6 @@ describe('IMG-001: core alt text detection', () => {
   it('sets targetField to image.docPr.<id> on the inputRequired spec', () => {
     const doc = makeDoc(NO_STEP1_XML);
     const issues = IMG_001.check(doc, OPTIONS_NONE) as Issue[];
-    expect(issues[0].inputRequired?.targetField).toBe('image.docPr.1');
+    expect(issues[0]!.inputRequired?.targetField).toBe('image.docPr.1');
   });
 });
