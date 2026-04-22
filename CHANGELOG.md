@@ -5,7 +5,7 @@
 
 ### Bug Fixes
 
-* address Copilot review comments on PR [#220](https://github.com/agilesix/nofo-design-prep-checker/issues/220) ([5a57a7e](https://github.com/agilesix/nofo-design-prep-checker/commit/5a57a7e6815548858b9baf34dc4663c28a547167))
+* address Copilot review comments on PR [#220](https://github.com/agilesix/nofo-design-prep-checker/pull/220) ([5a57a7e](https://github.com/agilesix/nofo-design-prep-checker/commit/5a57a7e6815548858b9baf34dc4663c28a547167))
 * append anchor to DOM and delay URL revocation for iOS download ([9de8224](https://github.com/agilesix/nofo-design-prep-checker/commit/9de822498f802352d4617d5ef8108214b32bdbed))
 * copy binary ZIP entries as uint8array to prevent file loss ([c47fc71](https://github.com/agilesix/nofo-design-prep-checker/commit/c47fc718f436939ac6df63862a2a6c05503ea469))
 * gate 30s blob URL revocation delay to iOS only ([324a093](https://github.com/agilesix/nofo-design-prep-checker/commit/324a0933c0176b153b8655c32a94e01e53b7d443))
