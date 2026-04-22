@@ -387,8 +387,11 @@ function isExemptByCheapSignals(table: Element, sectionHeading: string): boolean
   if (matchesExemptHeadingText(sectionHeading.toLowerCase())) return true;
 
   // First-row / first-cell content
-  const firstCellText = (table.querySelector('td, th')?.textContent ?? '').toLowerCase();
-  const firstRowText = (table.querySelector('tr')?.textContent ?? '').toLowerCase();
+  const firstCellText = (table.querySelector('td, th')?.textContent ?? '')
+    .replace(/\u00a0/g, ' ')
+    .trim()
+    .toLowerCase();
+  const firstRowText = (table.querySelector('tr')?.textContent ?? '').trim().toLowerCase();
 
   // CDC/DGHT and CDC/DGHP "Before you begin" scaffolding table.
   // CLEAN-007 removes this content from the output DOCX, but TABLE-002 runs

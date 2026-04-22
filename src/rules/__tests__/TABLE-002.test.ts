@@ -502,6 +502,18 @@ describe('TABLE-002 CDC scaffolding table exemption', () => {
     expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
   });
 
+  it('does not flag the scaffolding table when the first cell has leading whitespace or NBSP', () => {
+    // mammoth.js can emit leading whitespace or U+00A0 inside table cells;
+    // the exemption must survive trimming to avoid false positives.
+    const doc = makeDoc(
+      '<table><tbody>' +
+        '<tr><td>   CDC/DGHT NOFO Content Guide</td><td>v2.0</td></tr>' +
+        '<tr><td>Before you begin</td><td>Instructions here</td></tr>' +
+      '</tbody></table>'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
   it('still flags an unrelated table that happens to follow the scaffolding table', () => {
     const scaffolding =
       '<table><tbody>' +
