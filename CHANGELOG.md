@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.6.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.5.2...v1.6.0) (2026-04-22)
+
+
+### Features
+
+* **CLEAN-007:** remove DGHT/DGHP instruction box tables from output docx ([3c255d4](https://github.com/agilesix/nofo-design-prep-checker/commit/3c255d4045b36f8f93d4a28b6708144a31722fb5))
+* **upload:** add pre-upload checklist below file upload component ([b639870](https://github.com/agilesix/nofo-design-prep-checker/commit/b63987095a182d4d2923939c621818edef034f9b))
+* **upload:** add pre-upload checklist below file upload component ([966b25a](https://github.com/agilesix/nofo-design-prep-checker/commit/966b25a3f9e7e492ed897319dd83a8b2f4bf1d70))
+
+
+### Bug Fixes
+
+* **CLEAN-007:** use 'as unknown as' for AutoAppliedChange casts in tests ([ffad07f](https://github.com/agilesix/nofo-design-prep-checker/commit/ffad07fc6ae3ac74711b2b0bd515a57d1c7726f5))
+* **CLEAN-007:** use 'as unknown as' for AutoAppliedChange casts in tests ([aeb5c6d](https://github.com/agilesix/nofo-design-prep-checker/commit/aeb5c6d22901fb0c73bc5a6070dbbc81c38fd39c))
+* **HEAD-004:** remove text guard that blocked heading text corrections ([7d3ac1c](https://github.com/agilesix/nofo-design-prep-checker/commit/7d3ac1caf37ee45ade985bb0053804365c5561ae))
+* **LINK-009:** align buildDocx patch to alphanumeric boundary rule ([27e9cae](https://github.com/agilesix/nofo-design-prep-checker/commit/27e9cae271d0d6365a0fa6d95901a9e035e08856))
+* **LINK-009:** exclude punctuation from partial hyperlink detection ([0110e23](https://github.com/agilesix/nofo-design-prep-checker/commit/0110e23590c38a2094f4179dbcaf383e481249c7))
+* **LINK-009:** exclude punctuation from partial hyperlink detection ([00b2ce0](https://github.com/agilesix/nofo-design-prep-checker/commit/00b2ce0c32510c6617a848a557f114b2f00f0a7d))
+* **TABLE-002,TABLE-003:** exempt CDC scaffolding table from flagging ([9854b72](https://github.com/agilesix/nofo-design-prep-checker/commit/9854b7221ad4bfe836ae78967b717ef8c7893337))
+* **TABLE-002,TABLE-003:** exempt CDC scaffolding table from flagging ([0ad4a95](https://github.com/agilesix/nofo-design-prep-checker/commit/0ad4a959a42e72652c30aaa4466827c45c05acf7))
+* **TABLE-002,TABLE-003:** trim firstCellText before CDC exemption regex ([a5404fe](https://github.com/agilesix/nofo-design-prep-checker/commit/a5404fe798197760bf700b89c039070846a4daee))
+
 ## [1.5.2](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.5.1...v1.5.2) (2026-04-22)
 
 
