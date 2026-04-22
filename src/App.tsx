@@ -214,21 +214,8 @@ export default function App(): React.ReactElement {
     const isIOS = (isLegacyIOSDevice || isIPadOSDesktopMode) && !(window as unknown as Record<string, unknown>).MSStream;
 
     if (isIOS) {
-      // Try Web Share API first — gives users the native share sheet with "Open in Word"
-      const file = new File([blob], downloadName, {
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: downloadName });
-          return;
-        } catch (error) {
-          if (!(error instanceof DOMException) || (error.name !== 'AbortError' && error.name !== 'NotAllowedError')) {
-            throw error;
-          }
-        }
-      }
-      // Fall back to base64 data URI — iOS opens it via its file handler which offers Word
+      // iOS does not support anchor-click downloads; navigate to a base64 data URI
+      // so the system file handler can offer to open the file in Word.
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onerror = () => {
@@ -243,7 +230,9 @@ export default function App(): React.ReactElement {
         };
         reader.readAsDataURL(blob);
       });
-      window.location.href = dataUrl;
+      // replace() avoids pushing the large data URI onto the history stack,
+      // preventing memory bloat and broken Back navigation.
+      window.location.replace(dataUrl);
       return;
     }
 
