@@ -1352,7 +1352,7 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
 
     const currentIndex = headingCount++;
     const fix = fixesByIndex.get(currentIndex);
-    if (!fix) continue;
+    if (fix === undefined) continue;
 
     const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
     const allWTs = Array.from(wP.getElementsByTagNameNS(W_NS, 't'));
