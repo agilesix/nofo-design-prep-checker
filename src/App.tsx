@@ -14,7 +14,7 @@ import { RULES_REFERENCE_URL } from './constants';
 import { parseDocx } from './utils/parseDocx';
 import { detectContentGuide } from './utils/detectContentGuide';
 import { detectPreNofo } from './utils/detectPreNofo';
-import { buildDocx } from './utils/buildDocx';
+import { buildDocx, buildDocxPassthrough } from './utils/buildDocx';
 import { RuleRunner } from './utils/RuleRunner';
 import { allRules } from './rules';
 import { getContentGuideById, contentGuides } from './data/contentGuides';
@@ -190,19 +190,22 @@ export default function App(): React.ReactElement {
 
   const handleDownload = useCallback(async () => {
     if (!parsedDoc) return;
-    const blob = await buildDocx(
-      parsedDoc.zipArchive,
-      acceptedFixes,
-      reviewState?.autoAppliedChanges ?? []
-    );
+    const usePassthrough = new URLSearchParams(window.location.search).has('passthrough');
+    const blob = usePassthrough
+      ? await buildDocxPassthrough(parsedDoc.zipArchive)
+      : await buildDocx(parsedDoc.zipArchive, acceptedFixes, reviewState?.autoAppliedChanges ?? []);
     const originalName = uploadedFile?.name ?? 'nofo.docx';
-    const downloadName = originalName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
+    const suffix = usePassthrough ? '-PASSTHROUGH' : content.download.filename.suffix;
+    const downloadName = originalName.replace(/\.docx$/i, `${suffix}.docx`);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = downloadName;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
+    setTimeout(() => URL.revokeObjectURL(url), isIOS ? 30000 : 0);
   }, [parsedDoc, acceptedFixes, reviewState, uploadedFile]);
 
   const handleBack = useCallback(() => {

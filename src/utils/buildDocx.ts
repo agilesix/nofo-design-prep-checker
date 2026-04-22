@@ -13,6 +13,14 @@ export async function buildDocx(
   acceptedFixes: AcceptedFix[],
   autoAppliedChanges: AutoAppliedChange[] = []
 ): Promise<Blob> {
+  // ── DIAGNOSTIC LOGGING ────────────────────────────────────────────────────
+  const inputEntries = Object.keys(originalArchive.files).filter(
+    k => !originalArchive.files[k]!.dir
+  );
+  console.log('[buildDocx] INPUT file count:', inputEntries.length);
+  console.log('[buildDocx] INPUT files:', inputEntries);
+  // ── END DIAGNOSTIC ────────────────────────────────────────────────────────
+
   // Deep-clone the archive by explicitly copying each file with the appropriate
   // data type.  The prior approach (generateAsync → loadAsync round-trip) silently
   // corrupts or drops binary entries — images, fonts, theme files, and embedded
@@ -24,12 +32,24 @@ export async function buildDocx(
     const entry = originalArchive.files[filename];
     if (!entry || entry.dir) continue;
     const isXml = filename.endsWith('.xml') || filename.endsWith('.rels');
+    console.log(`[buildDocx] copying [${isXml ? 'string ' : 'uint8array'}] ${filename}`);
     if (isXml) {
       zip.file(filename, await entry.async('string'));
     } else {
       zip.file(filename, await entry.async('uint8array'));
     }
   }
+
+  // ── DIAGNOSTIC LOGGING ────────────────────────────────────────────────────
+  const outputEntries = Object.keys(zip.files).filter(k => !zip.files[k]!.dir);
+  console.log('[buildDocx] After copy — zip file count:', outputEntries.length);
+  const missing = inputEntries.filter(f => !outputEntries.includes(f));
+  if (missing.length) {
+    console.warn('[buildDocx] FILES MISSING after copy:', missing);
+  } else {
+    console.log('[buildDocx] No files missing after copy.');
+  }
+  // ── END DIAGNOSTIC ────────────────────────────────────────────────────────
 
   // Separate fixes by type for safe ordering
   const metaFixes = acceptedFixes.filter(f => f.targetField?.startsWith('metadata.'));
@@ -254,12 +274,71 @@ export async function buildDocx(
     zip.file(infraPath, await infraFile.async('arraybuffer'), { compression: 'STORE' });
   }
 
-  return await zip.generateAsync({
+  // ── DIAGNOSTIC LOGGING ────────────────────────────────────────────────────
+  const preGenerateEntries = Object.keys(zip.files).filter(k => !zip.files[k]!.dir);
+  console.log('[buildDocx] PRE-generateAsync file count:', preGenerateEntries.length);
+  const missingPreGenerate = inputEntries.filter(f => !preGenerateEntries.includes(f));
+  if (missingPreGenerate.length) {
+    console.warn('[buildDocx] FILES DROPPED by fix functions:', missingPreGenerate);
+  }
+  // ── END DIAGNOSTIC ────────────────────────────────────────────────────────
+
+  const blob = await zip.generateAsync({
     type: 'blob',
     mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     compression: 'DEFLATE',
     compressionOptions: { level: 6 },
   });
+  console.log('[buildDocx] OUTPUT blob size (bytes):', blob.size);
+  return blob;
+}
+
+/**
+ * Zero-modification passthrough — copies every file from the original archive
+ * and re-generates the ZIP without applying any fixes.  Used to confirm that
+ * JSZip's generation settings produce a file Word for iOS can open independent
+ * of content-modification code.
+ *
+ * Activate by appending ?passthrough to the app URL before uploading.
+ */
+export async function buildDocxPassthrough(originalArchive: JSZip): Promise<Blob> {
+  console.log('[passthrough] Starting zero-modification round-trip');
+  const zip = new JSZip();
+  const inputEntries = Object.keys(originalArchive.files).filter(
+    k => !originalArchive.files[k]!.dir
+  );
+  console.log('[passthrough] INPUT file count:', inputEntries.length);
+
+  for (const filename of inputEntries) {
+    const entry = originalArchive.files[filename]!;
+    const isXml = filename.endsWith('.xml') || filename.endsWith('.rels');
+    if (isXml) {
+      zip.file(filename, await entry.async('string'));
+    } else {
+      zip.file(filename, await entry.async('uint8array'));
+    }
+  }
+
+  // Enforce STORE for infrastructure files (same as full buildDocx path)
+  const infraPaths = [
+    '[Content_Types].xml',
+    ...Object.keys(zip.files).filter(name => name.endsWith('.rels')),
+  ];
+  for (const infraPath of infraPaths) {
+    const infraFile = zip.file(infraPath);
+    if (!infraFile) continue;
+    zip.file(infraPath, await infraFile.async('arraybuffer'), { compression: 'STORE' });
+  }
+
+  const blob = await zip.generateAsync({
+    type: 'blob',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 },
+  });
+  console.log('[passthrough] OUTPUT blob size (bytes):', blob.size);
+  console.log('[passthrough] OUTPUT file count:', Object.keys(zip.files).filter(k => !zip.files[k]!.dir).length);
+  return blob;
 }
 
 /**
