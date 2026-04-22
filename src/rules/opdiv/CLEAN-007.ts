@@ -100,6 +100,23 @@ function countInstructionBoxes(xml: string): number {
   return count;
 }
 
+/** Shared text normalization for DGHT/DGHP instruction box matching. */
+export function normalizeInstructionBoxText(text: string): string {
+  return text
+    .replace(/\u00a0/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/** Shared prefix predicate for DGHT/DGHP instruction box matching. */
+export function hasInstructionBoxPrefix(text: string): boolean {
+  const normalized = normalizeInstructionBoxText(text);
+  return (
+    normalized.startsWith('dght-specific instructions') ||
+    normalized.startsWith('dghp-specific instructions')
+  );
+}
+
 /** Returns true when a w:tbl element matches the instruction box criteria. */
 export function isInstructionBoxElement(tbl: Element): boolean {
   const cells = Array.from(tbl.getElementsByTagName('w:tc'));
@@ -116,14 +133,8 @@ export function isInstructionBoxElement(tbl: Element): boolean {
   // First cell text must start with instruction box prefix
   const cellText = Array.from(cell.getElementsByTagName('w:t'))
     .map(t => t.textContent ?? '')
-    .join('')
-    .replace(/\u00a0/g, ' ')
-    .trim()
-    .toLowerCase();
-  return (
-    cellText.startsWith('dght-specific instructions') ||
-    cellText.startsWith('dghp-specific instructions')
-  );
+    .join('');
+  return hasInstructionBoxPrefix(cellText);
 }
 
 export default CLEAN_007;
