@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.5.1](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.5.0...v1.5.1) (2026-04-22)
+
+
+### Bug Fixes
+
+* iOS Word compatibility + skip/undo clears recorded input value ([7ab1d97](https://github.com/agilesix/nofo-design-prep-checker/commit/7ab1d97abe20d0548a0a1a329130c6b813abc63e))
+* unconditionally enforce STORE for infrastructure files before generateAsync ([e62f1d4](https://github.com/agilesix/nofo-design-prep-checker/commit/e62f1d407400e3cdd17a77d3af6665791b3ccadc))
+* use DEFLATE for XML parts and STORE for ZIP infrastructure files ([e6deeb9](https://github.com/agilesix/nofo-design-prep-checker/commit/e6deeb935ef4ecfaa59e3a04f525708253b01e37))
+
 ## [1.5.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.4.1...v1.5.0) (2026-04-21)
 
 
