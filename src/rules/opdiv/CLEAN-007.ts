@@ -89,7 +89,6 @@ function countInstructionBoxes(xml: string): number {
   if (!xml) return 0;
   const lower = xml.toLowerCase();
   if (!lower.includes('bcd6f4')) return 0;
-  if (!lower.includes('specific instructions')) return 0;
 
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xml, 'application/xml');
