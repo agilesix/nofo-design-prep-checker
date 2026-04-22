@@ -17,11 +17,11 @@ import CLEAN_007 from '../opdiv/CLEAN-007';
 const PREAMBLE_GUIDE_IDS = new Set(CLEAN_007.contentGuideIds ?? []);
 
 /**
- * Walks body-level OOXML nodes once to find the Step 1 boundary index and
- * return both the children array and that index. Returns step1Index = -1 when
- * no matching heading is found. Computed once per check() call, not per image.
+ * Walks body-level OOXML nodes to find the Step 1 boundary, then collects the
+ * `id` attributes of every wp:docPr that appears before it. Returns a Set for
+ * O(1) per-image preamble checks. Built once per check() call.
  */
-function findStep1Boundary(body: Element): { bodyChildren: Element[]; step1Index: number } {
+function buildPreambleDocPrIds(body: Element): Set<string> {
   const bodyChildren = Array.from(body.childNodes).filter(
     (n): n is Element => n.nodeName === 'w:p' || n.nodeName === 'w:tbl'
   );
@@ -38,7 +38,16 @@ function findStep1Boundary(body: Element): { bodyChildren: Element[]; step1Index
     return text === DGHT_STEP1_ANCHOR;
   });
 
-  return { bodyChildren, step1Index };
+  if (step1Index === -1) return new Set();
+
+  const ids = new Set<string>();
+  for (const node of bodyChildren.slice(0, step1Index)) {
+    for (const docPr of Array.from(node.getElementsByTagName('wp:docPr'))) {
+      const id = docPr.getAttribute('id');
+      if (id) ids.add(id);
+    }
+  }
+  return ids;
 }
 
 const IMG_001: Rule = {
@@ -49,13 +58,12 @@ const IMG_001: Rule = {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(doc.documentXml, 'application/xml');
 
-    // Compute preamble boundary once for the whole document — O(bodyNodes) not O(images × bodyNodes).
+    // Build preamble id set once — O(preambleNodes) total, O(1) per-image check.
     const isPreambleGuide = options.contentGuideId !== null && PREAMBLE_GUIDE_IDS.has(options.contentGuideId);
-    let bodyChildren: Element[] = [];
-    let step1Index = -1;
+    let preambleDocPrIds = new Set<string>();
     if (isPreambleGuide) {
       const body = xmlDoc.getElementsByTagName('w:body')[0];
-      if (body) ({ bodyChildren, step1Index } = findStep1Boundary(body));
+      if (body) preambleDocPrIds = buildPreambleDocPrIds(body);
     }
 
     const issues: Issue[] = [];
@@ -67,10 +75,7 @@ const IMG_001: Rule = {
 
       // Images in the preamble are removed by CLEAN-007 on export; flagging them
       // is a false positive caused by rules running before the preamble patch applies.
-      if (isPreambleGuide && step1Index !== -1) {
-        const containingBodyChild = bodyChildren.find(n => n.contains(docPr));
-        if (containingBodyChild && bodyChildren.indexOf(containingBodyChild) < step1Index) return;
-      }
+      if (preambleDocPrIds.has(docPrId)) return;
 
       const descr = docPr.getAttribute('descr');
       const name = docPr.getAttribute('name') ?? `Image ${docPrId}`;
