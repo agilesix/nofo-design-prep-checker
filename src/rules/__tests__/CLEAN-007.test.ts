@@ -182,10 +182,19 @@ const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 function makeInstructionBoxDocXml(opts: {
   fill?: string;
   prefix?: string;
+  prefixRuns?: string[];
   cellCount?: number;
 }): string {
-  const { fill = 'BCD6F4', prefix = 'DGHT-SPECIFIC INSTRUCTIONS', cellCount = 1 } = opts;
+  const {
+    fill = 'BCD6F4',
+    prefix = 'DGHT-SPECIFIC INSTRUCTIONS',
+    prefixRuns,
+    cellCount = 1,
+  } = opts;
   const extraCell = cellCount > 1 ? `<w:tc><w:p><w:r><w:t>extra</w:t></w:r></w:p></w:tc>` : '';
+  const instructionRuns = prefixRuns && prefixRuns.length > 0
+    ? prefixRuns.map((text) => `<w:r><w:t>${text}</w:t></w:r>`).join('') + `<w:r><w:t> Some instructions here.</w:t></w:r>`
+    : `<w:r><w:t>${prefix} Some instructions here.</w:t></w:r>`;
   return (
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
     `<w:document xmlns:w="${W_NS}"><w:body>` +
@@ -193,7 +202,7 @@ function makeInstructionBoxDocXml(opts: {
     `<w:tr>` +
     `<w:tc>` +
     `<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="${fill}"/></w:tcPr>` +
-    `<w:p><w:r><w:t>${prefix} Some instructions here.</w:t></w:r></w:p>` +
+    `<w:p>${instructionRuns}</w:p>` +
     `</w:tc>` +
     extraCell +
     `</w:tr>` +
@@ -221,6 +230,29 @@ function makeDocWithXml(html: string, documentXml: string): ParsedDocument {
     activeContentGuide: null,
   };
 }
+
+async function runClean007(doc: ParsedDocument): Promise<AutoAppliedChange[]> {
+  if (typeof CLEAN_007 === 'function') {
+    return await (CLEAN_007 as (document: ParsedDocument) => Promise<AutoAppliedChange[]>)(doc);
+  }
+
+  if (typeof (CLEAN_007 as { apply?: unknown }).apply === 'function') {
+    return await (CLEAN_007 as { apply: (document: ParsedDocument) => Promise<AutoAppliedChange[]> }).apply(doc);
+  }
+
+  throw new TypeError('Unsupported CLEAN_007 export shape in test');
+}
+
+it('does not flag instruction-box content when the OOXML prefix is split across text nodes', async () => {
+  const html = '<table><tr><td>DGHT-SPECIFIC INSTRUCTIONS Some instructions here.</td></tr></table>';
+  const documentXml = makeInstructionBoxDocXml({
+    prefixRuns: ['DGHT-SPECIFIC', ' INSTRUCTIONS'],
+  });
+
+  const changes = await runClean007(makeDocWithXml(html, documentXml));
+
+  expect(changes).toEqual([]);
+});
 
 describe('CLEAN-007: instruction box detection', () => {
   it('detects a DGHT instruction box and returns the correct AutoAppliedChange', () => {
