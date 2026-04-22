@@ -3999,4 +3999,51 @@ describe('buildDocx — ZIP compression settings (iOS compatibility)', () => {
     // Content XML parts must use DEFLATE (method 8)
     expect(compressions.get('word/document.xml'), 'document.xml must be DEFLATE').toBe(8);
   });
+
+  it('keeps [Content_Types].xml and .rels as STORE even when no fix path rewrites them', async () => {
+    // This test covers the regression identified in review: the global DEFLATE
+    // in generateAsync would re-compress infrastructure files that were loaded
+    // from the original archive but never touched by any conditional fix path.
+    // The unconditional enforcement loop before generateAsync prevents that.
+    const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const zip = new JSZip();
+
+    // Minimal document — no content controls, so applyRemoveContentControls is a no-op.
+    zip.file('word/document.xml', [
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+      `<w:document xmlns:w="${W}"><w:body>`,
+      `${'<w:p><w:r><w:t>plain paragraph</w:t></w:r></w:p>'.repeat(40)}`,
+      `<w:sectPr/></w:body></w:document>`,
+    ].join(''));
+
+    // Infrastructure files — no auto-applied change will touch them.
+    zip.file('[Content_Types].xml', [
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+      `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">`,
+      `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>`,
+      `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>`,
+      `</Types>`,
+    ].join(''));
+    zip.file('_rels/.rels', [
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`,
+      `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>`,
+      `</Relationships>`,
+    ].join(''));
+    zip.file('word/_rels/document.xml.rels', [
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`,
+    ].join(''));
+
+    // No accepted fixes, no auto-applied changes — none of the conditional
+    // code paths that previously wrote these files with { compression: 'STORE' }
+    // will run.
+    const blob = await buildDocx(zip, [], []);
+    const buffer = await blob.arrayBuffer();
+    const compressions = parseZipCompressions(buffer);
+
+    expect(compressions.get('[Content_Types].xml'),          '[Content_Types].xml must be STORE').toBe(0);
+    expect(compressions.get('_rels/.rels'),                   '_rels/.rels must be STORE').toBe(0);
+    expect(compressions.get('word/_rels/document.xml.rels'),  'word/_rels/document.xml.rels must be STORE').toBe(0);
+  });
 });

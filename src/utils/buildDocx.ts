@@ -226,6 +226,21 @@ export async function buildDocx(
     await applyImportantPublicHeadingFix(zip);
   }
 
+  // Unconditionally enforce STORE compression for [Content_Types].xml and every
+  // .rels file before calling generateAsync. The global compression: 'DEFLATE'
+  // below would otherwise re-compress any infrastructure file that was loaded
+  // from the original archive but not explicitly rewritten by a fix path —
+  // producing DEFLATE-compressed infrastructure files that Word for iOS rejects.
+  const infraPaths = [
+    '[Content_Types].xml',
+    ...Object.keys(zip.files).filter(name => name.endsWith('.rels')),
+  ];
+  for (const infraPath of infraPaths) {
+    const infraFile = zip.file(infraPath);
+    if (!infraFile) continue;
+    zip.file(infraPath, await infraFile.async('arraybuffer'), { compression: 'STORE' });
+  }
+
   return await zip.generateAsync({
     type: 'blob',
     mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
