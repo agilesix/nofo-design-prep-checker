@@ -23,7 +23,10 @@ const TABLE_003: Rule = {
       // CDC/DGHT and CDC/DGHP scaffolding table — exempt for the same reason as
       // TABLE-002: CLEAN-007 removes it from the output DOCX but this rule runs
       // against the unmodified doc.html.
-      const firstCellText = (table.querySelector('td, th')?.textContent ?? '').toLowerCase();
+      const firstCellText = (table.querySelector('td, th')?.textContent ?? '')
+        .replace(/\u00a0/g, ' ')
+        .trim()
+        .toLowerCase();
       if (/^cdc\/dg(?:ht|hp)/.test(firstCellText)) return;
 
       const mergedCells = Array.from(table.querySelectorAll('[colspan],[rowspan]')).filter(cell => {
