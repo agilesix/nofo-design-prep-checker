@@ -118,70 +118,51 @@ const WITH_ALT_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   </w:body>
 </w:document>`;
 
-const OPTIONS_SSJ         = { contentGuideId: 'cdc-dght-ssj' } as const;
-const OPTIONS_COMPETITIVE = { contentGuideId: 'cdc-dght-competitive' } as const;
-const OPTIONS_DGHP        = { contentGuideId: 'cdc-dghp' } as const;
-const OPTIONS_CDC         = { contentGuideId: 'cdc' } as const;
-const OPTIONS_OTHER       = { contentGuideId: 'acf' } as const;
-const OPTIONS_NONE        = { contentGuideId: null } as const;
+const OPTIONS_SSJ          = { contentGuideId: 'cdc-dght-ssj' } as const;
+const OPTIONS_COMPETITIVE  = { contentGuideId: 'cdc-dght-competitive' } as const;
+const OPTIONS_DGHP         = { contentGuideId: 'cdc-dghp' } as const;
+const OPTIONS_CDC          = { contentGuideId: 'cdc' } as const;
+const OPTIONS_CDC_RESEARCH = { contentGuideId: 'cdc-research' } as const;
+const OPTIONS_OTHER        = { contentGuideId: 'acf' } as const;
+const OPTIONS_NONE         = { contentGuideId: null } as const;
 
 // ─── Preamble exemption ───────────────────────────────────────────────────────
 
-describe('IMG-001: CDC/DGHT preamble exemption', () => {
-  it('does not flag an image in the preamble for cdc-dght-ssj', () => {
-    const doc = makeDoc(PREAMBLE_AND_BODY_XML);
-    const issues = IMG_001.check(doc, OPTIONS_SSJ) as Issue[];
-    const ids = issues.map(i => i.id);
-    expect(ids).not.toContain('IMG-001-1');
+describe('IMG-001: CDC preamble exemption (all CLEAN-007 guides)', () => {
+  // All five guides in CLEAN-007.contentGuideIds get the exemption.
+  const exemptOptions = [OPTIONS_SSJ, OPTIONS_COMPETITIVE, OPTIONS_DGHP, OPTIONS_CDC, OPTIONS_CDC_RESEARCH];
+
+  exemptOptions.forEach(opts => {
+    it(`does not flag a preamble image for ${opts.contentGuideId}`, () => {
+      const issues = IMG_001.check(makeDoc(PREAMBLE_AND_BODY_XML), opts) as Issue[];
+      expect(issues.map(i => i.id)).not.toContain('IMG-001-1');
+    });
   });
 
-  it('does not flag an image in the preamble for cdc-dght-competitive', () => {
-    const doc = makeDoc(PREAMBLE_AND_BODY_XML);
-    const issues = IMG_001.check(doc, OPTIONS_COMPETITIVE) as Issue[];
-    expect(issues.map(i => i.id)).not.toContain('IMG-001-1');
-  });
-
-  it('does not flag an image in the preamble for cdc-dghp', () => {
-    const doc = makeDoc(PREAMBLE_AND_BODY_XML);
-    const issues = IMG_001.check(doc, OPTIONS_DGHP) as Issue[];
-    expect(issues.map(i => i.id)).not.toContain('IMG-001-1');
-  });
-
-  it('still flags an image after the Step 1 heading in a CDC/DGHT doc', () => {
-    const doc = makeDoc(PREAMBLE_AND_BODY_XML);
-    const issues = IMG_001.check(doc, OPTIONS_SSJ) as Issue[];
+  it('still flags an image after the Step 1 heading', () => {
+    const issues = IMG_001.check(makeDoc(PREAMBLE_AND_BODY_XML), OPTIONS_SSJ) as Issue[];
     expect(issues.map(i => i.id)).toContain('IMG-001-2');
   });
 
   it('exemption works when Step 1 uses a Heading1 style', () => {
-    const doc = makeDoc(HEADING1_STEP1_XML);
-    const issues = IMG_001.check(doc, OPTIONS_SSJ) as Issue[];
+    const issues = IMG_001.check(makeDoc(HEADING1_STEP1_XML), OPTIONS_SSJ) as Issue[];
     expect(issues.map(i => i.id)).not.toContain('IMG-001-1');
     expect(issues.map(i => i.id)).toContain('IMG-001-2');
   });
 
-  it('does not flag a preamble image for plain cdc guide', () => {
-    const doc = makeDoc(PREAMBLE_AND_BODY_XML);
-    const issues = IMG_001.check(doc, OPTIONS_CDC) as Issue[];
-    expect(issues.map(i => i.id)).not.toContain('IMG-001-1');
-  });
-
   it('does NOT exempt a preamble image for a non-CDC guide', () => {
-    const doc = makeDoc(PREAMBLE_AND_BODY_XML);
-    const issues = IMG_001.check(doc, OPTIONS_OTHER) as Issue[];
+    const issues = IMG_001.check(makeDoc(PREAMBLE_AND_BODY_XML), OPTIONS_OTHER) as Issue[];
     expect(issues.map(i => i.id)).toContain('IMG-001-1');
   });
 
   it('does NOT exempt a preamble image when no content guide is selected', () => {
-    const doc = makeDoc(PREAMBLE_AND_BODY_XML);
-    const issues = IMG_001.check(doc, OPTIONS_NONE) as Issue[];
+    const issues = IMG_001.check(makeDoc(PREAMBLE_AND_BODY_XML), OPTIONS_NONE) as Issue[];
     expect(issues.map(i => i.id)).toContain('IMG-001-1');
   });
 
   it('does not apply exemption when there is no Step 1 heading in the document', () => {
-    const doc = makeDoc(NO_STEP1_XML);
-    const issues = IMG_001.check(doc, OPTIONS_SSJ) as Issue[];
-    // No Step 1 → no preamble boundary → image must be flagged
+    const issues = IMG_001.check(makeDoc(NO_STEP1_XML), OPTIONS_SSJ) as Issue[];
+    // No Step 1 → no boundary → image must be flagged
     expect(issues.map(i => i.id)).toContain('IMG-001-1');
   });
 });
