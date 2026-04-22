@@ -234,6 +234,9 @@ export default function App(): React.ReactElement {
       }
       if (!navigated) {
         // Pre-opened window unavailable; fall back to the current tab.
+        if (iosWindow && !iosWindow.closed) {
+          iosWindow.close();
+        }
         window.location.href = url;
       }
       setTimeout(() => URL.revokeObjectURL(url), 60000);
