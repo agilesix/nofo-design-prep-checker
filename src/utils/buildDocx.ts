@@ -94,6 +94,9 @@ export async function buildDocx(
   const hasImportantPublicHeadingFix = autoAppliedChanges.some(
     c => c.targetField === 'table.importantpublic.heading'
   );
+  const hasRemoveOrphanedFootnotesHeading = autoAppliedChanges.some(
+    c => c.targetField === 'struct.hrsa.removefootnotesheading'
+  );
   const h2TitleCaseChanges = autoAppliedChanges.filter(
     c => c.targetField === 'heading.h2.titlecase' && c.value
   );
@@ -177,6 +180,11 @@ export async function buildDocx(
   // Apply "Before You Begin" heading removal
   if (hasRemoveBybHeading) {
     await applyRemoveBeforeYouBeginHeading(zip);
+  }
+
+  // Remove orphaned "Footnotes" heading at end of HRSA documents (CLEAN-017)
+  if (hasRemoveOrphanedFootnotesHeading) {
+    await applyRemoveOrphanedFootnotesHeading(zip);
   }
 
   // Apply date format corrections
@@ -778,6 +786,64 @@ async function applyRemoveBeforeYouBeginHeading(zip: JSZip): Promise<void> {
 
   for (const el of toRemove) {
     body.removeChild(el);
+  }
+
+  const serializer = new XMLSerializer();
+  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+}
+
+// ─── CLEAN-017: Remove orphaned "Footnotes" heading ─────────────────────────
+
+/**
+ * Remove an orphaned "Footnotes" or "Footnote" heading paragraph at the very
+ * end of the document body, along with any empty paragraphs that follow it
+ * before w:sectPr. The w:sectPr is never removed.
+ */
+async function applyRemoveOrphanedFootnotesHeading(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  const bodyChildren = Array.from(body.childNodes).filter(
+    n => n.nodeType === Node.ELEMENT_NODE
+  ) as Element[];
+
+  const last10 = bodyChildren.slice(-10);
+
+  const idx = last10.findIndex(el => {
+    if (el.localName !== 'p') return false;
+    const text = getParaText(el).trim().toLowerCase();
+    if (text !== 'footnotes' && text !== 'footnote') return false;
+    const pPr = Array.from(el.children).find(c => c.localName === 'pPr');
+    if (!pPr) return true;
+    const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+    if (!pStyle) return true;
+    const val = pStyle.getAttribute('w:val') ?? '';
+    return val.startsWith('Heading') || val === 'Normal' || val === '';
+  });
+
+  if (idx === -1) return;
+
+  const rest = last10.slice(idx + 1);
+  const hasContent = rest.some(
+    el =>
+      el.localName !== 'sectPr' &&
+      !(el.localName === 'p' && getParaText(el).trim() === '')
+  );
+  if (hasContent) return;
+
+  body.removeChild(last10[idx]!);
+  for (const el of rest) {
+    if (el.localName === 'sectPr') break;
+    if (el.localName === 'p' && getParaText(el).trim() === '') {
+      body.removeChild(el);
+    }
   }
 
   const serializer = new XMLSerializer();

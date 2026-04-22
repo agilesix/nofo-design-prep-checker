@@ -121,11 +121,12 @@ These run for ACF, ACL, CDC (standard), CMS, and IHS content guides.
 | `cdc-dght-competitive` | CDC/DGHT Competitive Content Guide | CDC identifier + DGHT identifier + competitive or "Build Your Application" signal |
 | `cdc-dghp` | CDC DGHP Competitive Content Guide | CDC identifier required + any ≥2 of: "CDC/DGHP", "Division of Global Health Protection", CDC-RFA-JG- opportunity number, "DGHP-SPECIFIC INSTRUCTIONS", "DGHP NOFO Tracker", "Global Health Security (GHS)", "Global Health Security Agenda (GHSA)", "We fund all Global Health Security (GHS) cooperative agreements" |
 
-### HRSA auto-applied changes (CLEAN-006)
+### HRSA auto-applied changes (CLEAN-006, CLEAN-017)
 
 | Rule ID | Title | Severity | Description |
 |---------|-------|----------|-------------|
 | CLEAN-006 | Remove "Before You Begin" heading (auto-apply) | — | NOFO Builder does not use a "Before You Begin" heading. For HRSA NOFOs, any heading-level paragraph (any heading level) whose text is exactly "Before You Begin" is automatically removed from the downloaded document. The content below the heading is preserved. Scoped to HRSA content guides only. |
+| CLEAN-017 | Remove orphaned "Footnotes" heading at end of document (auto-apply) | — | Grant Solutions Announcement Module sometimes leaves an empty "Footnotes" or "Footnote" heading paragraph at the very end of exported Word documents with no footnote content below it. This rule scans the last 10 body-level elements and removes the orphaned heading when found. A paragraph qualifies when: its trimmed, case-insensitive text is exactly "Footnotes" or "Footnote"; its paragraph style is Heading 1–6, Normal, or absent (no explicit style); and every element after it is either an empty paragraph (`w:p` with no text) or the section-properties element (`w:sectPr`). The heading paragraph and any empty paragraphs that follow it before `w:sectPr` are removed. `w:sectPr` is never removed. If the heading is followed by actual footnote content, no change is made. No change is made if no qualifying paragraph is found. Scoped to HRSA content guides only (`hrsa-rr`, `hrsa-bhw`, `hrsa-bphc`, `hrsa-construction`, `hrsa-mchb`). |
 
 ### HRSA structure checks (STRUCT-007 through STRUCT-009, STRUCT-020, STRUCT-025)
 
