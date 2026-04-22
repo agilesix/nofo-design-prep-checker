@@ -62,10 +62,10 @@ export const content = {
     },
     buttonHelperText: 'Checking usually takes a few seconds. Only .docx files are supported. If you have a .doc file, save it as .docx in Word first (File → Save As → Word Document).',
     preUploadChecklist: {
-      heading: 'Before you upload',
+      heading: 'A few things to check first',
       items: [
-        'Resolve all tracked changes and comments in your Word document',
-        'Check that headings are styled as headings in the Style Pane — not bolded normal text',
+        'Make sure all comments in your Word document have been addressed',
+        'In Word, check that bold text hasn\'t been used in place of a heading style — the tool can\'t detect this, and NOFO Builder won\'t convert bold text to headings',
       ],
     },
   },
