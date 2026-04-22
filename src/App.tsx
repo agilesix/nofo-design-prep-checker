@@ -214,9 +214,15 @@ export default function App(): React.ReactElement {
     const isIOS = (isLegacyIOSDevice || isIPadOSDesktopMode) && !(window as unknown as Record<string, unknown>).MSStream;
 
     if (isIOS) {
-      // iOS does not honour the download attribute on blob URLs, but does
-      // honour it on data URIs (Safari 13.4+). Convert to data URI first,
-      // then trigger via an anchor so the filename is preserved.
+      // Safari 13.4+ honours the download attribute on data URIs (not blob URLs),
+      // which preserves the filename. Older Safari and embedded WKWebViews (which
+      // omit the Version/ token) do not, so fall back to window.location.replace()
+      // there to avoid pushing the large data URI onto the history stack.
+      const versionMatch = navigator.userAgent.match(/Version\/(\d+)\.(\d+)/);
+      const safariMajor = versionMatch ? parseInt(versionMatch[1]!, 10) : 0;
+      const safariMinor = versionMatch ? parseInt(versionMatch[2]!, 10) : 0;
+      const supportsDataUriDownload = safariMajor > 13 || (safariMajor === 13 && safariMinor >= 4);
+
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onerror = () => {
@@ -231,12 +237,18 @@ export default function App(): React.ReactElement {
         };
         reader.readAsDataURL(blob);
       });
-      const a = document.createElement('a');
-      a.href = dataUrl;
-      a.download = downloadName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+
+      if (supportsDataUriDownload) {
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = downloadName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        // Older iOS / WKWebView: replace avoids a history entry for the data URI.
+        window.location.replace(dataUrl);
+      }
       return;
     }
 
