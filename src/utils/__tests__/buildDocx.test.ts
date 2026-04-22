@@ -3207,23 +3207,23 @@ function directParaRuns(xml: string): Element[] {
 }
 
 describe('buildDocx — LINK-009: partial hyperlink fix', () => {
-  it('moves trailing non-ws char from preceding run into hyperlink and removes emptied run', async () => {
+  it('moves trailing alphanumeric char from preceding run into hyperlink and removes emptied run', async () => {
     const zip = new JSZip();
-    zip.file('word/document.xml', makePartialHlDocXml(`<w:r><w:t>(</w:t></w:r>`, ``));
+    zip.file('word/document.xml', makePartialHlDocXml(`<w:r><w:t>G</w:t></w:r>`, ``));
 
     const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
 
-    expect(getHyperlinkText(outXml, 'rId1')).toBe('(link text');
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('Glink text');
     expect(directParaRuns(outXml)).toHaveLength(0);
   });
 
-  it('moves leading non-ws char from following run into hyperlink and removes emptied run', async () => {
+  it('moves leading alphanumeric char from following run into hyperlink and removes emptied run', async () => {
     const zip = new JSZip();
-    zip.file('word/document.xml', makePartialHlDocXml(``, `<w:r><w:t>)</w:t></w:r>`));
+    zip.file('word/document.xml', makePartialHlDocXml(``, `<w:r><w:t>s</w:t></w:r>`));
 
     const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
 
-    expect(getHyperlinkText(outXml, 'rId1')).toBe('link text)');
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('link texts');
     expect(directParaRuns(outXml)).toHaveLength(0);
   });
 
@@ -3231,25 +3231,25 @@ describe('buildDocx — LINK-009: partial hyperlink fix', () => {
     const zip = new JSZip();
     zip.file(
       'word/document.xml',
-      makePartialHlDocXml(`<w:r><w:t>(</w:t></w:r>`, `<w:r><w:t>)</w:t></w:r>`)
+      makePartialHlDocXml(`<w:r><w:t>G</w:t></w:r>`, `<w:r><w:t>s</w:t></w:r>`)
     );
 
     const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
 
-    expect(getHyperlinkText(outXml, 'rId1')).toBe('(link text)');
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('Glink texts');
     expect(directParaRuns(outXml)).toHaveLength(0);
   });
 
-  it('trims only trailing non-ws from preceding run, preserving whitespace remainder', async () => {
+  it('trims only trailing alphanumeric from preceding run, preserving whitespace remainder', async () => {
     const zip = new JSZip();
     zip.file(
       'word/document.xml',
-      makePartialHlDocXml(`<w:r><w:t xml:space="preserve">Hello (</w:t></w:r>`, ``)
+      makePartialHlDocXml(`<w:r><w:t xml:space="preserve">Hello G</w:t></w:r>`, ``)
     );
 
     const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
 
-    expect(getHyperlinkText(outXml, 'rId1')).toBe('(link text');
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('Glink text');
     const remaining = directParaRuns(outXml);
     expect(remaining).toHaveLength(1);
     const text = Array.from((remaining[0] as Element).getElementsByTagName('w:t'))
@@ -3263,14 +3263,14 @@ describe('buildDocx — LINK-009: partial hyperlink fix', () => {
     zip.file(
       'word/document.xml',
       makePartialHlDocXml(
-        `<w:r><w:t>(</w:t></w:r><w:bookmarkEnd w:id="0"/>`,
+        `<w:r><w:t>G</w:t></w:r><w:bookmarkEnd w:id="0"/>`,
         ``
       )
     );
 
     const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
 
-    expect(getHyperlinkText(outXml, 'rId1')).toBe('(link text');
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('Glink text');
   });
 
   it('does not apply fix when a non-bookmark element blocks adjacency', async () => {
@@ -3278,7 +3278,7 @@ describe('buildDocx — LINK-009: partial hyperlink fix', () => {
     zip.file(
       'word/document.xml',
       makePartialHlDocXml(
-        `<w:r><w:t>(</w:t></w:r><w:proofErr w:type="spellStart"/>`,
+        `<w:r><w:t>G</w:t></w:r><w:proofErr w:type="spellStart"/>`,
         ``
       )
     );
@@ -3288,9 +3288,58 @@ describe('buildDocx — LINK-009: partial hyperlink fix', () => {
     expect(getHyperlinkText(outXml, 'rId1')).toBe('link text');
   });
 
-  it('inserts the moved run with w:rStyle w:val="Hyperlink" for correct rendering', async () => {
+  it('does not move a period immediately following the hyperlink', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePartialHlDocXml(``, `<w:r><w:t>.</w:t></w:r>`));
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('link text');
+    expect(directParaRuns(outXml)).toHaveLength(1);
+  });
+
+  it('does not move a comma immediately following the hyperlink', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePartialHlDocXml(``, `<w:r><w:t>,</w:t></w:r>`));
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('link text');
+    expect(directParaRuns(outXml)).toHaveLength(1);
+  });
+
+  it('does not move a period+space suffix — sentence punctuation stays outside', async () => {
+    // e.g. "Visit [link text]. Next sentence." — period must not be incorporated
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makePartialHlDocXml(``, `<w:r><w:t xml:space="preserve">. Next sentence.</w:t></w:r>`)
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('link text');
+    const runs = directParaRuns(outXml);
+    expect(runs).toHaveLength(1);
+    const text = Array.from((runs[0] as Element).getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '')
+      .join('');
+    expect(text).toBe('. Next sentence.');
+  });
+
+  it('does not move an opening paren immediately preceding the hyperlink', async () => {
     const zip = new JSZip();
     zip.file('word/document.xml', makePartialHlDocXml(`<w:r><w:t>(</w:t></w:r>`, ``));
+
+    const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
+
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('link text');
+    expect(directParaRuns(outXml)).toHaveLength(1);
+  });
+
+  it('inserts the moved run with w:rStyle w:val="Hyperlink" for correct rendering', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePartialHlDocXml(`<w:r><w:t>G</w:t></w:r>`, ``));
 
     const outXml = await getOutputDocXml(zip, [], [PARTIAL_HYPERLINK_CHANGE]);
 
@@ -3307,7 +3356,7 @@ describe('buildDocx — LINK-009: partial hyperlink fix', () => {
 
   it('does not modify the document when autoAppliedChanges does not include LINK-009', async () => {
     const zip = new JSZip();
-    zip.file('word/document.xml', makePartialHlDocXml(`<w:r><w:t>(</w:t></w:r>`, ``));
+    zip.file('word/document.xml', makePartialHlDocXml(`<w:r><w:t>G</w:t></w:r>`, ``));
 
     const outXml = await getOutputDocXml(zip, [], []);
 

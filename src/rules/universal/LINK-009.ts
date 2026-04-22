@@ -4,13 +4,17 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
  * LINK-009: Fix partial hyperlinks — characters accidentally left outside the
  * w:hyperlink element (auto-apply)
  *
- * Detects w:hyperlink elements where non-whitespace characters in a directly
+ * Detects w:hyperlink elements where alphanumeric characters in a directly
  * adjacent sibling w:r run are structurally part of the linked word:
  *
- *   Leading: the run immediately preceding the hyperlink ends with non-whitespace
+ *   Leading: the run immediately preceding the hyperlink ends with [a-zA-Z0-9]
  *            AND the hyperlink's own text starts with non-whitespace.
- *   Trailing: the run immediately following the hyperlink starts with non-whitespace
+ *   Trailing: the run immediately following the hyperlink starts with [a-zA-Z0-9]
  *             AND the hyperlink's own text ends with non-whitespace.
+ *
+ * Only alphanumeric characters are considered partial — punctuation such as
+ * ".", ",", ";", ":", "!", "?", ")", and "]" immediately adjacent to a link
+ * is sentence/list punctuation and must never be pulled inside the hyperlink.
  *
  * "Immediately adjacent" means a direct paragraph-level sibling with no
  * intervening elements other than w:bookmarkStart / w:bookmarkEnd.
@@ -52,13 +56,13 @@ function hyperlinkHasPartialChars(hyperlink: Element): boolean {
 
   const prevRun = adjacentRunOf(hyperlink, 'prev');
   if (prevRun) {
-    const trailing = trailingNonWS(hlRunText(prevRun));
+    const trailing = trailingAlphanumeric(hlRunText(prevRun));
     if (trailing.length > 0 && !/^\s/.test(hlText)) return true;
   }
 
   const nextRun = adjacentRunOf(hyperlink, 'next');
   if (nextRun) {
-    const leading = leadingNonWS(hlRunText(nextRun));
+    const leading = leadingAlphanumeric(hlRunText(nextRun));
     if (leading.length > 0 && !/\s$/.test(hlText)) return true;
   }
 
@@ -104,13 +108,13 @@ function adjacentRunOf(hyperlink: Element, direction: 'prev' | 'next'): Element 
   return null;
 }
 
-function trailingNonWS(text: string): string {
-  const m = text.match(/\S+$/);
+function trailingAlphanumeric(text: string): string {
+  const m = text.match(/[a-zA-Z0-9]+$/);
   return m ? m[0] : '';
 }
 
-function leadingNonWS(text: string): string {
-  const m = text.match(/^\S+/);
+function leadingAlphanumeric(text: string): string {
+  const m = text.match(/^[a-zA-Z0-9]+/);
   return m ? m[0] : '';
 }
 
