@@ -93,9 +93,9 @@ describe('LINK-009: leading partial character', () => {
 // ─── Detection: trailing partial character ────────────────────────────────────
 
 describe('LINK-009: trailing partial character', () => {
-  it('detects ".com" after "Google" link', () => {
+  it('detects alphanumeric text immediately after a hyperlink', () => {
     const doc = makeDoc(
-      wrap(`<w:p>${extLink(linkRun('Google'))}${run('.com')}</w:p>`)
+      wrap(`<w:p>${extLink(linkRun('Google'))}${run('com')}</w:p>`)
     );
     const results = LINK_009.check(doc, OPTIONS);
     expect(results).toHaveLength(1);
@@ -103,13 +103,55 @@ describe('LINK-009: trailing partial character', () => {
     expect(change.value).toBe('1');
   });
 
-  it('detects only the leading non-whitespace chars of the following run', () => {
-    // Following run is ".com today" — only ".com" should be flagged
+  it('detects only the leading alphanumeric chars of the following run', () => {
+    // Following run is "com today" — only "com" should be examined
     const doc = makeDoc(
-      wrap(`<w:p>${extLink(linkRun('Google'))}${runSpace('.com today')}</w:p>`)
+      wrap(`<w:p>${extLink(linkRun('Google'))}${runSpace('com today')}</w:p>`)
     );
     const results = LINK_009.check(doc, OPTIONS);
     expect(results).toHaveLength(1);
+  });
+});
+
+// ─── No-op: punctuation adjacent to hyperlink is not a partial char ──────────
+
+describe('LINK-009: punctuation adjacent to hyperlink is not flagged', () => {
+  it('does not flag a period immediately after a hyperlink', () => {
+    // [link text]. — sentence-ending period must stay outside the link
+    const doc = makeDoc(
+      wrap(`<w:p>${extLink(linkRun('Click here'))}${run('.')}</w:p>`)
+    );
+    expect(LINK_009.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a comma immediately after a hyperlink', () => {
+    const doc = makeDoc(
+      wrap(`<w:p>${extLink(linkRun('Click here'))}${run(',')}</w:p>`)
+    );
+    expect(LINK_009.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a semicolon immediately after a hyperlink', () => {
+    const doc = makeDoc(
+      wrap(`<w:p>${extLink(linkRun('Click here'))}${run(';')}</w:p>`)
+    );
+    expect(LINK_009.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a period followed by a space after a hyperlink', () => {
+    // e.g. "Visit [example.com]. Next sentence." — period + space must not be incorporated
+    const doc = makeDoc(
+      wrap(`<w:p>${extLink(linkRun('example.com'))}${runSpace('. Next sentence.')}</w:p>`)
+    );
+    expect(LINK_009.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag punctuation immediately before a hyperlink', () => {
+    // e.g. (before link) opening paren should not be pulled inside
+    const doc = makeDoc(
+      wrap(`<w:p>${run('(')}${extLink(linkRun('example.com'))}</w:p>`)
+    );
+    expect(LINK_009.check(doc, OPTIONS)).toHaveLength(0);
   });
 });
 
@@ -184,7 +226,7 @@ describe('LINK-009: bookmark elements between run and hyperlink are skipped', ()
         `<w:p>` +
         extLink(linkRun('Google')) +
         `<w:bookmarkEnd w:id="1"/>` +
-        run('.com') +
+        run('com') +
         `</w:p>`
       )
     );
