@@ -2031,14 +2031,19 @@ async function applyPdfLabelFix(zip: JSZip): Promise<void> {
 // ─── LINK-009: Fix partial hyperlinks ────────────────────────────────────────
 
 /**
- * For each w:hyperlink, moves non-whitespace characters that are accidentally
+ * For each w:hyperlink, moves alphanumeric characters that are accidentally
  * outside the element but immediately adjacent to it:
  *
- *   Leading fix: trailing non-whitespace chars are removed from the end of the
+ *   Leading fix: trailing [a-zA-Z0-9] chars are removed from the end of the
  *                preceding sibling w:r and inserted as a new first run in the
  *                hyperlink.
- *   Trailing fix: leading non-whitespace chars are removed from the start of
+ *   Trailing fix: leading [a-zA-Z0-9] chars are removed from the start of
  *                 the following sibling w:r and appended as a new last run.
+ *
+ * Only alphanumeric characters are moved — punctuation (., ,, ;, (, ), etc.)
+ * immediately adjacent to a link is sentence/list punctuation and must stay
+ * outside the hyperlink element. This keeps the patch in sync with LINK-009
+ * detection, which uses the same alphanumeric boundary rule.
  *
  * Bookmark elements (w:bookmarkStart, w:bookmarkEnd) between the run and the
  * hyperlink are ignored; any other intervening element blocks adjacency.
@@ -2062,11 +2067,11 @@ async function applyPartialHyperlinkFix(zip: JSZip): Promise<void> {
     const hlText = l9HlText(hyperlink);
     if (!hlText) continue;
 
-    // Leading fix: move trailing non-whitespace of preceding run inside hyperlink
+    // Leading fix: move trailing alphanumeric chars of preceding run inside hyperlink
     const prevRun = l9AdjacentRun(hyperlink, 'prev');
     if (prevRun) {
       const prevText = l9RunText(prevRun);
-      const chars = l9TrailingNonWS(prevText);
+      const chars = l9TrailingAlphanumeric(prevText);
       if (chars.length > 0 && !/^\s/.test(hlText)) {
         const rPr = Array.from(prevRun.children).find(c => c.localName === 'rPr') as Element | undefined;
         hyperlink.insertBefore(l9MakeRun(xmlDoc, W, rPr ?? null, chars), hyperlink.firstChild);
@@ -2080,12 +2085,12 @@ async function applyPartialHyperlinkFix(zip: JSZip): Promise<void> {
       }
     }
 
-    // Trailing fix: move leading non-whitespace of following run inside hyperlink
+    // Trailing fix: move leading alphanumeric chars of following run inside hyperlink
     const hlTextNow = l9HlText(hyperlink);
     const nextRun = l9AdjacentRun(hyperlink, 'next');
     if (nextRun) {
       const nextText = l9RunText(nextRun);
-      const chars = l9LeadingNonWS(nextText);
+      const chars = l9LeadingAlphanumeric(nextText);
       if (chars.length > 0 && !/\s$/.test(hlTextNow)) {
         const rPr = Array.from(nextRun.children).find(c => c.localName === 'rPr') as Element | undefined;
         hyperlink.appendChild(l9MakeRun(xmlDoc, W, rPr ?? null, chars));
@@ -2142,13 +2147,13 @@ function l9AdjacentRun(hyperlink: Element, direction: 'prev' | 'next'): Element 
   return null;
 }
 
-function l9TrailingNonWS(text: string): string {
-  const m = text.match(/\S+$/);
+function l9TrailingAlphanumeric(text: string): string {
+  const m = text.match(/[a-zA-Z0-9]+$/);
   return m ? m[0] : '';
 }
 
-function l9LeadingNonWS(text: string): string {
-  const m = text.match(/^\S+/);
+function l9LeadingAlphanumeric(text: string): string {
+  const m = text.match(/^[a-zA-Z0-9]+/);
   return m ? m[0] : '';
 }
 
