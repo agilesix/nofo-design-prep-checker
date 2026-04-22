@@ -134,7 +134,7 @@ describe('TABLE-003 CDC scaffolding table exemption', () => {
     // the exemption must survive trimming to avoid false positives.
     const doc = makeDoc(
       '<table><tbody>' +
-        '<tr><td colspan="2">   CDC/DGHT NOFO Content Guide</td></tr>' +
+        '<tr><td colspan="2">  CDC/DGHT NOFO Content Guide</td></tr>' +
         '<tr><td>Before you begin</td><td>Instructions here</td></tr>' +
       '</tbody></table>'
     );
