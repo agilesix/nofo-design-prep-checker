@@ -173,3 +173,138 @@ describe('CLEAN-007: content guide scope', () => {
     expect(CLEAN_007.contentGuideIds).toHaveLength(5);
   });
 });
+
+// ─── Instruction box detection ────────────────────────────────────────────────
+
+const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+/** Build a minimal document.xml containing one instruction box table. */
+function makeInstructionBoxDocXml(opts: {
+  fill?: string;
+  prefix?: string;
+  cellCount?: number;
+}): string {
+  const { fill = 'BCD6F4', prefix = 'DGHT-SPECIFIC INSTRUCTIONS', cellCount = 1 } = opts;
+  const extraCell = cellCount > 1 ? `<w:tc><w:p><w:r><w:t>extra</w:t></w:r></w:p></w:tc>` : '';
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS}"><w:body>` +
+    `<w:tbl>` +
+    `<w:tr>` +
+    `<w:tc>` +
+    `<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="${fill}"/></w:tcPr>` +
+    `<w:p><w:r><w:t>${prefix} Some instructions here.</w:t></w:r></w:p>` +
+    `</w:tc>` +
+    extraCell +
+    `</w:tr>` +
+    `</w:tbl>` +
+    `<w:sectPr/></w:body></w:document>`
+  );
+}
+
+function makeDocWithXml(html: string, documentXml: string): ParsedDocument {
+  return {
+    html,
+    sections: [{
+      id: 'section-preamble',
+      heading: 'Document start',
+      headingLevel: 0,
+      html,
+      rawText: html.replace(/<[^>]+>/g, ''),
+      startPage: 1,
+    }],
+    rawText: html.replace(/<[^>]+>/g, ''),
+    zipArchive: new JSZip(),
+    documentXml,
+    footnotesXml: '',
+    endnotesXml: '',
+    activeContentGuide: null,
+  };
+}
+
+describe('CLEAN-007: instruction box detection', () => {
+  it('detects a DGHT instruction box and returns the correct AutoAppliedChange', () => {
+    const doc = makeDocWithXml('', makeInstructionBoxDocXml({}));
+    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as AutoAppliedChange[];
+    const change = results.find(r => r.targetField === 'struct.dght.removeinstructionboxes');
+    expect(change).toBeDefined();
+    expect(change!.ruleId).toBe('CLEAN-007');
+    expect(change!.value).toBe('1');
+    expect(change!.description).toBe('Removed 1 DGHT/DGHP instruction box.');
+  });
+
+  it('detects a DGHP instruction box', () => {
+    const doc = makeDocWithXml('', makeInstructionBoxDocXml({ prefix: 'DGHP-SPECIFIC INSTRUCTIONS' }));
+    const results = CLEAN_007.check(doc, OPTIONS_DGHP) as AutoAppliedChange[];
+    const change = results.find(r => r.targetField === 'struct.dght.removeinstructionboxes');
+    expect(change).toBeDefined();
+    expect(change!.value).toBe('1');
+  });
+
+  it('counts multiple instruction boxes correctly', () => {
+    // Build two-box XML by hand to keep the test simple
+    const twoBoxDocXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS}"><w:body>` +
+      `<w:tbl><w:tr><w:tc>` +
+      `<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="BCD6F4"/></w:tcPr>` +
+      `<w:p><w:r><w:t>DGHT-SPECIFIC INSTRUCTIONS First box.</w:t></w:r></w:p>` +
+      `</w:tc></w:tr></w:tbl>` +
+      `<w:tbl><w:tr><w:tc>` +
+      `<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="BCD6F4"/></w:tcPr>` +
+      `<w:p><w:r><w:t>DGHT-SPECIFIC INSTRUCTIONS Second box.</w:t></w:r></w:p>` +
+      `</w:tc></w:tr></w:tbl>` +
+      `<w:sectPr/></w:body></w:document>`;
+    const doc = makeDocWithXml('', twoBoxDocXml);
+    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as AutoAppliedChange[];
+    const change = results.find(r => r.targetField === 'struct.dght.removeinstructionboxes');
+    expect(change).toBeDefined();
+    expect(change!.value).toBe('2');
+    expect(change!.description).toBe('Removed 2 DGHT/DGHP instruction boxes.');
+  });
+
+  it('is case-insensitive for the fill color attribute', () => {
+    const doc = makeDocWithXml('', makeInstructionBoxDocXml({ fill: 'bcd6f4' }));
+    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as AutoAppliedChange[];
+    expect(results.find(r => r.targetField === 'struct.dght.removeinstructionboxes')).toBeDefined();
+  });
+
+  it('is case-insensitive for the instruction prefix', () => {
+    const doc = makeDocWithXml('', makeInstructionBoxDocXml({ prefix: 'dght-specific instructions' }));
+    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as AutoAppliedChange[];
+    expect(results.find(r => r.targetField === 'struct.dght.removeinstructionboxes')).toBeDefined();
+  });
+
+  it('does not detect a table without blue shading', () => {
+    const doc = makeDocWithXml('', makeInstructionBoxDocXml({ fill: 'FFFFFF' }));
+    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as AutoAppliedChange[];
+    expect(results.find(r => r.targetField === 'struct.dght.removeinstructionboxes')).toBeUndefined();
+  });
+
+  it('does not detect a table whose text does not start with the instruction prefix', () => {
+    const doc = makeDocWithXml('', makeInstructionBoxDocXml({ prefix: 'Some other content' }));
+    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as AutoAppliedChange[];
+    expect(results.find(r => r.targetField === 'struct.dght.removeinstructionboxes')).toBeUndefined();
+  });
+
+  it('does not detect a multi-cell table even if shading and prefix match', () => {
+    const doc = makeDocWithXml('', makeInstructionBoxDocXml({ cellCount: 2 }));
+    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as AutoAppliedChange[];
+    expect(results.find(r => r.targetField === 'struct.dght.removeinstructionboxes')).toBeUndefined();
+  });
+
+  it('returns no instruction box change when documentXml is empty', () => {
+    const doc = makeDocWithXml('', '');
+    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as AutoAppliedChange[];
+    expect(results.find(r => r.targetField === 'struct.dght.removeinstructionboxes')).toBeUndefined();
+  });
+
+  it('can return both preamble and instruction box changes for the same document', () => {
+    const docXml = makeInstructionBoxDocXml({});
+    const html = PREAMBLE_HTML;
+    const doc = makeDocWithXml(html, docXml);
+    const results = CLEAN_007.check(doc, OPTIONS_SSJ) as AutoAppliedChange[];
+    expect(results.find(r => r.targetField === 'struct.dght.removescaffolding')).toBeDefined();
+    expect(results.find(r => r.targetField === 'struct.dght.removeinstructionboxes')).toBeDefined();
+  });
+});

@@ -2415,6 +2415,53 @@ describe('buildDocx — applyHeadingTextCorrections (HEAD-004)', () => {
     // Text corrected despite level having changed before this patch ran
     expect(styles[1]).toMatchObject({ text: 'Short heading' });
   });
+
+  it('applies fix when fix.originalText uses regular space but OOXML heading has NBSP (mammoth normalisation)', async () => {
+    // Simulates the real-world case: OOXML stores \u00a0 between words but mammoth
+    // renders it as a regular space in HTML, so fix.originalText has a regular space.
+    const ooXmlText = 'Long heading\u00a0with eleven words so it exceeds the limit here';
+    const mammothText = 'Long heading with eleven words so it exceeds the limit here';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(3, ooXmlText),  // OOXML has NBSP
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-004-0',
+      ruleId: 'HEAD-004',
+      targetField: `heading.text.H3.0::${mammothText}`,  // originalText has regular space
+      value: 'Short heading',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    expect(styles[0]).toMatchObject({ style: 'Heading3', text: 'Short heading' });
+  });
+
+  it('replaces text in a multi-run heading and clears subsequent runs', async () => {
+    // Heading split across two runs (e.g. different run-level formatting)
+    const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const multiRunPara =
+      `<w:p xmlns:w="${W_NS}">` +
+      `<w:pPr><w:pStyle w:val="Heading3"/></w:pPr>` +
+      `<w:r><w:t xml:space="preserve">First half </w:t></w:r>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>second half that is long</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([multiRunPara]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-004-0',
+      ruleId: 'HEAD-004',
+      targetField: 'heading.text.H3.0::First half second half that is long',
+      value: 'Short heading',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const styles = extractHeadingStyles(xml);
+    // All runs' text concatenated should equal just the new text (second run cleared)
+    expect(styles[0]).toMatchObject({ style: 'Heading3', text: 'Short heading' });
+  });
 });
 
 // ─── LINK-006 auto-applied bookmark retargets ─────────────────────────────────
@@ -2866,6 +2913,137 @@ describe('buildDocx — CLEAN-007: CDC preamble removal', () => {
 
     const outXml = await getOutputDocXml(zip, [], []);
     expect(outXml).toContain('Should survive');
+  });
+});
+
+// ─── applyRemoveDghtInstructionBoxes (CLEAN-007) ─────────────────────────────
+
+const W_NS_IB = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function makeInstructionBoxDocXmlBD(opts: {
+  fill?: string;
+  prefix?: string;
+  extraCells?: number;
+  extraParaAfter?: string;
+}): string {
+  const { fill = 'BCD6F4', prefix = 'DGHT-SPECIFIC INSTRUCTIONS', extraCells = 0, extraParaAfter } = opts;
+  const extra = Array.from({ length: extraCells })
+    .map(() => `<w:tc><w:p><w:r><w:t>extra</w:t></w:r></w:p></w:tc>`)
+    .join('');
+  const afterPara = extraParaAfter
+    ? `<w:p><w:r><w:t>${extraParaAfter}</w:t></w:r></w:p>`
+    : '';
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_IB}"><w:body>` +
+    `<w:tbl>` +
+    `<w:tr>` +
+    `<w:tc>` +
+    `<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="${fill}"/></w:tcPr>` +
+    `<w:p><w:r><w:t>${prefix} Do not include this in the output.</w:t></w:r></w:p>` +
+    `</w:tc>` +
+    extra +
+    `</w:tr>` +
+    `</w:tbl>` +
+    afterPara +
+    `<w:sectPr/></w:body></w:document>`
+  );
+}
+
+const INSTRUCTION_BOX_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-007',
+  description: 'Removed 1 DGHT/DGHP instruction box.',
+  targetField: 'struct.dght.removeinstructionboxes',
+  value: '1',
+};
+
+describe('buildDocx — CLEAN-007: DGHT/DGHP instruction box removal', () => {
+  it('removes a single-cell BCD6F4-shaded table starting with "DGHT-SPECIFIC INSTRUCTIONS"', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeInstructionBoxDocXmlBD({}));
+
+    const outXml = await getOutputDocXml(zip, [], [INSTRUCTION_BOX_CHANGE]);
+
+    expect(outXml).not.toContain('DGHT-SPECIFIC INSTRUCTIONS');
+    expect(outXml).not.toContain('w:tbl');
+  });
+
+  it('removes a DGHP variant instruction box', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeInstructionBoxDocXmlBD({ prefix: 'DGHP-SPECIFIC INSTRUCTIONS' }));
+
+    const outXml = await getOutputDocXml(zip, [], [INSTRUCTION_BOX_CHANGE]);
+
+    expect(outXml).not.toContain('DGHP-SPECIFIC INSTRUCTIONS');
+    expect(outXml).not.toContain('w:tbl');
+  });
+
+  it('preserves surrounding content when removing the instruction box', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeInstructionBoxDocXmlBD({ extraParaAfter: 'Keep this paragraph.' })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [INSTRUCTION_BOX_CHANGE]);
+
+    expect(outXml).not.toContain('DGHT-SPECIFIC INSTRUCTIONS');
+    expect(outXml).toContain('Keep this paragraph.');
+  });
+
+  it('does not remove a table without BCD6F4 shading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeInstructionBoxDocXmlBD({ fill: 'FFFFFF' }));
+
+    const outXml = await getOutputDocXml(zip, [], [INSTRUCTION_BOX_CHANGE]);
+
+    expect(outXml).toContain('DGHT-SPECIFIC INSTRUCTIONS');
+    expect(outXml).toContain('w:tbl');
+  });
+
+  it('does not remove a multi-cell table even with matching shading and prefix', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeInstructionBoxDocXmlBD({ extraCells: 1 }));
+
+    const outXml = await getOutputDocXml(zip, [], [INSTRUCTION_BOX_CHANGE]);
+
+    expect(outXml).toContain('DGHT-SPECIFIC INSTRUCTIONS');
+    expect(outXml).toContain('w:tbl');
+  });
+
+  it('removes all matching instruction boxes when multiple are present', async () => {
+    const tblXml =
+      `<w:tbl><w:tr><w:tc>` +
+      `<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="BCD6F4"/></w:tcPr>` +
+      `<w:p><w:r><w:t>DGHT-SPECIFIC INSTRUCTIONS Box content.</w:t></w:r></w:p>` +
+      `</w:tc></w:tr></w:tbl>`;
+    const docXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_IB}"><w:body>` +
+      tblXml + tblXml +
+      `<w:p><w:r><w:t>Preserve this.</w:t></w:r></w:p>` +
+      `<w:sectPr/></w:body></w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', docXml);
+
+    const outXml = await getOutputDocXml(zip, [], [{
+      ruleId: 'CLEAN-007',
+      description: 'Removed 2 DGHT/DGHP instruction boxes.',
+      targetField: 'struct.dght.removeinstructionboxes',
+      value: '2',
+    }]);
+
+    expect(outXml).not.toContain('DGHT-SPECIFIC INSTRUCTIONS');
+    expect(outXml).toContain('Preserve this.');
+  });
+
+  it('does not modify the document when targetField is absent from autoAppliedChanges', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeInstructionBoxDocXmlBD({}));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+
+    expect(outXml).toContain('DGHT-SPECIFIC INSTRUCTIONS');
   });
 });
 
