@@ -21,6 +21,7 @@ import { DESIGNATOR_RE, isComponentLabel } from '../../constants';
  *  - Application contents / standard forms
  *  - Application checklist / merit review criteria / reporting tables
  *  - Tables preceded by a heading within 50 words of body text
+ *  - CDC/DGHT and CDC/DGHP "Before you begin" scaffolding tables
  */
 const TABLE_002: Rule = {
   id: 'TABLE-002',
@@ -379,6 +380,7 @@ function looksLikeApplicationChecklist(table: Element): boolean {
  *  - Merit review criteria (section heading or first-row text)
  *  - Reporting tables (section heading or first-row text)
  *  - Key facts / key dates tables (first-cell text)
+ *  - CDC/DGHT and CDC/DGHP "Before you begin" scaffolding tables (first-cell text)
  */
 function isExemptByCheapSignals(table: Element, sectionHeading: string): boolean {
   // Section heading
@@ -387,6 +389,13 @@ function isExemptByCheapSignals(table: Element, sectionHeading: string): boolean
   // First-row / first-cell content
   const firstCellText = (table.querySelector('td, th')?.textContent ?? '').toLowerCase();
   const firstRowText = (table.querySelector('tr')?.textContent ?? '').toLowerCase();
+
+  // CDC/DGHT and CDC/DGHP "Before you begin" scaffolding table.
+  // CLEAN-007 removes this content from the output DOCX, but TABLE-002 runs
+  // against the original doc.html before CLEAN-007's patch is applied, so the
+  // scaffolding table is still present when TABLE-002 runs. Exempt it here so
+  // it is never flagged regardless of rule execution order.
+  if (/^cdc\/dg(?:ht|hp)/.test(firstCellText)) return true;
   if (
     /key\s+facts/.test(firstCellText) ||
     /key\s+dates/.test(firstCellText) ||

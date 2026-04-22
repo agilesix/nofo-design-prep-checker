@@ -465,6 +465,56 @@ describe('TABLE-002 standard table-type exemptions', () => {
   });
 });
 
+// ─── CDC/DGHT and CDC/DGHP scaffolding table exemption ───────────────────────
+
+describe('TABLE-002 CDC scaffolding table exemption', () => {
+  // These tables are removed by CLEAN-007 from the output DOCX, but TABLE-002
+  // runs against the original doc.html (pre-CLEAN-007). The exemption ensures
+  // the scaffolding table is never flagged regardless of rule execution order.
+
+  it('does not flag the CDC/DGHT "Before you begin" scaffolding table', () => {
+    const doc = makeDoc(
+      '<table><tbody>' +
+        '<tr><td>CDC/DGHT NOFO Content Guide</td><td>v2.0</td></tr>' +
+        '<tr><td>Before you begin</td><td>Instructions here</td></tr>' +
+      '</tbody></table>'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag the CDC/DGHP "Before you begin" scaffolding table', () => {
+    const doc = makeDoc(
+      '<table><tbody>' +
+        '<tr><td>CDC/DGHP NOFO Content Guide</td><td>v1.0</td></tr>' +
+        '<tr><td>Before you begin</td><td>Instructions here</td></tr>' +
+      '</tbody></table>'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag the scaffolding table even when it has merged cells (no caption, merged structure)', () => {
+    const doc = makeDoc(
+      '<table><tbody>' +
+        '<tr><td colspan="2">CDC/DGHT NOFO Content Guide</td></tr>' +
+        '<tr><td>Before you begin</td><td>Instructions here</td></tr>' +
+      '</tbody></table>'
+    );
+    expect(TABLE_002.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('still flags an unrelated table that happens to follow the scaffolding table', () => {
+    const scaffolding =
+      '<table><tbody>' +
+        '<tr><td>CDC/DGHT NOFO Content Guide</td><td>v2.0</td></tr>' +
+        '<tr><td>Before you begin</td><td>Instructions here</td></tr>' +
+      '</tbody></table>';
+    const doc = makeDoc(scaffolding + SIMPLE_TABLE);
+    const results = TABLE_002.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as Issue).title).toBe('Table is missing a caption');
+  });
+});
+
 // ─── Sentence case suggestion ─────────────────────────────────────────────────
 
 describe('TABLE-002 sentence case suggestion', () => {
