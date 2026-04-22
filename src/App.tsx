@@ -190,72 +190,67 @@ export default function App(): React.ReactElement {
 
   const handleDownload = useCallback(async () => {
     if (!parsedDoc) return;
-    const blob = await buildDocx(
-      parsedDoc.zipArchive,
-      acceptedFixes,
-      reviewState?.autoAppliedChanges ?? []
-    );
-    const originalName = uploadedFile?.name ?? 'nofo.docx';
-    const downloadName = originalName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
 
-    const anchorDownload = () => {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = downloadName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    };
-
+    // Detect iOS synchronously before any await. iOS blocks window.open() calls
+    // that occur after an async gap, so we must open the target window here —
+    // within the synchronous user-gesture context — and navigate it to the blob
+    // URL once the document is ready.
     const isLegacyIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const isIPadOSDesktopMode = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
     const isIOS = (isLegacyIOSDevice || isIPadOSDesktopMode) && !(window as unknown as Record<string, unknown>).MSStream;
+    const iosWindow = isIOS ? window.open('about:blank', '_blank') : null;
+    if (iosWindow) {
+      iosWindow.opener = null;
+    }
+
+    let blob: Blob;
+    try {
+      blob = await buildDocx(
+        parsedDoc.zipArchive,
+        acceptedFixes,
+        reviewState?.autoAppliedChanges ?? []
+      );
+    } catch (err) {
+      iosWindow?.close();
+      throw err;
+    }
+
+    const originalName = uploadedFile?.name ?? 'nofo.docx';
+    const downloadName = originalName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
 
     if (isIOS) {
-      // iOS 13.4+ honours the download attribute on data URIs (not blob URLs),
-      // which preserves the filename. On iOS, the Safari Version/x.y token does
-      // not necessarily match the iOS version (for example, iOS 13.4 commonly
-      // reports Version/13.1), so gate this behaviour on the iOS OS version
-      // segment instead. Older Safari and embedded WKWebViews may omit the OS
-      // version token, so fall back conservatively to window.location.replace()
-      // there to avoid pushing the large data URI onto the history stack.
-      const iosVersionMatch = navigator.userAgent.match(/OS (\d+)[._](\d+)/);
-      const iosMajor = iosVersionMatch ? parseInt(iosVersionMatch[1]!, 10) : 0;
-      const iosMinor = iosVersionMatch ? parseInt(iosVersionMatch[2]!, 10) : 0;
-      const supportsDataUriDownload = iosMajor > 13 || (iosMajor === 13 && iosMinor >= 4);
-
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => {
-          reject(reader.error ?? new Error('Failed to read generated document.'));
-        };
-        reader.onloadend = () => {
-          if (typeof reader.result === 'string') {
-            resolve(reader.result);
-            return;
-          }
-          reject(new Error('Failed to generate a data URL for download.'));
-        };
-        reader.readAsDataURL(blob);
-      });
-
-      if (supportsDataUriDownload) {
-        const a = document.createElement('a');
-        a.href = dataUrl;
-        a.download = downloadName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      } else {
-        // Older iOS / WKWebView: replace avoids a history entry for the data URI.
-        window.location.replace(dataUrl);
+      // Use a binary blob URL (not a data URI) so iOS gets the actual DOCX bytes.
+      // iOS opens the blob in its built-in document viewer, where the user can
+      // tap Share → Open in Word / Save to Files.
+      const url = URL.createObjectURL(blob);
+      let navigated = false;
+      if (iosWindow && !iosWindow.closed) {
+        try {
+          iosWindow.location.replace(url);
+          navigated = true;
+        } catch {
+          // Window was closed or cross-origin blocked between open and navigate.
+        }
       }
+      if (!navigated) {
+        // Pre-opened window unavailable; fall back to the current tab.
+        if (iosWindow && !iosWindow.closed) {
+          iosWindow.close();
+        }
+        window.location.href = url;
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
       return;
     }
 
-    anchorDownload();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = downloadName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }, [parsedDoc, acceptedFixes, reviewState, uploadedFile]);
 
   const handleBack = useCallback(() => {
