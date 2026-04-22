@@ -442,9 +442,10 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
         for (const el of hyperlinks) {
           const elAnchor = el.getAttribute('w:anchor') ?? el.getAttributeNS(W, 'anchor');
           if (elAnchor === oldAnchor) {
-            // Preserve the existing OOXML prefix binding without triggering serializer
-            // namespace corruption such as xmlns:w="" on output.
-            el.setAttribute('w:anchor', normalizedNewAnchor);
+            el.removeAttributeNS(W, 'anchor');
+            el.removeAttributeNS(null, 'anchor');
+            el.removeAttribute('w:anchor');
+            el.setAttributeNS(W, 'w:anchor', normalizedNewAnchor);
           }
         }
       }
