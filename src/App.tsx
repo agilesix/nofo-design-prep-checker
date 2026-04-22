@@ -226,7 +226,7 @@ export default function App(): React.ReactElement {
       let navigated = false;
       if (iosWindow && !iosWindow.closed) {
         try {
-          iosWindow.location.href = url;
+          iosWindow.location.replace(url);
           navigated = true;
         } catch {
           // Window was closed or cross-origin blocked between open and navigate.
