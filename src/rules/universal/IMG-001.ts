@@ -1,4 +1,5 @@
 import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
+import { DGHT_STEP1_ANCHOR } from '../opdiv/CLEAN-007-constants';
 
 /**
  * IMG-001: Images missing alt text
@@ -10,13 +11,51 @@ import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types
  * the first element with an empty descr, which would apply alt text to the
  * wrong image when multiple images are missing alt text.
  */
+
+const CDC_DGHT_GUIDE_IDS = new Set(['cdc-dght-ssj', 'cdc-dght-competitive', 'cdc-dghp']);
+
+/**
+ * Returns true when `docPr` lives inside a body-level paragraph that precedes
+ * the first Step 1 heading — i.e. the CDC/DGHT preamble that CLEAN-007 removes
+ * from the exported DOCX. Images there should never be flagged.
+ */
+function isInCdcDghtPreamble(xmlDoc: Document, docPr: Element): boolean {
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return false;
+
+  const bodyChildren = Array.from(body.childNodes).filter(
+    (n): n is Element => n.nodeName === 'w:p' || n.nodeName === 'w:tbl'
+  );
+
+  const step1Index = bodyChildren.findIndex(node => {
+    if (node.nodeName !== 'w:p') return false;
+    const pStyle = node.getElementsByTagName('w:pStyle')[0]?.getAttribute('w:val') ?? '';
+    if (!/^heading\d/i.test(pStyle)) return false;
+    const text = Array.from(node.getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '')
+      .join('')
+      .toLowerCase()
+      .trim();
+    return text.includes(DGHT_STEP1_ANCHOR);
+  });
+
+  if (step1Index === -1) return false;
+
+  const containingBodyChild = bodyChildren.find(n => n.contains(docPr));
+  if (!containingBodyChild) return false;
+
+  return bodyChildren.indexOf(containingBodyChild) < step1Index;
+}
+
 const IMG_001: Rule = {
   id: 'IMG-001',
-  check(doc: ParsedDocument, _options: RuleRunnerOptions): Issue[] {
+  check(doc: ParsedDocument, options: RuleRunnerOptions): Issue[] {
     if (!doc.documentXml) return [];
 
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(doc.documentXml, 'application/xml');
+
+    const isCdcDght = CDC_DGHT_GUIDE_IDS.has(options.contentGuideId ?? '');
 
     const issues: Issue[] = [];
     const docPrElements = Array.from(xmlDoc.getElementsByTagName('wp:docPr'));
@@ -24,6 +63,10 @@ const IMG_001: Rule = {
     docPrElements.forEach(docPr => {
       const docPrId = docPr.getAttribute('id');
       if (!docPrId) return;
+
+      // Images in the CDC/DGHT preamble are removed by CLEAN-007 on export;
+      // flagging them would be a false positive caused by rule sequencing.
+      if (isCdcDght && isInCdcDghtPreamble(xmlDoc, docPr)) return;
 
       const descr = docPr.getAttribute('descr');
       const name = docPr.getAttribute('name') ?? `Image ${docPrId}`;
