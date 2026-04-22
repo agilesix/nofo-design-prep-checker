@@ -209,7 +209,9 @@ export default function App(): React.ReactElement {
       URL.revokeObjectURL(url);
     };
 
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as unknown as Record<string, unknown>).MSStream;
+    const isLegacyIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isIPadOSDesktopMode = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+    const isIOS = (isLegacyIOSDevice || isIPadOSDesktopMode) && !(window as unknown as Record<string, unknown>).MSStream;
 
     if (isIOS) {
       // Try Web Share API first — gives users the native share sheet with "Open in Word"
