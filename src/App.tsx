@@ -197,17 +197,57 @@ export default function App(): React.ReactElement {
     );
     const originalName = uploadedFile?.name ?? 'nofo.docx';
     const downloadName = originalName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = downloadName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    // iOS (Safari/WKWebView) fetches blob URLs asynchronously after click;
-    // immediate revocation produces an empty file. Other browsers are fine immediately.
-    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
-    setTimeout(() => URL.revokeObjectURL(url), isIOS ? 30000 : 0);
+
+    const anchorDownload = () => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = downloadName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    };
+
+    const isLegacyIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isIPadOSDesktopMode = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+    const isIOS = (isLegacyIOSDevice || isIPadOSDesktopMode) && !(window as unknown as Record<string, unknown>).MSStream;
+
+    if (isIOS) {
+      // Try Web Share API first — gives users the native share sheet with "Open in Word"
+      const file = new File([blob], downloadName, {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: downloadName });
+          return;
+        } catch (error) {
+          if (!(error instanceof DOMException) || (error.name !== 'AbortError' && error.name !== 'NotAllowedError')) {
+            throw error;
+          }
+        }
+      }
+      // Fall back to base64 data URI — iOS opens it via its file handler which offers Word
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => {
+          reject(reader.error ?? new Error('Failed to read generated document.'));
+        };
+        reader.onloadend = () => {
+          if (typeof reader.result === 'string') {
+            resolve(reader.result);
+            return;
+          }
+          reject(new Error('Failed to generate a data URL for download.'));
+        };
+        reader.readAsDataURL(blob);
+      });
+      window.location.href = dataUrl;
+      return;
+    }
+
+    anchorDownload();
   }, [parsedDoc, acceptedFixes, reviewState, uploadedFile]);
 
   const handleBack = useCallback(() => {

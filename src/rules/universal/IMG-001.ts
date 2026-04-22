@@ -1,4 +1,6 @@
 import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
+import { DGHT_STEP1_ANCHOR } from '../opdiv/CLEAN-007-constants';
+import CLEAN_007 from '../opdiv/CLEAN-007';
 
 /**
  * IMG-001: Images missing alt text
@@ -10,13 +12,59 @@ import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types
  * the first element with an empty descr, which would apply alt text to the
  * wrong image when multiple images are missing alt text.
  */
+
+// Derived from CLEAN-007 so the exemption always matches where scaffolding removal runs.
+const PREAMBLE_GUIDE_IDS = new Set(CLEAN_007.contentGuideIds ?? []);
+
+/**
+ * Walks body-level OOXML nodes to find the Step 1 boundary, then collects the
+ * `id` attributes of every wp:docPr that appears before it. Returns a Set for
+ * O(1) per-image preamble checks. Built once per check() call.
+ */
+function buildPreambleDocPrIds(body: Element): Set<string> {
+  const bodyChildren = Array.from(body.childNodes).filter(
+    (n): n is Element => n.nodeName === 'w:p' || n.nodeName === 'w:tbl'
+  );
+
+  const step1Index = bodyChildren.findIndex(node => {
+    if (node.nodeName !== 'w:p') return false;
+    const pStyle = node.getElementsByTagName('w:pStyle')[0]?.getAttribute('w:val') ?? '';
+    if (!/^heading\d/i.test(pStyle)) return false;
+    const text = Array.from(node.getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '')
+      .join('')
+      .toLowerCase()
+      .trim();
+    return text === DGHT_STEP1_ANCHOR;
+  });
+
+  if (step1Index === -1) return new Set();
+
+  const ids = new Set<string>();
+  for (const node of bodyChildren.slice(0, step1Index)) {
+    for (const docPr of Array.from(node.getElementsByTagName('wp:docPr'))) {
+      const id = docPr.getAttribute('id');
+      if (id) ids.add(id);
+    }
+  }
+  return ids;
+}
+
 const IMG_001: Rule = {
   id: 'IMG-001',
-  check(doc: ParsedDocument, _options: RuleRunnerOptions): Issue[] {
+  check(doc: ParsedDocument, options: RuleRunnerOptions): Issue[] {
     if (!doc.documentXml) return [];
 
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(doc.documentXml, 'application/xml');
+
+    // Build preamble id set once — O(preambleNodes) total, O(1) per-image check.
+    const isPreambleGuide = options.contentGuideId !== null && PREAMBLE_GUIDE_IDS.has(options.contentGuideId);
+    let preambleDocPrIds = new Set<string>();
+    if (isPreambleGuide) {
+      const body = xmlDoc.getElementsByTagName('w:body')[0];
+      if (body) preambleDocPrIds = buildPreambleDocPrIds(body);
+    }
 
     const issues: Issue[] = [];
     const docPrElements = Array.from(xmlDoc.getElementsByTagName('wp:docPr'));
@@ -24,6 +72,10 @@ const IMG_001: Rule = {
     docPrElements.forEach(docPr => {
       const docPrId = docPr.getAttribute('id');
       if (!docPrId) return;
+
+      // Images in the preamble are removed by CLEAN-007 on export; flagging them
+      // is a false positive caused by rules running before the preamble patch applies.
+      if (preambleDocPrIds.has(docPrId)) return;
 
       const descr = docPr.getAttribute('descr');
       const name = docPr.getAttribute('name') ?? `Image ${docPrId}`;
