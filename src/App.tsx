@@ -214,8 +214,9 @@ export default function App(): React.ReactElement {
     const isIOS = (isLegacyIOSDevice || isIPadOSDesktopMode) && !(window as unknown as Record<string, unknown>).MSStream;
 
     if (isIOS) {
-      // iOS does not support anchor-click downloads; navigate to a base64 data URI
-      // so the system file handler can offer to open the file in Word.
+      // iOS does not honour the download attribute on blob URLs, but does
+      // honour it on data URIs (Safari 13.4+). Convert to data URI first,
+      // then trigger via an anchor so the filename is preserved.
       const dataUrl = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onerror = () => {
@@ -230,9 +231,12 @@ export default function App(): React.ReactElement {
         };
         reader.readAsDataURL(blob);
       });
-      // replace() avoids pushing the large data URI onto the history stack,
-      // preventing memory bloat and broken Back navigation.
-      window.location.replace(dataUrl);
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = downloadName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
       return;
     }
 
