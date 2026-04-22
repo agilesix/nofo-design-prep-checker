@@ -197,6 +197,28 @@ export default function App(): React.ReactElement {
     );
     const originalName = uploadedFile?.name ?? 'nofo.docx';
     const downloadName = originalName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
+
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+
+    if (isIOS) {
+      // Try Web Share API first — gives users the native share sheet with "Open in Word"
+      const file = new File([blob], downloadName, {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: downloadName });
+        return;
+      }
+      // Fall back to base64 data URI — iOS opens it via its file handler which offers Word
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        window.location.href = reader.result as string;
+      };
+      reader.readAsDataURL(blob);
+      return;
+    }
+
+    // Desktop: standard anchor-click download
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -204,10 +226,7 @@ export default function App(): React.ReactElement {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    // iOS (Safari/WKWebView) fetches blob URLs asynchronously after click;
-    // immediate revocation produces an empty file. Other browsers are fine immediately.
-    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent);
-    setTimeout(() => URL.revokeObjectURL(url), isIOS ? 30000 : 0);
+    URL.revokeObjectURL(url);
   }, [parsedDoc, acceptedFixes, reviewState, uploadedFile]);
 
   const handleBack = useCallback(() => {
