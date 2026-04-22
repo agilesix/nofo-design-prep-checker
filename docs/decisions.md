@@ -4,17 +4,17 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
-## 2026-04-21 — iOS Word compatibility: DEFLATE for XML parts, STORE for rewritten ZIP infrastructure files
+## 2026-04-21 — iOS Word compatibility: DEFLATE for XML parts, STORE for ZIP infrastructure files
 
-**Decision:** `buildDocx`'s final `zip.generateAsync()` call now passes `compression: 'DEFLATE', compressionOptions: { level: 6 }` so modified XML content parts (e.g. `word/document.xml`) are compressed in the output ZIP. When `[Content_Types].xml` or relationship files (`word/_rels/document.xml.rels`) are rewritten via `zip.file()`, those writes explicitly pass `{ compression: 'STORE' }` to override the global default.
+**Decision:** `buildDocx`'s final `zip.generateAsync()` call uses `compression: 'DEFLATE', compressionOptions: { level: 6 }` so modified XML content parts are compressed. Immediately before `generateAsync`, an unconditional loop re-adds `[Content_Types].xml` and every `*.rels` file with `{ compression: 'STORE' }`, regardless of whether any fix path previously rewrote them.
 
 **Reason:** Microsoft Word for iOS is stricter than desktop Word when validating the downloaded `.docx` ZIP structure. Users reported that files downloaded from Safari for iOS could not be opened in Word for iOS, producing two sequential error dialogs: "Word found unreadable content" followed by "This file was created in a pre-release version of Word 2007." Desktop Word opened the same files with just a recoverable warning.
 
-The OOXML packaging convention (ECMA-376, Part 2 §13) expects `[Content_Types].xml` and relationship (`.rels`) files to be stored uncompressed (STORE). While desktop Word tolerates these files being DEFLATE-compressed, Word for iOS rejects the document outright when the ZIP infrastructure files are compressed. The global DEFLATE setting is safe for content XML parts — it reduces output file size while remaining compatible — but the explicit STORE override described here applies only on code paths that rewrite those infrastructure files.
+The OOXML packaging convention (ECMA-376, Part 2 §13) expects `[Content_Types].xml` and relationship (`.rels`) files to be stored uncompressed (STORE). While desktop Word tolerates DEFLATE-compressed infrastructure files, Word for iOS rejects the document outright. The global DEFLATE option would re-compress any infrastructure file loaded from the original archive but never touched by a fix path, so the unconditional enforcement loop is required to cover all documents regardless of which fixes run.
 
-**Alternative considered:** Leaving `compression` unspecified in `generateAsync` (JSZip default: STORE for newly-written files). This was the prior behavior; the modified XML files were stored uncompressed, producing larger output files. The iOS incompatibility existed before this change because the original docx loaded from disk had `[Content_Types].xml` with STORE compression, but any write-back of that file (e.g., after removing comment content-type overrides) used JSZip's default and may have lost the STORE flag depending on JSZip version behavior.
+**Alternative considered:** Setting `{ compression: 'STORE' }` only on the explicit `zip.file()` calls that rewrite those files (accept-changes cleanup, email fix). This was insufficient: documents that don't trigger those paths had their infrastructure files re-compressed by the global DEFLATE option.
 
-**Outcome:** Modified XML parts are DEFLATE-compressed (level 6). On runs where `[Content_Types].xml` or `.rels` files are rewritten, those ZIP infrastructure files are explicitly written with STORE, which addresses the Word-for-iOS failure mode for those paths. This decision does not by itself guarantee STORE for infrastructure files on runs where those entries are not rewritten.
+**Outcome:** Output docx files open without errors in Microsoft Word for iOS. Modified XML content parts are DEFLATE-compressed (level 6); `[Content_Types].xml` and all `*.rels` files are unconditionally STORE.
 
 ---
 
