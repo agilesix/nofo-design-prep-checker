@@ -1313,8 +1313,7 @@ async function applyHeadingLevelCorrections(zip: JSZip, fixes: AcceptedFix[]): P
  * elements are not touched.
  */
 async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
-  interface TextFix { level: number; originalText: string; newText: string }
-  const fixesByIndex = new Map<number, TextFix>();
+  const fixesByIndex = new Map<number, string>();
 
   for (const fix of fixes) {
     if (!fix.targetField || !fix.value) continue;
@@ -1331,7 +1330,7 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
     if (isNaN(level) || isNaN(headingIndex)) continue;
     // Skip if value is unchanged — user accepted without editing
     if (fix.value.trim() === originalText.trim()) continue;
-    fixesByIndex.set(headingIndex, { level, originalText, newText: fix.value.trim() });
+    fixesByIndex.set(headingIndex, fix.value.trim());
   }
 
   if (fixesByIndex.size === 0) return;
@@ -1355,16 +1354,6 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
     const fix = fixesByIndex.get(currentIndex);
     if (!fix) continue;
 
-    // Text guard: skip if the paragraph at this index doesn't match the
-    // original text encoded in the targetField. This is the primary guard
-    // against index drift and is sufficient on its own — the level guard was
-    // removed because applyHeadingLevelCorrections (HEAD-003) may have already
-    // changed the level of this paragraph before this function runs, causing
-    // the original-level check to incorrectly reject a valid fix. Any original
-    // heading `level` retained on the fix payload is therefore intentionally
-    // not consulted here and is only for debugging/telemetry.
-    if (getParaText(wP).trim() !== fix.originalText) continue;
-
     const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
     const allWTs = Array.from(wP.getElementsByTagNameNS(W_NS, 't'));
     if (allWTs.length === 0) {
@@ -1372,7 +1361,7 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
     }
     if (allWTs.length === 0) continue;
 
-    allWTs[0]!.textContent = fix.newText;
+    allWTs[0]!.textContent = fix;
     allWTs[0]!.removeAttribute('xml:space');
     for (let i = 1; i < allWTs.length; i++) {
       allWTs[i]!.textContent = '';
