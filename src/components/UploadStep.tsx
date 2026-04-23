@@ -93,7 +93,7 @@ export default function UploadStep({
         <div className="usa-alert">
           <div className="usa-alert__body">
             <p className="usa-alert__text">
-              This tool works best on a desktop or laptop. Downloading your corrected document may not work on mobile devices or tablets.
+              This tool works best on a desktop or laptop. Downloading your corrected document may not work on small screens.
             </p>
           </div>
         </div>
