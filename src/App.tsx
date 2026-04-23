@@ -190,25 +190,55 @@ export default function App(): React.ReactElement {
 
   const handleDownload = useCallback(async () => {
     if (!parsedDoc) return;
-    const blob = await buildDocx(
-      parsedDoc.zipArchive,
-      acceptedFixes,
-      reviewState?.autoAppliedChanges ?? []
-    );
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    // Open the tab synchronously inside the user-gesture context so iOS does
+    // not treat it as a popup after the async buildDocx gap.
+    let newTab: Window | null = null;
+    if (isIOS) {
+      newTab = window.open('', '_blank');
+      if (newTab) {
+        newTab.opener = null;
+      }
+    }
+
+    let blob: Blob;
+    try {
+      blob = await buildDocx(
+        parsedDoc.zipArchive,
+        acceptedFixes,
+        reviewState?.autoAppliedChanges ?? []
+      );
+    } catch (err) {
+      newTab?.close();
+      throw err;
+    }
     const originalName = uploadedFile?.name ?? 'nofo.docx';
     const downloadName = originalName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
 
-    const url = URL.createObjectURL(blob);
+    // Wrap in a File before creating the object URL so the generated resource
+    // carries downloadName consistently; this is especially important on iOS,
+    // where opening the blob URL in a tab influences the Share sheet / Save to
+    // Files suggested filename.
+    const url = URL.createObjectURL(new File([blob], downloadName, { type: blob.type }));
+
+    if (isIOS) {
+      if (newTab && !newTab.closed) {
+        newTab.location.href = url;
+      } else {
+        // Popup was blocked — fall back to navigating the current tab.
+        window.location.href = url;
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return;
+    }
+
     const a = document.createElement('a');
     a.href = url;
     a.download = downloadName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    // Delay revocation — iOS fetches blob URLs asynchronously after the click.
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    setTimeout(() => URL.revokeObjectURL(url), isIOS ? 60000 : 0);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   }, [parsedDoc, acceptedFixes, reviewState, uploadedFile]);
 
   const handleBack = useCallback(() => {
