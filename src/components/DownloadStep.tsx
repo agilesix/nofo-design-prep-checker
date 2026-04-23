@@ -116,7 +116,7 @@ export default function DownloadStep({
                       <polyline points="8 6 12 2 16 6"/>
                       <path d="M20 16v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4"/>
                     </svg>
-                    {' '}button at the bottom of the screen
+                    {' '}button
                   </span>
                 </li>
                 <li style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
