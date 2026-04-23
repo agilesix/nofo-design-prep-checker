@@ -211,6 +211,14 @@ $app-green-dark: #1a4f3a;
   flex: 1;
 }
 
+// Mobile-only visibility — shown below the USWDS tablet breakpoint (640px),
+// hidden at tablet and above
+.mobile-only {
+  @media (min-width: 40em) {
+    display: none;
+  }
+}
+
 // Drop zone styling
 .usa-file-input-dropzone {
   cursor: pointer;

@@ -21,9 +21,6 @@ export default function DownloadStep({
   const headingRef = useFocusHeading();
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [hasDownloaded, setHasDownloaded] = React.useState(false);
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) &&
-    !(window as unknown as Record<string, unknown>).MSStream;
-
 
   const downloadName = fileName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
   const acceptedCount = acceptedFixes.length;
@@ -65,17 +62,7 @@ export default function DownloadStep({
         </div>
       </div>
 
-      {isIOS ? (
-        <div className="usa-alert usa-alert--info margin-bottom-3">
-          <div className="usa-alert__body">
-            <p className="usa-alert__text">
-              <strong>Downloading is not supported on iPhone or iPad.</strong>{' '}
-              To download your corrected document, open this tool on a desktop or laptop computer.
-              Your session is not saved — you will need to re-upload your document on desktop.
-            </p>
-          </div>
-        </div>
-      ) : !hasDownloaded ? (
+      {!hasDownloaded ? (
         <button
           type="button"
           className="usa-button usa-button--big margin-bottom-2"
@@ -96,7 +83,7 @@ export default function DownloadStep({
         </div>
       )}
 
-      {(isIOS || !hasDownloaded) && (
+      {!hasDownloaded && (
         <>
           <p className="font-body-sm text-base-dark margin-bottom-3">{fixCountLabel}</p>
 

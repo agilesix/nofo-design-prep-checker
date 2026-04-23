@@ -4,6 +4,20 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
+## 2026-04-23 — Mobile: slim site alert on upload page replaces iOS-specific download branching
+
+**Decision:** A `usa-site-alert--slim` (info type) is shown above the H1 on the Upload page on small screens only (hidden at ≥768px via `.mobile-only { @media (min-width: 48em) { display: none } }`). Alert text: "This tool works best on a desktop or laptop. Downloading your corrected document may not work on mobile devices or tablets."
+
+All iOS-specific code was removed from the Download page: the `isIOS` detection variable, the iOS info alert, and the `(isIOS || !hasDownloaded)` body guard. The Download page now behaves identically on all devices.
+
+**Reason:** The earlier iOS "use desktop" alert on the Download page meant users had already uploaded their document, worked through all the review issues, and reached the final step before discovering they couldn't download. Setting that expectation at the Upload step — before any work is invested — is more useful and less frustrating. A device-agnostic Download page is simpler and avoids maintaining two code paths for a download flow that may work on some mobile browsers.
+
+**Alternative considered:** Keeping the iOS alert on the Download page in addition to adding the Upload alert. Rejected because the Download page alert was the original iOS workaround; once the Upload alert communicates the limitation upfront, the Download-page branch adds complexity without adding value.
+
+**Outcome:** Mobile users see the caveat before they start. The Download page is device-agnostic. The `.mobile-only` CSS utility is available for other components if similar mobile-only visibility is needed.
+
+---
+
 ## 2026-04-23 — iOS: download replaced with "use desktop" message; XML declaration fix applied
 
 **Decision:** On iOS devices (`/iPad|iPhone|iPod/.test(navigator.userAgent) && !MSStream`), the Download page replaces the download button with a neutral info alert:
