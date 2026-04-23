@@ -190,6 +190,11 @@ export default function App(): React.ReactElement {
 
   const handleDownload = useCallback(async () => {
     if (!parsedDoc) return;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    // Open the tab synchronously inside the user-gesture context so iOS does
+    // not treat it as a popup after the async buildDocx gap.
+    const newTab = isIOS ? window.open('', '_blank') : null;
+
     const blob = await buildDocx(
       parsedDoc.zipArchive,
       acceptedFixes,
@@ -199,16 +204,25 @@ export default function App(): React.ReactElement {
     const downloadName = originalName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
 
     const url = URL.createObjectURL(blob);
+
+    if (isIOS) {
+      if (newTab && !newTab.closed) {
+        newTab.location.href = url;
+      } else {
+        // Popup was blocked — fall back to navigating the current tab.
+        window.location.href = url;
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      return;
+    }
+
     const a = document.createElement('a');
     a.href = url;
     a.download = downloadName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    // Delay revocation — iOS fetches blob URLs asynchronously after the click.
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    setTimeout(() => URL.revokeObjectURL(url), isIOS ? 60000 : 0);
+    URL.revokeObjectURL(url);
   }, [parsedDoc, acceptedFixes, reviewState, uploadedFile]);
 
   const handleBack = useCallback(() => {

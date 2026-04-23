@@ -21,6 +21,7 @@ export default function DownloadStep({
   const headingRef = useFocusHeading();
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [hasDownloaded, setHasDownloaded] = React.useState(false);
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
   const downloadName = fileName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
   const acceptedCount = acceptedFixes.length;
@@ -76,6 +77,12 @@ export default function DownloadStep({
               ? content.accessibility.loadingSpinner
               : `↓ Download ${downloadName}`}
           </button>
+
+          {isIOS && (
+            <p className="font-body-sm text-base-dark margin-bottom-2">
+              On iOS, your document will open in a new tab. Tap the Share button (□↑) then choose <strong>Save to Files</strong> or <strong>Open in Word</strong>.
+            </p>
+          )}
 
           <p className="font-body-sm text-base-dark margin-bottom-3">{fixCountLabel}</p>
 
