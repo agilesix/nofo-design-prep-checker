@@ -86,6 +86,19 @@ export default function UploadStep({
 
   return (
     <div className="margin-top-4">
+      <section
+        className="usa-site-alert usa-site-alert--info usa-site-alert--slim mobile-only margin-bottom-3"
+        aria-label="Site alert"
+      >
+        <div className="usa-alert">
+          <div className="usa-alert__body">
+            <p className="usa-alert__text">
+              This tool works best on a desktop or laptop. Downloading your corrected document may not work on mobile devices or tablets.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <h1 className="usa-h1" tabIndex={-1} ref={headingRef}>{content.steps.upload.heading}</h1>
 
       <div className="usa-prose margin-bottom-3">

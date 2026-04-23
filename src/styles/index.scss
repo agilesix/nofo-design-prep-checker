@@ -211,6 +211,13 @@ $app-green-dark: #1a4f3a;
   flex: 1;
 }
 
+// Mobile-only visibility — shown below 768px, hidden at tablet and above
+.mobile-only {
+  @media (min-width: 48em) {
+    display: none;
+  }
+}
+
 // Drop zone styling
 .usa-file-input-dropzone {
   cursor: pointer;
