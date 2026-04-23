@@ -4607,3 +4607,156 @@ describe('buildDocx — ZIP round-trip integrity', () => {
     }
   });
 });
+
+// ─── XML declaration preservation (iOS compatibility) ─────────────────────────
+//
+// XMLSerializer.serializeToString() silently drops the
+// <?xml version="1.0" encoding="UTF-8" standalone="yes"?> processing
+// instruction.  Desktop Word auto-repairs missing declarations and opens the
+// file anyway.  Word for iOS is strict: a missing declaration causes
+// OfficeImportErrorDomain error 912 ("file is structurally corrupt").
+//
+// The serializeXml() helper in buildDocx.ts restores the declaration whenever
+// the serializer omits it.  The tests below lock in that behaviour by
+// triggering a real parse→modify→serialize cycle for each category of XML
+// part that buildDocx can rewrite, then asserting the expected declaration is
+// present in the output.  If serializeXml() is ever replaced with a bare
+// XMLSerializer.serializeToString() call, every test in this suite will fail.
+
+const XML_DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+
+/** Return the text content of a named file from a buildDocx output Blob. */
+async function getPartText(blob: Blob, path: string): Promise<string> {
+  const outZip = await JSZip.loadAsync(blob);
+  const file = outZip.file(path);
+  if (!file) throw new Error(`${path} missing from output ZIP`);
+  return file.async('string');
+}
+
+describe('buildDocx — XML declaration preservation (iOS Word compatibility)', () => {
+  // ── word/document.xml ────────────────────────────────────────────────────────
+
+  it('document.xml retains the XML declaration after applyRemoveContentControls rewrites it', async () => {
+    // applyRemoveContentControls runs unconditionally and rewrites document.xml
+    // whenever the file contains <w:sdt> elements.
+    const zip = new JSZip();
+    zip.file('word/document.xml', [
+      XML_DECL,
+      `<w:document xmlns:w="${W_OOXML}"><w:body>`,
+      `<w:sdt><w:sdtContent>`,
+      `<w:p><w:r><w:t>inner text</w:t></w:r></w:p>`,
+      `</w:sdtContent></w:sdt>`,
+      `<w:sectPr/></w:body></w:document>`,
+    ].join(''));
+
+    const blob = await buildDocx(zip, [], []);
+    const xml = await getPartText(blob, 'word/document.xml');
+    expect(xml.startsWith(XML_DECL), 'XML declaration must be present after content-control removal').toBe(true);
+  });
+
+  it('document.xml retains the XML declaration after applyDoublespaceFix rewrites it', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', [
+      XML_DECL,
+      `<w:document xmlns:w="${W_OOXML}"><w:body>`,
+      `<w:p><w:r><w:t>two  spaces here</w:t></w:r></w:p>`,
+      `<w:sectPr/></w:body></w:document>`,
+    ].join(''));
+
+    const change: AutoAppliedChange = {
+      ruleId: 'CLEAN-004',
+      description: 'Double spaces removed.',
+      targetField: 'text.doublespace',
+    };
+
+    const blob = await buildDocx(zip, [], [change]);
+    const xml = await getPartText(blob, 'word/document.xml');
+    expect(xml.startsWith(XML_DECL), 'XML declaration must be present after double-space fix').toBe(true);
+  });
+
+  it('document.xml retains the XML declaration after applyHeadingLeadingSpaceFix rewrites it', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', [
+      XML_DECL,
+      `<w:document xmlns:w="${W_OOXML}"><w:body>`,
+      `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>`,
+      `<w:r><w:t xml:space="preserve"> Leading space heading</w:t></w:r></w:p>`,
+      `<w:sectPr/></w:body></w:document>`,
+    ].join(''));
+
+    const change: AutoAppliedChange = {
+      ruleId: 'CLEAN-008',
+      description: 'Leading spaces removed.',
+      targetField: 'heading.leadingspace',
+    };
+
+    const blob = await buildDocx(zip, [], [change]);
+    const xml = await getPartText(blob, 'word/document.xml');
+    expect(xml.startsWith(XML_DECL), 'XML declaration must be present after heading leading-space fix').toBe(true);
+  });
+
+  // ── [Content_Types].xml ───────────────────────────────────────────────────────
+
+  it('[Content_Types].xml retains the XML declaration after applyAcceptTrackedChanges rewrites it', async () => {
+    // applyAcceptTrackedChangesAndRemoveComments removes the /word/comments.xml
+    // Override entry and rewrites [Content_Types].xml when a comments file exists.
+    const zip = new JSZip();
+    zip.file('word/document.xml', [
+      XML_DECL,
+      `<w:document xmlns:w="${W_OOXML}"><w:body>`,
+      `<w:p><w:r><w:t>text</w:t></w:r></w:p>`,
+      `<w:sectPr/></w:body></w:document>`,
+    ].join(''));
+    zip.file('[Content_Types].xml', [
+      XML_DECL,
+      `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">`,
+      `<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>`,
+      `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>`,
+      `<Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/>`,
+      `</Types>`,
+    ].join(''));
+    zip.file('word/comments.xml', [
+      XML_DECL,
+      `<w:comments xmlns:w="${W_OOXML}"/>`,
+    ].join(''));
+
+    const change: AutoAppliedChange = {
+      ruleId: 'CLEAN-008',
+      description: 'Accept tracked changes.',
+      targetField: 'doc.acceptchanges',
+    };
+
+    const blob = await buildDocx(zip, [], [change]);
+    const xml = await getPartText(blob, '[Content_Types].xml');
+    expect(xml.startsWith(XML_DECL), 'XML declaration must be present in [Content_Types].xml after rewrite').toBe(true);
+  });
+
+  // ── word/_rels/document.xml.rels ─────────────────────────────────────────────
+
+  it('word/_rels/document.xml.rels retains the XML declaration after applyEmailMailtoFixes rewrites it', async () => {
+    // applyEmailMailtoFixes appends mailto Relationship entries and always
+    // rewrites word/_rels/document.xml.rels when an email change is present.
+    const zip = new JSZip();
+    zip.file('word/document.xml', [
+      XML_DECL,
+      `<w:document xmlns:w="${W_OOXML}"><w:body>`,
+      `<w:p><w:r><w:t>contact@example.gov for info</w:t></w:r></w:p>`,
+      `<w:sectPr/></w:body></w:document>`,
+    ].join(''));
+    zip.file('word/_rels/document.xml.rels', [
+      XML_DECL,
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`,
+    ].join(''));
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-008',
+      description: 'Email converted to mailto hyperlink.',
+      targetField: 'email.mailto',
+      value: 'contact@example.gov',
+    };
+
+    const blob = await buildDocx(zip, [], [change]);
+    const xml = await getPartText(blob, 'word/_rels/document.xml.rels');
+    expect(xml.startsWith(XML_DECL), 'XML declaration must be present in document.xml.rels after rewrite').toBe(true);
+  });
+});
