@@ -201,11 +201,17 @@ export default function App(): React.ReactElement {
       }
     }
 
-    const blob = await buildDocx(
-      parsedDoc.zipArchive,
-      acceptedFixes,
-      reviewState?.autoAppliedChanges ?? []
-    );
+    let blob: Blob;
+    try {
+      blob = await buildDocx(
+        parsedDoc.zipArchive,
+        acceptedFixes,
+        reviewState?.autoAppliedChanges ?? []
+      );
+    } catch (err) {
+      newTab?.close();
+      throw err;
+    }
     const originalName = uploadedFile?.name ?? 'nofo.docx';
     const downloadName = originalName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
 
