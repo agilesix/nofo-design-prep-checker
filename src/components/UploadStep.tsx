@@ -87,7 +87,7 @@ export default function UploadStep({
   return (
     <div className="margin-top-4">
       <section
-        className="usa-site-alert usa-site-alert--info usa-site-alert--slim mobile-only margin-bottom-3"
+        className="usa-site-alert usa-site-alert--slim mobile-only margin-bottom-3"
         aria-label="Site alert"
       >
         <div className="usa-alert">
