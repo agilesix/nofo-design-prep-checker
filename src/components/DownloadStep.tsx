@@ -21,7 +21,8 @@ export default function DownloadStep({
   const headingRef = useFocusHeading();
   const [isDownloading, setIsDownloading] = React.useState(false);
   const [hasDownloaded, setHasDownloaded] = React.useState(false);
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) &&
+    !(window as unknown as Record<string, unknown>).MSStream;
 
   const downloadName = fileName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
   const acceptedCount = acceptedFixes.length;
@@ -65,6 +66,81 @@ export default function DownloadStep({
 
       {!hasDownloaded ? (
         <>
+          {isIOS && (
+            <div
+              className="margin-bottom-3"
+              style={{
+                background: '#fff8e1',
+                borderLeft: '4px solid #f9c642',
+                borderRadius: '0 4px 4px 0',
+                padding: '0.875rem 1.125rem',
+              }}
+            >
+              <p className="margin-0 margin-bottom-05 font-body-sm text-bold">
+                📱 On iPhone or iPad?
+              </p>
+              <p className="margin-0 margin-bottom-1 font-body-sm">
+                After tapping download, your document opens in a new tab. To save it:
+              </p>
+              <ol style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                <li style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.375rem' }}>
+                  <span style={{
+                    flexShrink: 0,
+                    background: '#f9c642',
+                    borderRadius: '50%',
+                    width: '1.25rem',
+                    height: '1.25rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.7rem',
+                    fontWeight: 'bold',
+                    marginTop: '0.1rem',
+                  }}>1</span>
+                  <span className="font-body-sm">
+                    In the new tab, tap the Share{' '}
+                    <svg
+                      aria-hidden="true"
+                      focusable="false"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{ verticalAlign: 'middle', display: 'inline-block' }}
+                    >
+                      <line x1="12" y1="2" x2="12" y2="14"/>
+                      <polyline points="8 6 12 2 16 6"/>
+                      <path d="M20 16v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4"/>
+                    </svg>
+                    {' '}button
+                  </span>
+                </li>
+                <li style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                  <span style={{
+                    flexShrink: 0,
+                    background: '#f9c642',
+                    borderRadius: '50%',
+                    width: '1.25rem',
+                    height: '1.25rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.7rem',
+                    fontWeight: 'bold',
+                    marginTop: '0.1rem',
+                  }}>2</span>
+                  <span className="font-body-sm">
+                    Choose <strong>Open in Word</strong> or <strong>Save to Files</strong>
+                  </span>
+                </li>
+              </ol>
+            </div>
+          )}
+
           <button
             type="button"
             className="usa-button usa-button--big margin-bottom-2"
@@ -74,15 +150,9 @@ export default function DownloadStep({
             aria-busy={isDownloading}
           >
             {isDownloading
-              ? content.accessibility.loadingSpinner
+              ? (isIOS ? 'Preparing your document…' : content.accessibility.loadingSpinner)
               : `↓ Download ${downloadName}`}
           </button>
-
-          {isIOS && (
-            <p className="font-body-sm text-base-dark margin-bottom-2">
-              On iOS, your document will open in a new tab. Tap the Share button, then choose <strong>Save to Files</strong> or <strong>Open in Word</strong>.
-            </p>
-          )}
 
           <p className="font-body-sm text-base-dark margin-bottom-3">{fixCountLabel}</p>
 

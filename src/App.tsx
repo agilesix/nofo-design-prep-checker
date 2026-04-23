@@ -190,7 +190,8 @@ export default function App(): React.ReactElement {
 
   const handleDownload = useCallback(async () => {
     if (!parsedDoc) return;
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) &&
+      !(window as unknown as Record<string, unknown>).MSStream;
     // Open the tab synchronously inside the user-gesture context so iOS does
     // not treat it as a popup after the async buildDocx gap.
     let newTab: Window | null = null;
