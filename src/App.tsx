@@ -209,8 +209,10 @@ export default function App(): React.ReactElement {
     const originalName = uploadedFile?.name ?? 'nofo.docx';
     const downloadName = originalName.replace(/\.docx$/i, `${content.download.filename.suffix}.docx`);
 
-    // Wrap in a File so iOS uses downloadName as the suggested filename in the
-    // Share sheet / Save to Files dialog when the blob URL is opened in a tab.
+    // Wrap in a File before creating the object URL so the generated resource
+    // carries downloadName consistently; this is especially important on iOS,
+    // where opening the blob URL in a tab influences the Share sheet / Save to
+    // Files suggested filename.
     const url = URL.createObjectURL(new File([blob], downloadName, { type: blob.type }));
 
     if (isIOS) {
