@@ -80,7 +80,7 @@ export default function DownloadStep({
 
           {isIOS && (
             <p className="font-body-sm text-base-dark margin-bottom-2">
-              On iOS, your document will open in a new tab. Tap the Share button (□↑) then choose <strong>Save to Files</strong> or <strong>Open in Word</strong>.
+              On iOS, your document will open in a new tab. Tap the Share button, then choose <strong>Save to Files</strong> or <strong>Open in Word</strong>.
             </p>
           )}
 
