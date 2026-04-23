@@ -193,7 +193,13 @@ export default function App(): React.ReactElement {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     // Open the tab synchronously inside the user-gesture context so iOS does
     // not treat it as a popup after the async buildDocx gap.
-    const newTab = isIOS ? window.open('', '_blank') : null;
+    let newTab: Window | null = null;
+    if (isIOS) {
+      newTab = window.open('', '_blank');
+      if (newTab) {
+        newTab.opener = null;
+      }
+    }
 
     const blob = await buildDocx(
       parsedDoc.zipArchive,
