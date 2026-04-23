@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.6.1](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.6.0...v1.6.1) (2026-04-23)
+
+
+### Bug Fixes
+
+* address review feedback on iOS download and IMG-001 preamble exemption ([0afc07e](https://github.com/agilesix/nofo-design-prep-checker/commit/0afc07e604dc5c8fae949372585f5cfe6e8b47cc))
+* **buildDocx:** restore XML declaration stripped by XMLSerializer ([7c4d0a2](https://github.com/agilesix/nofo-design-prep-checker/commit/7c4d0a2ad7bdfc39f72d2880deea7cd2c501ddef))
+* **IMG-001:** add non-null assertions to satisfy strict TS array indexing ([9f01d4f](https://github.com/agilesix/nofo-design-prep-checker/commit/9f01d4f2e7b6f7e8507fd32f34d31272b9a3e6c4))
+* **IMG-001:** exempt CDC/DGHT preamble images from alt text check ([080ecd9](https://github.com/agilesix/nofo-design-prep-checker/commit/080ecd980fcae2491cbe44a7acecfb5adf7ed41a))
+* implement iOS-specific download handling for .docx files ([fd5f5ff](https://github.com/agilesix/nofo-design-prep-checker/commit/fd5f5ff8182f99ec8d1fd9521c8ba33f92f89605))
+* **ios:** add pre-download banner with save instructions and loading state ([5476ecd](https://github.com/agilesix/nofo-design-prep-checker/commit/5476ecd1f64f8ab0ee7e25671365d90b55b3ff49))
+* **ios:** close pre-opened tab if buildDocx throws ([48a7632](https://github.com/agilesix/nofo-design-prep-checker/commit/48a7632e661115ce16507dd1c3b9c634b48c377c))
+* **ios:** gate &lt;a download&gt; data URI path to Safari 13.4+ ([586226b](https://github.com/agilesix/nofo-design-prep-checker/commit/586226bd396944f0829f636932e9fe948683301d))
+* **ios:** guard iosWindow navigation against user-closed window ([32cf9d1](https://github.com/agilesix/nofo-design-prep-checker/commit/32cf9d15416e9a2257373f0f28d98b81806bcef5))
+* **ios:** open blob URL in pre-opened tab with inline save instructions ([566e671](https://github.com/agilesix/nofo-design-prep-checker/commit/566e671875d03309c506137acd4019e700c3ac44))
+* **ios:** open blob URL in pre-opened tab with inline save instructions ([538d0f4](https://github.com/agilesix/nofo-design-prep-checker/commit/538d0f436ae4897ecdb6babfc8f9365dbf47cc19))
+* **ios:** remove Web Share API — use data URI directly on iOS ([b4d3e69](https://github.com/agilesix/nofo-design-prep-checker/commit/b4d3e69b4475f3efcda5365b11f99a0a0ded366e))
+* **ios:** remove Web Share API — use data URI directly on iOS ([adba383](https://github.com/agilesix/nofo-design-prep-checker/commit/adba3838f5ac5f1fa9e4af73ad8568ce708e0526))
+* **ios:** replace download button with use-desktop message on iOS ([ece4a08](https://github.com/agilesix/nofo-design-prep-checker/commit/ece4a08823729dd8cf0234415cc6aa61f48ce764))
+* **ios:** replace download with use-desktop message + XML declaration fix ([12d21fc](https://github.com/agilesix/nofo-design-prep-checker/commit/12d21fcc6c2a3c4fd6da70dda1c33fbc66f9e87b))
+* **ios:** switch from data URI to blob URL to fix corrupted downloads ([e4bcd88](https://github.com/agilesix/nofo-design-prep-checker/commit/e4bcd88262be0c5628e7f4fa0753759e042b4f0b))
+* **ios:** switch from data URI to blob URL to fix corrupted downloads ([1ca0209](https://github.com/agilesix/nofo-design-prep-checker/commit/1ca02098eb3a545192237f2c1329c249575cfc65))
+* **ios:** use &lt;a download&gt; with data URI to preserve filename on iOS ([df6c9af](https://github.com/agilesix/nofo-design-prep-checker/commit/df6c9afb4a55d731320d2d9d45fb8a33e6b95747))
+* **ios:** use &lt;a download&gt; with data URI to preserve filename on iOS ([f75be3a](https://github.com/agilesix/nofo-design-prep-checker/commit/f75be3a3aebee0cf2e4b61f9502532fc459a468c))
+* **ios:** use window.location.replace() for data URI navigation ([93ef72f](https://github.com/agilesix/nofo-design-prep-checker/commit/93ef72f754eae64b73d2769df3c8cf193bf00ea8))
+* **ios:** wrap blob in File to preserve downloadName on iOS share sheet ([8784529](https://github.com/agilesix/nofo-design-prep-checker/commit/87845298954b09d8b87475477aa8767ce6a7cd9d))
+* **lint:** replace (window as any) with typed cast in iOS detection ([182ca27](https://github.com/agilesix/nofo-design-prep-checker/commit/182ca27ec6999c5fb6cc11e778fbb8155157612b))
+* simplify iOS download to anchor-click with deferred blob revocation ([7b40399](https://github.com/agilesix/nofo-design-prep-checker/commit/7b40399d1cb34cd026be4cbdb98f39b32c504bbc))
+* simplify iOS download to anchor-click with deferred blob revocation ([6520e92](https://github.com/agilesix/nofo-design-prep-checker/commit/6520e922e532b93c0395ec823e19669f477bbc45))
+
 ## [1.6.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.5.2...v1.6.0) (2026-04-22)
 
 
