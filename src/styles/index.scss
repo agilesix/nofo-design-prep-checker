@@ -211,9 +211,10 @@ $app-green-dark: #1a4f3a;
   flex: 1;
 }
 
-// Mobile-only visibility — shown below 768px, hidden at tablet and above
+// Mobile-only visibility — shown below the USWDS tablet breakpoint (640px),
+// hidden at tablet and above
 .mobile-only {
-  @media (min-width: 48em) {
+  @media (min-width: 40em) {
     display: none;
   }
 }
