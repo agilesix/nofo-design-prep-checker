@@ -3,6 +3,16 @@ import type { AcceptedFix, AutoAppliedChange } from '../types';
 import { DGHT_STEP1_ANCHOR } from '../rules/opdiv/CLEAN-007-constants';
 import { groupListParagraphs } from './listHelpers';
 
+// XMLSerializer.serializeToString() drops the XML declaration. Word for iOS
+// (and strict XML consumers) require it — desktop Word auto-repairs missing
+// declarations, masking the issue on non-iOS platforms. This wrapper restores
+// the standard OOXML declaration whenever it is absent.
+const _xmlSerializer = new XMLSerializer();
+function serializeXml(xmlDoc: Document): string {
+  const raw = _xmlSerializer.serializeToString(xmlDoc);
+  return raw.startsWith('<?xml') ? raw : `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${raw}`;
+}
+
 const BUILD_DOCX_DEBUG =
   (globalThis as typeof globalThis & {
     process?: { env?: Record<string, string | undefined> };
@@ -364,8 +374,8 @@ async function applyMetadataFixes(zip: JSZip, fixes: AcceptedFix[]): Promise<voi
     }
   }
 
-  const serializer = new XMLSerializer();
-  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+
+  zip.file('word/document.xml', serializeXml(xmlDoc));
 }
 
 async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
@@ -481,8 +491,8 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
     }
   }
 
-  const serializer = new XMLSerializer();
-  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+
+  zip.file('word/document.xml', serializeXml(xmlDoc));
 }
 
 /**
@@ -520,8 +530,8 @@ async function applyDoublespaceFix(zip: JSZip): Promise<void> {
     wT.textContent = text.replace(/ {2,}/g, ' ');
   }
 
-  const serializer = new XMLSerializer();
-  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+
+  zip.file('word/document.xml', serializeXml(xmlDoc));
 }
 
 /**
@@ -659,8 +669,8 @@ async function applyTaglineRelocation(zip: JSZip): Promise<void> {
     body.appendChild(primary);
   }
 
-  const serializer = new XMLSerializer();
-  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+
+  zip.file('word/document.xml', serializeXml(xmlDoc));
 }
 
 // ─── CLEAN-014: Strip wrapping quotes from tagline value ─────────────────────
@@ -738,8 +748,8 @@ async function applyTaglineUnquote(zip: JSZip): Promise<void> {
     allWTs[i]!.textContent = '';
   }
 
-  const serializer = new XMLSerializer();
-  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+
+  zip.file('word/document.xml', serializeXml(xmlDoc));
 }
 
 // ─── CLEAN-006: Remove "Before You Begin" heading ────────────────────────────
@@ -780,8 +790,8 @@ async function applyRemoveBeforeYouBeginHeading(zip: JSZip): Promise<void> {
     body.removeChild(el);
   }
 
-  const serializer = new XMLSerializer();
-  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+
+  zip.file('word/document.xml', serializeXml(xmlDoc));
 }
 
 // ─── CLEAN-007: Remove CDC/DGHT editorial scaffolding ────────────────────────
@@ -830,8 +840,8 @@ async function applyRemoveDghtScaffolding(zip: JSZip): Promise<void> {
     }
   }
 
-  const serializer = new XMLSerializer();
-  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+
+  zip.file('word/document.xml', serializeXml(xmlDoc));
 }
 
 // ─── CLEAN-007 (instruction boxes): Remove DGHT/DGHP instruction box tables ──
@@ -865,8 +875,8 @@ async function applyRemoveDghtInstructionBoxes(zip: JSZip): Promise<void> {
   }
 
   if (changed) {
-    const serializer = new XMLSerializer();
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  
+    zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
 
@@ -1076,8 +1086,7 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
   }
 
   if (changed) {
-    const serializer = new XMLSerializer();
-    const outXml = serializer.serializeToString(xmlDoc);
+    const outXml = serializeXml(xmlDoc);
     dbg('[CLEAN-008] Serialized output snippet (first 800 chars):', outXml.slice(0, 800));
     zip.file('word/document.xml', outXml);
   } else {
@@ -1203,8 +1212,8 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
   }
 
   if (changed) {
-    const serializer = new XMLSerializer();
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  
+    zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
 
@@ -1289,8 +1298,8 @@ async function applyHeadingLevelCorrections(zip: JSZip, fixes: AcceptedFix[]): P
   }
 
   if (changed) {
-    const serializer = new XMLSerializer();
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  
+    zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
 
@@ -1370,8 +1379,8 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
   }
 
   if (changed) {
-    const serializer = new XMLSerializer();
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  
+    zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
 
@@ -1484,8 +1493,8 @@ async function applyDateFormatCorrections(zip: JSZip): Promise<void> {
   }
 
   if (changed) {
-    const serializer = new XMLSerializer();
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  
+    zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
 
@@ -1568,8 +1577,8 @@ async function applyEmailMailtoFixes(zip: JSZip, emails: string[]): Promise<void
     relsRoot.appendChild(rel);
   }
 
-  const serializer = new XMLSerializer();
-  zip.file(relsPath, serializer.serializeToString(relsDoc), { compression: 'STORE' });
+
+  zip.file(relsPath, serializeXml(relsDoc), { compression: 'STORE' });
 
   // ── Document body ─────────────────────────────────────────────────────────
   const docFile = zip.file('word/document.xml');
@@ -1624,7 +1633,7 @@ async function applyEmailMailtoFixes(zip: JSZip, emails: string[]): Promise<void
     }
   }
 
-  zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  zip.file('word/document.xml', serializeXml(xmlDoc));
 }
 
 /** Create a <w:r> for the email address itself, with w:rStyle w:val="Hyperlink". */
@@ -1747,7 +1756,7 @@ function applyTrackedChangesAndCommentsToXmlDoc(xmlDoc: Document): boolean {
  */
 async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<void> {
   const parser = new DOMParser();
-  const serializer = new XMLSerializer();
+
 
   for (const path of getStoryPartPaths(zip)) {
     const file = zip.file(path);
@@ -1757,7 +1766,7 @@ async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<v
     const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
     const changed = applyTrackedChangesAndCommentsToXmlDoc(xmlDoc);
     if (changed) {
-      zip.file(path, serializer.serializeToString(xmlDoc));
+      zip.file(path, serializeXml(xmlDoc));
     }
   }
 
@@ -1792,7 +1801,7 @@ async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<v
       for (const el of overridesToRemove) {
         el.parentNode?.removeChild(el);
       }
-      zip.file(contentTypesPath, serializer.serializeToString(contentTypesDoc), { compression: 'STORE' });
+      zip.file(contentTypesPath, serializeXml(contentTypesDoc), { compression: 'STORE' });
     }
   }
   // ── Clean comment relationship entries ────────────────────────────────────
@@ -1820,7 +1829,7 @@ async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<v
     for (const el of commentRels) {
       el.parentNode?.removeChild(el);
     }
-    zip.file(relsPath, serializer.serializeToString(relsDoc), { compression: 'STORE' });
+    zip.file(relsPath, serializeXml(relsDoc), { compression: 'STORE' });
   }
 }
 
@@ -1883,8 +1892,8 @@ async function applyListPeriodFix(zip: JSZip): Promise<void> {
   }
 
   if (changed) {
-    const serializer = new XMLSerializer();
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  
+    zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
 
@@ -1967,8 +1976,8 @@ async function applyTimeFormatCorrections(zip: JSZip): Promise<void> {
   }
 
   if (changed) {
-    const serializer = new XMLSerializer();
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  
+    zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
 
@@ -2081,8 +2090,8 @@ async function applyPdfLabelFix(zip: JSZip): Promise<void> {
   }
 
   if (changed) {
-    const serializer = new XMLSerializer();
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  
+    zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
 
@@ -2164,8 +2173,8 @@ async function applyPartialHyperlinkFix(zip: JSZip): Promise<void> {
   }
 
   if (changed) {
-    const serializer = new XMLSerializer();
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  
+    zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
 
@@ -2465,8 +2474,8 @@ async function applyAsteriskedBoldFix(zip: JSZip): Promise<void> {
   }
 
   if (changed) {
-    const serializer = new XMLSerializer();
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  
+    zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
 
@@ -2611,8 +2620,8 @@ async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
   }
 
   if (changed) {
-    const serializer = new XMLSerializer();
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  
+    zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
 
@@ -2656,8 +2665,8 @@ async function applyBoldBulletFix(zip: JSZip): Promise<void> {
   }
 
   if (changed) {
-    const serializer = new XMLSerializer();
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  
+    zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
 
@@ -2701,8 +2710,8 @@ async function applyTrailingPeriodBoldFix(zip: JSZip): Promise<void> {
   }
 
   if (changed) {
-    const serializer = new XMLSerializer();
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  
+    zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
 
@@ -2841,8 +2850,8 @@ async function applyImportantPublicHeadingFix(zip: JSZip): Promise<void> {
   }
 
   if (changed) {
-    const serializer = new XMLSerializer();
-    zip.file('word/document.xml', serializer.serializeToString(xmlDoc));
+  
+    zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
 
@@ -2942,7 +2951,7 @@ function directChildEl(parent: Element, tagName: string): Element | null {
  */
 async function applyRemoveContentControls(zip: JSZip): Promise<void> {
   const parser = new DOMParser();
-  const serializer = new XMLSerializer();
+
 
   for (const path of getStoryPartPaths(zip)) {
     const file = zip.file(path);
@@ -2954,7 +2963,7 @@ async function applyRemoveContentControls(zip: JSZip): Promise<void> {
 
     const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
     if (stripContentControlsFromXmlDoc(xmlDoc)) {
-      zip.file(path, serializer.serializeToString(xmlDoc));
+      zip.file(path, serializeXml(xmlDoc));
     }
   }
 }
