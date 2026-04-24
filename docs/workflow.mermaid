@@ -1,0 +1,52 @@
+flowchart TD
+    A([User visits app]) --> B[Upload .docx file]
+    B --> C{Valid .docx?}
+    C -- No --> D[Show error:\nUnsupported file type]
+    D --> B
+
+    C -- Yes --> E[Parse document\nmammoth.js → HTML + paragraph objects\nJSZip → raw XML + relationships]
+
+    E --> F[Extract metadata\nWord core properties:\ntitle, author, subject, description]
+
+    E --> G[Run auto-fixes silently\nRemove CDC/DGHT editorial scaffolding\nRelocate tagline if needed\nOther silent corrections]
+
+    F --> H
+    G --> H
+
+    H[Run rule engine\nAll checks execute in parallel]
+
+    H --> H1[Structure checks\nHeadings, step order,\nsection presence]
+    H --> H2[Formatting checks\nBold, lists, tables,\ncaptions, footnotes]
+    H --> H3[Metadata checks\nTitle, author, subject,\ndescription fields]
+    H --> H4[Link checks\nBroken links, anchors,\nURL format]
+    H --> H5[Content checks\nDate formats, tagline,\nkey facts section]
+
+    H1 & H2 & H3 & H4 & H5 --> I[Aggregate results\nGroup by severity:\nError · Warning · Info]
+
+    I --> J{Any issues found?}
+
+    J -- No --> K([Show: All checks passed\nReady for design handoff])
+
+    J -- Yes --> L[Display Summary page\nStat cards by severity\nTotal issue count]
+
+    L --> M[User reviews issues\nFiltered by severity\nLocation: nearest heading]
+
+    M --> N{Issue has\nauto-fix?}
+
+    N -- Yes --> O[User accepts fix\nDocument patched in memory]
+    N -- No --> P[User dismisses issue\nor corrects manually in Word]
+
+    O --> Q
+    P --> Q
+
+    Q{More issues\nto review?}
+    Q -- Yes --> M
+    Q -- No --> R[Export fixed .docx\nJSZip reassembles file\nwith accepted patches]
+
+    R --> S([Download ready\nHand off to designer])
+
+    style A fill:#1b4332,color:#fff,stroke:none
+    style S fill:#1b4332,color:#fff,stroke:none
+    style K fill:#1b4332,color:#fff,stroke:none
+    style D fill:#c0392b,color:#fff,stroke:none
+    style G fill:#2c3e50,color:#fff,stroke:#555
