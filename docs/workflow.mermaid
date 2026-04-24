@@ -33,7 +33,7 @@ flowchart TD
 
     M --> N{Issue has\nauto-fix?}
 
-    N -- Yes --> O[User accepts fix\nDocument patched in memory]
+    N -- Yes --> O[User accepts fix\nAccepted fix stored for export]
     N -- No --> P[User dismisses issue\nor corrects manually in Word]
 
     O --> Q
