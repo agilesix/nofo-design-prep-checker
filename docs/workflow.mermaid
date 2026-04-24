@@ -13,7 +13,7 @@ flowchart TD
     F --> H
     G --> H
 
-    H[Run rule engine\nAll checks execute in parallel]
+    H[Run rule engine\nChecks execute sequentially]
 
     H --> H1[Structure checks\nHeadings, step order,\nsection presence]
     H --> H2[Formatting checks\nBold, lists, tables,\ncaptions, footnotes]
