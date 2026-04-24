@@ -1,0 +1,48 @@
+flowchart TD
+    A([User visits app]) --> B[Upload .docx file]
+    B --> C{Valid .docx?}
+    C -- No --> D[Show .docx-only error]
+    D --> B
+
+    C -- Yes --> E[Parse document\nmammoth.js → HTML + paragraph objects\nJSZip → raw XML + relationships]
+
+    E --> H[Run rule engine\nSingle RuleRunner.run(...) pass\nAuto-apply rules first, then regular rules]
+
+    H --> G[Rule category: auto-fixes silently\nRemove CDC/DGHT editorial scaffolding\nRelocate tagline if needed\nOther silent corrections]
+
+    G --> F[Rule category: extract metadata\nauthor, subject, keywords]
+
+    F --> H1[Structure checks\nHeadings, step order,\nsection presence]
+    F --> H2[Formatting checks\nBold, lists, tables,\ncaptions, footnotes]
+    F --> H3[Metadata checks\nauthor, subject,\nkeywords fields]
+    F --> H4[Link checks\nBroken links, anchors,\nURL format]
+    F --> H5[Content checks\nDate formats, tagline,\nkey facts section]
+    H1 & H2 & H3 & H4 & H5 --> I[Aggregate results\nGroup by severity:\nError · Warning · Suggestion]
+
+    I --> J{Any issues found?}
+
+    J -- No --> K([Show: All checks passed\nReady for design handoff])
+
+    J -- Yes --> L[Display Summary page\nStat cards by severity\nTotal issue count]
+
+    L --> M[User reviews issues\nFiltered by severity\nLocation: nearest heading]
+
+    M --> N{Issue has\nauto-fix?}
+
+    N -- Yes --> O[User accepts fix\nAccepted fix stored for export]
+    N -- No --> P[User dismisses issue\nor corrects manually in Word]
+
+    O --> Q
+    P --> Q
+
+    Q{More issues\nto review?}
+    Q -- Yes --> M
+    Q -- No --> R[Export fixed .docx\nJSZip reassembles file\nwith accepted patches]
+
+    R --> S([Download ready\nHand off to designer])
+
+    style A fill:#1b4332,color:#fff,stroke:none
+    style S fill:#1b4332,color:#fff,stroke:none
+    style K fill:#1b4332,color:#fff,stroke:none
+    style D fill:#c0392b,color:#fff,stroke:none
+    style G fill:#2c3e50,color:#fff,stroke:#555
