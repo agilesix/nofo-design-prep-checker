@@ -1,0 +1,46 @@
+flowchart TD
+    A([Idea or problem surfaces\nTesting · new template · feedback]) --> B
+
+    B[Claude.ai\nThink through spec\nMake product decisions\nDraft implementation prompt]
+
+    B --> C[Claude Code\nTerminal-based implementation\nGuided by prompt from Claude.ai]
+
+    C --> D[TypeScript check\nnpx tsc --noEmit]
+    D --> E{Pass?}
+    E -- No --> F[Targeted fix prompt\nto Claude Code]
+    F --> D
+    E -- Yes --> G[Lint\nnpm run lint]
+    G --> H{Pass?}
+    H -- No --> F
+    H -- Yes --> I[Commit + push\ngit add · git commit · git push]
+
+    I --> J[Open pull request\nGitHub]
+
+    J --> K[GitHub Copilot\nAutomated PR review\nSuggestions flagged]
+
+    K --> L{Suggestions\nto act on?}
+
+    L -- Yes --> M[Human review\nEvaluate suggestions]
+    M --> N[Pass feedback to\nClaude or Claude Code]
+    N --> C
+
+    L -- No --> O[Merge PR\nGitHub]
+
+    O --> P[Cloudflare Pages\nAuto-deploy on merge]
+
+    P --> Q[Test in browser\nLive app review]
+
+    Q --> R[Update docs\nchangelog · docs/decisions.md · docs/rules.md]
+
+    R --> S{New idea or\nproblem?}
+    S -- Yes --> A
+    S -- No --> T([Done for now])
+
+    style A fill:#1b4332,color:#fff,stroke:none
+    style T fill:#1b4332,color:#fff,stroke:none
+    style B fill:#c47a1e,color:#fff,stroke:none
+    style C fill:#c47a1e,color:#fff,stroke:none
+    style K fill:#6e3fa3,color:#fff,stroke:none
+    style M fill:#1b4332,color:#fff,stroke:none
+    style O fill:#1b4332,color:#fff,stroke:none
+    style P fill:#f38020,color:#fff,stroke:none
