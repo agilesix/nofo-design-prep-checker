@@ -6,21 +6,17 @@ flowchart TD
 
     C -- Yes --> E[Parse document\nmammoth.js → HTML + paragraph objects\nJSZip → raw XML + relationships]
 
-    E --> F[Extract metadata\nBody paragraphs:\nauthor, subject, keywords]
+    E --> H[Run rule engine\nSingle RuleRunner.run(...) pass\nAuto-apply rules first, then regular rules]
 
-    E --> G[Run auto-fixes silently\nRemove CDC/DGHT editorial scaffolding\nRelocate tagline if needed\nOther silent corrections]
+    H --> G[Rule category: auto-fixes silently\nRemove CDC/DGHT editorial scaffolding\nRelocate tagline if needed\nOther silent corrections]
 
-    F --> H
-    G --> H
+    G --> F[Rule category: extract metadata\nauthor, subject, keywords]
 
-    H[Run rule engine\nChecks execute sequentially]
-
-    H --> H1[Structure checks\nHeadings, step order,\nsection presence]
-    H --> H2[Formatting checks\nBold, lists, tables,\ncaptions, footnotes]
-    H --> H3[Metadata checks\nauthor, subject,\nkeywords fields]
-    H --> H4[Link checks\nBroken links, anchors,\nURL format]
-    H --> H5[Content checks\nDate formats, tagline,\nkey facts section]
-
+    F --> H1[Structure checks\nHeadings, step order,\nsection presence]
+    F --> H2[Formatting checks\nBold, lists, tables,\ncaptions, footnotes]
+    F --> H3[Metadata checks\nauthor, subject,\nkeywords fields]
+    F --> H4[Link checks\nBroken links, anchors,\nURL format]
+    F --> H5[Content checks\nDate formats, tagline,\nkey facts section]
     H1 & H2 & H3 & H4 & H5 --> I[Aggregate results\nGroup by severity:\nError · Warning · Suggestion]
 
     I --> J{Any issues found?}
