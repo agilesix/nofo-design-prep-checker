@@ -1,7 +1,7 @@
 flowchart TD
     A([User visits app]) --> B[Upload .docx file]
     B --> C{Valid .docx?}
-    C -- No --> D[Show error:\nUnsupported file type]
+    C -- No --> D[Show .docx-only error]
     D --> B
 
     C -- Yes --> E[Parse document\nmammoth.js → HTML + paragraph objects\nJSZip → raw XML + relationships]
