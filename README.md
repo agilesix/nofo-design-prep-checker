@@ -148,6 +148,10 @@ See [docs/workflow.mermaid](docs/workflow.mermaid) for an end-to-end diagram of 
 
 See [docs/decisions.md](docs/decisions.md) for a log of significant architecture and implementation decisions — what was decided, why, and what alternatives were considered.
 
+## Development workflow
+
+See [docs/dev-workflow.mermaid](docs/dev-workflow.mermaid) for a diagram of the AI-enabled development workflow used to build and maintain this tool — from idea to deployment.
+
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for a history of notable changes to this project.
