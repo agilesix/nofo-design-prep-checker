@@ -4,8 +4,6 @@ An internal HHS tool that helps staff and contractors prepare Notice of Funding 
 
 > **Internal tool — not for public distribution.** This tool is for HHS staff and contractors. Do not share this URL publicly.
 
-See [docs/workflow.mermaid](docs/workflow.mermaid) for an end-to-end diagram of the app's processing flow.
-
 ## Impact
 
 Preparing a NOFO Word document for design has always been a manual, time-intensive process. A coach, grant writer, or designer working carefully through a NOFO — checking metadata fields, verifying 60 to 100+ hyperlinks, reviewing table structures, hunting for footnote and image issues, then fixing each problem found directly in the Word document — typically spent **3 to 4 hours per NOFO**.
@@ -141,6 +139,10 @@ Security headers are set in `public/_headers`. The `robots.txt` blocks all crawl
 ## Rules
 
 See [docs/rules.md](docs/rules.md) for a complete list of all checks performed by the tool.
+
+## Processing flow
+
+See [docs/workflow.mermaid](docs/workflow.mermaid) for an end-to-end diagram of the app's processing flow.
 
 ## Architecture decisions
 
