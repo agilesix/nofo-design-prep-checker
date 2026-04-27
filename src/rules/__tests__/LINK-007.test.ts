@@ -69,7 +69,7 @@ describe('LINK-007: detection', () => {
 
 // ─── No-ops ───────────────────────────────────────────────────────────────────
 
-describe('LINK-007: no changes when [PDF is already present in link text', () => {
+describe('LINK-007: no changes when [PDF] is already present in link text', () => {
   it('does not flag a PDF link that already ends with [PDF]', () => {
     const doc = makeDoc('<p><a href="https://example.com/report.pdf">Annual Report [PDF]</a></p>');
     expect(LINK_007.check(doc, OPTIONS)).toHaveLength(0);
