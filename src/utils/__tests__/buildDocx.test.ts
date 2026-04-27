@@ -1763,6 +1763,165 @@ describe('buildDocx — LINK-007: [PDF] label OOXML patch', () => {
   });
 });
 
+// ─── CLEAN-017: Grants.gov link normalization OOXML patch ────────────────────
+
+/**
+ * Minimal word/_rels/document.xml.rels with one grants.gov hyperlink.
+ */
+function makeGrantsGovRelsXml(rId: string, target: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="${RELS_NS}">` +
+    `<Relationship Id="${rId}" Type="${HYPERLINK_TYPE_URI}" Target="${target}" TargetMode="External"/>` +
+    `</Relationships>`
+  );
+}
+
+/**
+ * Minimal word/document.xml with one grants.gov hyperlink carrying the given
+ * relationship ID and link text.
+ */
+function makeGrantsGovDocXml(rId: string, linkText: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}">` +
+    `<w:body>` +
+    `<w:p><w:hyperlink r:id="${rId}" w:history="1">` +
+    `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t>${linkText}</w:t></w:r>` +
+    `</w:hyperlink></w:p>` +
+    `<w:sectPr/></w:body></w:document>`
+  );
+}
+
+/**
+ * Read word/_rels/document.xml.rels from the output ZIP produced by buildDocx.
+ */
+async function getOutputRelsXml(
+  zip: JSZip,
+  autoAppliedChanges: AutoAppliedChange[] = []
+): Promise<string> {
+  const blob = await buildDocx(zip, [], autoAppliedChanges);
+  const outZip = await JSZip.loadAsync(blob);
+  const relsFile = outZip.file('word/_rels/document.xml.rels');
+  if (!relsFile) throw new Error('word/_rels/document.xml.rels missing from output');
+  return relsFile.async('string');
+}
+
+/**
+ * Return the Target attribute of the first Relationship with the given Id
+ * from a serialized .rels XML string.
+ */
+function getRelTarget(relsXml: string, rId: string): string | null {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(relsXml, 'application/xml');
+  const rels = Array.from(doc.getElementsByTagNameNS(RELS_NS, 'Relationship'));
+  const rel = rels.find(r => r.getAttribute('Id') === rId);
+  return rel?.getAttribute('Target') ?? null;
+}
+
+const GRANTS_GOV_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-017',
+  description: 'Normalized 1 Grants.gov link.',
+  targetField: 'link.grantsgov.normalize',
+  value: '1',
+};
+
+describe('buildDocx — CLEAN-017: Grants.gov link normalization OOXML patch', () => {
+  it('normalizes a non-canonical root URL (http://grants.gov) to https://www.grants.gov in .rels', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeGrantsGovDocXml('rId1', 'Grants.gov'));
+    zip.file('word/_rels/document.xml.rels', makeGrantsGovRelsXml('rId1', 'http://grants.gov'));
+
+    const relsXml = await getOutputRelsXml(zip, [GRANTS_GOV_CHANGE]);
+    expect(getRelTarget(relsXml, 'rId1')).toBe('https://www.grants.gov');
+  });
+
+  it('normalizes https://grants.gov (no-www) to https://www.grants.gov in .rels', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeGrantsGovDocXml('rId1', 'Grants.gov'));
+    zip.file('word/_rels/document.xml.rels', makeGrantsGovRelsXml('rId1', 'https://grants.gov'));
+
+    const relsXml = await getOutputRelsXml(zip, [GRANTS_GOV_CHANGE]);
+    expect(getRelTarget(relsXml, 'rId1')).toBe('https://www.grants.gov');
+  });
+
+  it('normalizes https://www.grants.gov/ (trailing slash) to https://www.grants.gov in .rels', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeGrantsGovDocXml('rId1', 'Grants.gov'));
+    zip.file('word/_rels/document.xml.rels', makeGrantsGovRelsXml('rId1', 'https://www.grants.gov/'));
+
+    const relsXml = await getOutputRelsXml(zip, [GRANTS_GOV_CHANGE]);
+    expect(getRelTarget(relsXml, 'rId1')).toBe('https://www.grants.gov');
+  });
+
+  it('does not rewrite .rels when the URL is already canonical', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeGrantsGovDocXml('rId1', 'grants.gov'));
+    zip.file('word/_rels/document.xml.rels', makeGrantsGovRelsXml('rId1', 'https://www.grants.gov'));
+
+    const relsXml = await getOutputRelsXml(zip, [GRANTS_GOV_CHANGE]);
+    expect(getRelTarget(relsXml, 'rId1')).toBe('https://www.grants.gov');
+  });
+
+  it('rewrites "grants.gov" link text to "Grants.gov" in document.xml', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeGrantsGovDocXml('rId1', 'grants.gov'));
+    zip.file('word/_rels/document.xml.rels', makeGrantsGovRelsXml('rId1', 'https://www.grants.gov'));
+
+    const outXml = await getOutputDocXml(zip, [], [GRANTS_GOV_CHANGE]);
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('Grants.gov');
+  });
+
+  it('rewrites "www.grants.gov" link text to "Grants.gov" in document.xml', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeGrantsGovDocXml('rId1', 'www.grants.gov'));
+    zip.file('word/_rels/document.xml.rels', makeGrantsGovRelsXml('rId1', 'https://www.grants.gov'));
+
+    const outXml = await getOutputDocXml(zip, [], [GRANTS_GOV_CHANGE]);
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('Grants.gov');
+  });
+
+  it('normalizes both URL and text in a single pass', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeGrantsGovDocXml('rId1', 'grants.gov'));
+    zip.file('word/_rels/document.xml.rels', makeGrantsGovRelsXml('rId1', 'http://grants.gov'));
+
+    const outDocXml = await getOutputDocXml(zip, [], [GRANTS_GOV_CHANGE]);
+    const outRelsXml = await getOutputRelsXml(zip, [GRANTS_GOV_CHANGE]);
+    expect(getHyperlinkText(outDocXml, 'rId1')).toBe('Grants.gov');
+    expect(getRelTarget(outRelsXml, 'rId1')).toBe('https://www.grants.gov');
+  });
+
+  it('does not rewrite text when link text is already "Grants.gov"', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeGrantsGovDocXml('rId1', 'Grants.gov'));
+    zip.file('word/_rels/document.xml.rels', makeGrantsGovRelsXml('rId1', 'https://www.grants.gov'));
+
+    const outXml = await getOutputDocXml(zip, [], [GRANTS_GOV_CHANGE]);
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('Grants.gov');
+  });
+
+  it('does not rewrite custom link text (e.g. "Apply for funding")', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeGrantsGovDocXml('rId1', 'Apply for funding'));
+    zip.file('word/_rels/document.xml.rels', makeGrantsGovRelsXml('rId1', 'https://www.grants.gov'));
+
+    const outXml = await getOutputDocXml(zip, [], [GRANTS_GOV_CHANGE]);
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('Apply for funding');
+  });
+
+  it('makes no changes when the autoAppliedChange flag is absent', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeGrantsGovDocXml('rId1', 'grants.gov'));
+    zip.file('word/_rels/document.xml.rels', makeGrantsGovRelsXml('rId1', 'http://grants.gov'));
+
+    const outDocXml = await getOutputDocXml(zip, [], []);
+    const outRelsXml = await getOutputRelsXml(zip, []);
+    expect(getHyperlinkText(outDocXml, 'rId1')).toBe('grants.gov');
+    expect(getRelTarget(outRelsXml, 'rId1')).toBe('http://grants.gov');
+  });
+});
+
 // ─── CLEAN-012: asterisked bold OOXML patch ───────────────────────────────────
 
 /**

@@ -1,4 +1,5 @@
 import type { Rule, AutoAppliedChange, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
+import { buildLocationLookup } from '../../utils/locationContext';
 
 /**
  * CLEAN-017: Normalize Grants.gov link text and URLs (auto-apply)
@@ -50,6 +51,7 @@ const CLEAN_017: Rule = {
 
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
+    const getContext = buildLocationLookup(htmlDoc);
 
     const results: (AutoAppliedChange | Issue)[] = [];
     let normalizeCount = 0;
@@ -79,13 +81,15 @@ const CLEAN_017: Rule = {
         const isSubdomain = hostname !== 'grants.gov' && hostname !== 'www.grants.gov';
         const urlKind = isSubdomain ? 'subdomain' : 'specific path';
 
+        const { nearestHeading } = getContext(link);
         results.push({
           id: `CLEAN-017-${issueIdx++}`,
           ruleId: 'CLEAN-017',
           title: 'Grants.gov URL may need updating',
           severity: 'warning',
           sectionId: sectionIdFor(doc, linkText),
-          nearestHeading: null,
+          nearestHeading,
+          location: href,
           description:
             `The link “${linkText || href}” points to a Grants.gov ${urlKind} URL ` +
             `(${href}). This URL may have changed or may no longer be valid.`,
