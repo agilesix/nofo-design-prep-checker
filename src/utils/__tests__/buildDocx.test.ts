@@ -4946,3 +4946,98 @@ describe('buildDocx — XML declaration preservation (iOS Word compatibility)', 
     expect(xml.startsWith(XML_DECL), 'XML declaration must be present in document.xml.rels after rewrite').toBe(true);
   });
 });
+
+// ─── applyUniversalInstructionBoxRemoval (CLEAN-018) ─────────────────────────
+
+const W_NS_C18 = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function makeUniversalInstructionBoxDocXml(opts: {
+  firstParaText?: string;
+  cellCount?: number;
+  extraParaAfter?: string;
+}): string {
+  const {
+    firstParaText = 'DGHT-SPECIFIC INSTRUCTIONS: Review before submission.',
+    cellCount = 1,
+    extraParaAfter,
+  } = opts;
+  const extraCells = Array.from({ length: cellCount - 1 })
+    .map(() => `<w:tc><w:p><w:r><w:t>extra</w:t></w:r></w:p></w:tc>`)
+    .join('');
+  const afterPara = extraParaAfter
+    ? `<w:p><w:r><w:t>${extraParaAfter}</w:t></w:r></w:p>`
+    : '';
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_C18}"><w:body>` +
+    `<w:tbl><w:tr>` +
+    `<w:tc><w:p><w:r><w:t>${firstParaText}</w:t></w:r></w:p></w:tc>` +
+    extraCells +
+    `</w:tr></w:tbl>` +
+    afterPara +
+    `<w:sectPr/></w:body></w:document>`
+  );
+}
+
+const UNIVERSAL_IB_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-018',
+  description: '1 instruction box removed.',
+  targetField: 'struct.universal.removeinstructionboxes',
+  value: '1',
+};
+
+describe('buildDocx — CLEAN-018: universal instruction box removal', () => {
+  it('removes a single-cell table whose first paragraph contains "DGHT-SPECIFIC INSTRUCTIONS"', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeUniversalInstructionBoxDocXml({}));
+
+    const outXml = await getOutputDocXml(zip, [], [UNIVERSAL_IB_CHANGE]);
+
+    expect(outXml).not.toContain('DGHT-SPECIFIC INSTRUCTIONS');
+    expect(outXml).not.toContain('w:tbl');
+  });
+
+  it('removes a single-cell table whose first paragraph contains "instructions" (generic)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeUniversalInstructionBoxDocXml({
+      firstParaText: 'Instructions: Read carefully before proceeding.',
+    }));
+
+    const outXml = await getOutputDocXml(zip, [], [UNIVERSAL_IB_CHANGE]);
+
+    expect(outXml).not.toContain('Instructions:');
+    expect(outXml).not.toContain('w:tbl');
+  });
+
+  it('preserves surrounding paragraphs when removing the instruction box', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeUniversalInstructionBoxDocXml({ extraParaAfter: 'Keep this paragraph.' })
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [UNIVERSAL_IB_CHANGE]);
+
+    expect(outXml).not.toContain('DGHT-SPECIFIC INSTRUCTIONS');
+    expect(outXml).toContain('Keep this paragraph.');
+  });
+
+  it('does not remove a multi-cell table even when first paragraph contains "instructions"', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeUniversalInstructionBoxDocXml({ cellCount: 2 }));
+
+    const outXml = await getOutputDocXml(zip, [], [UNIVERSAL_IB_CHANGE]);
+
+    expect(outXml).toContain('DGHT-SPECIFIC INSTRUCTIONS');
+    expect(outXml).toContain('w:tbl');
+  });
+
+  it('does not modify the document when targetField is absent from autoAppliedChanges', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeUniversalInstructionBoxDocXml({}));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+
+    expect(outXml).toContain('DGHT-SPECIFIC INSTRUCTIONS');
+  });
+});

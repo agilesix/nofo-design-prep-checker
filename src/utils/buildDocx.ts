@@ -236,13 +236,8 @@ export async function buildDocx(
     await applyGrantsGovNormalization(zip);
   }
 
-  const shouldApplyUniversalInstructionBoxRemoval =
-    hasUniversalInstructionBoxRemoval &&
-    !acceptedFixes.some((fix: AcceptedFix) => fix.id === 'CLEAN-007');
-
-  // Remove universal instruction box tables (single-cell, first paragraph contains "instructions"),
-  // but do not re-run on documents where CLEAN-007 already handles the overlapping DGHT/DGHP boxes.
-  if (shouldApplyUniversalInstructionBoxRemoval) {
+  // Remove universal instruction box tables (single-cell, first paragraph contains "instructions")
+  if (hasUniversalInstructionBoxRemoval) {
     await applyUniversalInstructionBoxRemoval(zip);
   }
 
