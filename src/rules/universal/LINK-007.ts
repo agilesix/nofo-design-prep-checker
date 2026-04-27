@@ -47,7 +47,7 @@ const LINK_007: Rule = {
 
       const linkText = (link.textContent ?? '').trim();
 
-      // Case 2: already contains [PDF anywhere (e.g. [PDF], [PDF - 312KB]) → no change
+      // Case 2: already contains "[PDF" anywhere (e.g. [PDF], [PDF - 312KB]) → no change
       if (/\[pdf/i.test(linkText)) continue;
 
       // Cases 1 and 3: link needs [PDF] added
