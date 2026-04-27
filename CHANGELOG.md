@@ -32,8 +32,8 @@
 * **rules:** add CDC and CDC-funded heading capitalization exceptions to HEAD-001 ([9f468fc](https://github.com/agilesix/nofo-design-prep-checker/commit/9f468fc0cf936efd43c2bec87e744626f8e19248))
 * **rules:** extend CLEAN-011 to insert missing glyphs and cover Step 3 checklist tables ([c3f36e6](https://github.com/agilesix/nofo-design-prep-checker/commit/c3f36e6e10ab0582ba6ed154c4db84a892117037))
 * **rules:** extend CLEAN-011 to insert missing glyphs and cover Step 3 checklist tables ([a9003eb](https://github.com/agilesix/nofo-design-prep-checker/commit/a9003eb9ed1704a830eeb9e7dc3f12ba5b8cdb59))
-* **rules:** skip PDF link text append when [PDF already present in link text ([b4f7384](https://github.com/agilesix/nofo-design-prep-checker/commit/b4f73848eaaf0d99a2e78b8e3b13c8a8033bb2b2))
-* **rules:** skip PDF link text append when [PDF already present in link text ([599acd9](https://github.com/agilesix/nofo-design-prep-checker/commit/599acd92ac1fd395237184d044ed977b389da738))
+* **rules:** skip PDF link text append when [PDF] already present in link text ([b4f7384](https://github.com/agilesix/nofo-design-prep-checker/commit/b4f73848eaaf0d99a2e78b8e3b13c8a8033bb2b2))
+* **rules:** skip PDF link text append when [PDF] already present in link text ([599acd9](https://github.com/agilesix/nofo-design-prep-checker/commit/599acd92ac1fd395237184d044ed977b389da738))
 * use default (emergency) style for mobile site alert on upload page ([5fa2acf](https://github.com/agilesix/nofo-design-prep-checker/commit/5fa2acf5502f528d0ef3c76f3407f50a37ac067b))
 
 ## [1.6.1](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.6.0...v1.6.1) (2026-04-23)
