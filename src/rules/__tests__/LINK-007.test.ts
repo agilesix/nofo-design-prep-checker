@@ -95,7 +95,7 @@ describe('LINK-007: no changes when [PDF is already present in link text', () =>
     expect(LINK_007.check(doc, OPTIONS)).toHaveLength(0);
   });
 
-  it('does not flag when [PDF appears anywhere in the link text (start, middle, or end)', () => {
+  it('does not flag when link text contains "[PDF]" or a "[PDF - ...]" label anywhere in the text', () => {
     const start = makeDoc('<p><a href="https://example.com/r.pdf">[PDF - 500KB] Report</a></p>');
     const middle = makeDoc('<p><a href="https://example.com/r.pdf">Report [PDF] Appendix</a></p>');
     expect(LINK_007.check(start, OPTIONS)).toHaveLength(0);
