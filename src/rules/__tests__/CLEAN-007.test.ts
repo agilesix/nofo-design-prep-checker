@@ -32,7 +32,7 @@ const OPTIONS_CDC         = { contentGuideId: 'cdc' } as const;
 const OPTIONS_CDC_RESEARCH = { contentGuideId: 'cdc-research' } as const;
 const OPTIONS_OTHER       = { contentGuideId: 'acf' } as const;
 
-// Preamble + Step 1 heading — the canonical trigger case
+// Preamble + Step 1 heading — the canonical trigger case (has scaffolding table)
 const PREAMBLE_HTML =
   '<p>Here is the color coding for the doc: green = required, red = remove</p>' +
   '<p>Some editorial notes about this template.</p>' +
@@ -45,16 +45,26 @@ const CLEAN_HTML =
   '<h2>Step 1: Review the Opportunity</h2>' +
   '<p>Content here.</p>';
 
-// Generic CDC doc with one paragraph before Step 1
+// Generic CDC doc with one paragraph before Step 1 but NO scaffolding table
 const GENERIC_CDC_PREAMBLE_HTML =
   '<p>This is a funding opportunity from the CDC.</p>' +
+  '<h2>Step 1: Review the Opportunity</h2>' +
+  '<p>Content here.</p>';
+
+// Standard NOFO metadata block — real document content, must never be removed
+const METADATA_BLOCK_HTML =
+  '<p>OpDiv: CDC</p>' +
+  '<p>Agency: National Center for Emerging and Zoonotic Infectious Diseases (NCEZID)</p>' +
+  '<p>Subagency: Division of Foodborne, Waterborne, and Environmental Diseases (DFWED)</p>' +
+  '<p>Opportunity name: Epidemiology and Laboratory Capacity for Prevention and Control</p>' +
+  '<p>Opportunity number: CDC-RFA-CK25-001</p>' +
   '<h2>Step 1: Review the Opportunity</h2>' +
   '<p>Content here.</p>';
 
 // ─── Detection ────────────────────────────────────────────────────────────────
 
 describe('CLEAN-007: detects preamble before Step 1 heading', () => {
-  it('fires when non-empty content precedes the Step 1 heading', () => {
+  it('fires when a CDC/DGHT NOFO Content Guide scaffolding table precedes Step 1', () => {
     const doc = makeDoc(PREAMBLE_HTML);
     const results = CLEAN_007.check(doc, OPTIONS_SSJ);
     expect(results).toHaveLength(1);
@@ -64,33 +74,68 @@ describe('CLEAN-007: detects preamble before Step 1 heading', () => {
     expect(change.description).toBe('CDC preamble removed from beginning of document.');
   });
 
-  it('fires for a plain CDC doc with any paragraph before Step 1', () => {
-    const doc = makeDoc(GENERIC_CDC_PREAMBLE_HTML);
-    expect(CLEAN_007.check(doc, OPTIONS_CDC)).toHaveLength(1);
-  });
-
-  it('detects preamble regardless of whether the "color coding" phrase is present', () => {
+  it('fires when the first cell of a table contains "Here is the color coding"', () => {
     const html =
-      '<p>Instructions for completing this template.</p>' +
+      '<table><tbody><tr><td>Here is the color coding: green = required</td></tr></tbody></table>' +
       '<h2>Step 1: Review the Opportunity</h2>';
     const doc = makeDoc(html);
     expect(CLEAN_007.check(doc, OPTIONS_CDC)).toHaveLength(1);
   });
 
-  it('detection is case-insensitive for the Step 1 heading text', () => {
+  it('fires when first cell contains "CDC/DGHP" and preamble contains "Before you begin"', () => {
     const html =
-      '<p>Preamble content.</p>' +
+      '<table><tbody><tr><td>CDC/DGHP Content Guide</td></tr></tbody></table>' +
+      '<p>Before you begin, read these instructions carefully.</p>' +
+      '<h2>Step 1: Review the Opportunity</h2>';
+    const doc = makeDoc(html);
+    expect(CLEAN_007.check(doc, OPTIONS_DGHP)).toHaveLength(1);
+  });
+
+  it('detection of the Step 1 heading anchor is case-insensitive', () => {
+    const html =
+      '<table><tbody><tr><td>CDC/DGHT NOFO Content Guide</td></tr></tbody></table>' +
       '<h2>STEP 1: REVIEW THE OPPORTUNITY</h2>';
     const doc = makeDoc(html);
     expect(CLEAN_007.check(doc, OPTIONS_SSJ)).toHaveLength(1);
   });
 
-  it('fires when a table precedes Step 1', () => {
+  it('does NOT fire when a non-scaffolding table precedes Step 1', () => {
     const html =
       '<table><tbody><tr><td>Content guide reference</td></tr></tbody></table>' +
       '<h2>Step 1: Review the Opportunity</h2>';
     const doc = makeDoc(html);
-    expect(CLEAN_007.check(doc, OPTIONS_CDC)).toHaveLength(1);
+    expect(CLEAN_007.check(doc, OPTIONS_CDC)).toHaveLength(0);
+  });
+
+  it('does NOT fire when only a generic paragraph precedes Step 1 (no scaffolding table)', () => {
+    const doc = makeDoc(GENERIC_CDC_PREAMBLE_HTML);
+    expect(CLEAN_007.check(doc, OPTIONS_CDC)).toHaveLength(0);
+  });
+
+  it('does NOT fire when "CDC/DGHP" table is present but "Before you begin" is absent', () => {
+    const html =
+      '<table><tbody><tr><td>CDC/DGHP Content Guide</td></tr></tbody></table>' +
+      '<h2>Step 1: Review the Opportunity</h2>';
+    const doc = makeDoc(html);
+    expect(CLEAN_007.check(doc, OPTIONS_DGHP)).toHaveLength(0);
+  });
+
+  it('does NOT fire for a document that contains only the NOFO metadata block before Step 1', () => {
+    // The metadata block (OpDiv:, Agency:, Subagency:, Opportunity name:, etc.)
+    // is real NOFO content — not editorial scaffolding — and must never be removed.
+    const doc = makeDoc(METADATA_BLOCK_HTML);
+    expect(CLEAN_007.check(doc, OPTIONS_CDC_RESEARCH)).toHaveLength(0);
+  });
+
+  it('aborts removal when NOFO metadata labels are present even alongside a scaffolding table', () => {
+    // Safety guard: if the preamble somehow contains both a scaffolding table
+    // and metadata field labels, the metadata takes priority and removal is aborted.
+    const html =
+      '<p>OpDiv: CDC</p>' +
+      '<table><tbody><tr><td>CDC/DGHT NOFO Content Guide</td></tr></tbody></table>' +
+      '<h2>Step 1: Review the Opportunity</h2>';
+    const doc = makeDoc(html);
+    expect(CLEAN_007.check(doc, OPTIONS_CDC)).toHaveLength(0);
   });
 });
 
@@ -148,11 +193,11 @@ describe('CLEAN-007: content guide scope', () => {
   });
 
   it('fires for cdc', () => {
-    expect(CLEAN_007.check(makeDoc(GENERIC_CDC_PREAMBLE_HTML), OPTIONS_CDC)).toHaveLength(1);
+    expect(CLEAN_007.check(makeDoc(PREAMBLE_HTML), OPTIONS_CDC)).toHaveLength(1);
   });
 
   it('fires for cdc-research', () => {
-    expect(CLEAN_007.check(makeDoc(GENERIC_CDC_PREAMBLE_HTML), OPTIONS_CDC_RESEARCH)).toHaveLength(1);
+    expect(CLEAN_007.check(makeDoc(PREAMBLE_HTML), OPTIONS_CDC_RESEARCH)).toHaveLength(1);
   });
 
   it('check() detects preamble regardless of the options contentGuideId passed in', () => {
