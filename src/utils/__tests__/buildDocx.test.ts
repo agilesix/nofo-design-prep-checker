@@ -1761,6 +1761,33 @@ describe('buildDocx — LINK-007: [PDF] label OOXML patch', () => {
     const outXml = await getOutputDocXml(zip, [], [PDF_LABEL_CHANGE]);
     expect(getHyperlinkText(outXml, 'rId1')).toBe('Image PDF');
   });
+
+  it('does not append [PDF] when link text contains a size-annotated "[PDF - 312KB]"', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePdfHyperlinkDocXml('rId1', 'Annual Report [PDF - 312KB]'));
+    zip.file('word/_rels/document.xml.rels',
+      makePdfRelsXml('rId1', 'https://example.com/annual-report.pdf'));
+    const outXml = await getOutputDocXml(zip, [], [PDF_LABEL_CHANGE]);
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('Annual Report [PDF - 312KB]');
+  });
+
+  it('does not append [PDF] when link text contains a size-annotated "[PDF - 1.2MB]"', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePdfHyperlinkDocXml('rId1', 'Annual Report [PDF - 1.2MB]'));
+    zip.file('word/_rels/document.xml.rels',
+      makePdfRelsXml('rId1', 'https://example.com/annual-report.pdf'));
+    const outXml = await getOutputDocXml(zip, [], [PDF_LABEL_CHANGE]);
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('Annual Report [PDF - 1.2MB]');
+  });
+
+  it('does not append [PDF] when "[PDF]" appears at the start of the link text', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makePdfHyperlinkDocXml('rId1', '[PDF] Annual Report'));
+    zip.file('word/_rels/document.xml.rels',
+      makePdfRelsXml('rId1', 'https://example.com/annual-report.pdf'));
+    const outXml = await getOutputDocXml(zip, [], [PDF_LABEL_CHANGE]);
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('[PDF] Annual Report');
+  });
 });
 
 // ─── CLEAN-012: asterisked bold OOXML patch ───────────────────────────────────
