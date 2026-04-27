@@ -1,5 +1,38 @@
 import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
 
+// Returns the heading level (1–6) of a <w:p> XML element, or 0 if the paragraph
+// is not a Heading style or uses a level outside the 1–6 range (e.g. Heading 7–9,
+// which are valid Word styles but outside this rule's contract).
+function xmlHeadingLevel(wP: Element): number {
+  const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
+  if (!pPr) return 0;
+  const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+  if (!pStyle) return 0;
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const val =
+    pStyle.getAttribute('w:val') ??
+    pStyle.getAttributeNS(W, 'val') ??
+    pStyle.getAttribute('val') ??
+    '';
+  const m = val.match(/^Heading\s*(\d+)$/i);
+  if (!m) return 0;
+  const level = parseInt(m[1]!, 10);
+  return level >= 1 && level <= 6 ? level : 0;
+}
+
+// Returns concatenated text of all <w:t> descendants inside a <w:p> XML element.
+function xmlParaText(wP: Element): string {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const byNS = Array.from(wP.getElementsByTagNameNS(W, 't'));
+  const byTag = Array.from(wP.getElementsByTagName('w:t'));
+  const seen = new Set<Element>();
+  const nodes: Element[] = [];
+  for (const el of [...byNS, ...byTag]) {
+    if (!seen.has(el)) { seen.add(el); nodes.push(el); }
+  }
+  return nodes.map(t => t.textContent ?? '').join('');
+}
+
 /**
  * HEAD-003: Skipped heading levels
  *
@@ -22,7 +55,10 @@ import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types
  * targetField format for accepted fixes:
  *   "heading.level.H{fromLevel}.{headingIndex}::{headingText}"
  *   headingIndex is the 0-based ordinal position of the heading among all
- *   headings in the document (as returned by querySelectorAll('h1,…,h6')).
+ *   Heading 1–6 paragraphs in the document. When documentXml is present the
+ *   ordinal comes from a deep getElementsByTagName('w:p') traversal of the
+ *   OOXML, counting only Heading 1–6 paragraphs; when only HTML is available
+ *   it falls back to querySelectorAll('h1,…,h6') ordering.
  *   This disambiguates headings with identical text.
  * value: the confirmed target level as a string (e.g. "2")
  */
@@ -32,16 +68,27 @@ const HEAD_003: Rule = {
   check(doc: ParsedDocument, _options: RuleRunnerOptions): Issue[] {
     const issues: Issue[] = [];
 
-    const parser = new DOMParser();
-    const htmlDoc = parser.parseFromString(doc.html, 'text/html');
-    const headings = Array.from(htmlDoc.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+    // Build the heading sequence using a deep traversal so that headings nested
+    // inside w:sdt content controls are included. When documentXml is available
+    // (real documents), parse the OOXML directly; fall back to mammoth HTML for
+    // environments that provide only HTML (e.g. unit tests without XML).
+    let headingData: Array<{ level: number; text: string }>;
 
-    if (headings.length < 2) return [];
-
-    const headingData = headings.map(h => ({
-      level: parseInt(h.tagName[1] ?? '0', 10),
-      text: (h.textContent ?? '').trim(),
-    }));
+    if (doc.documentXml) {
+      const xmlParser = new DOMParser();
+      const xmlDoc = xmlParser.parseFromString(doc.documentXml, 'application/xml');
+      headingData = Array.from(xmlDoc.getElementsByTagName('w:p'))
+        .map(wP => ({ level: xmlHeadingLevel(wP), text: xmlParaText(wP).trim() }))
+        .filter(h => h.level > 0);
+    } else {
+      const htmlParser = new DOMParser();
+      const htmlDoc = htmlParser.parseFromString(doc.html, 'text/html');
+      headingData = Array.from(htmlDoc.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+        .map(h => ({
+          level: parseInt(h.tagName[1] ?? '0', 10),
+          text: (h.textContent ?? '').trim(),
+        }));
+    }
 
     for (let i = 1; i < headingData.length; i++) {
       const prev = headingData[i - 1]!;
