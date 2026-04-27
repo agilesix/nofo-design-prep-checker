@@ -137,6 +137,36 @@ describe('CLEAN-007: detects preamble before Step 1 heading', () => {
     const doc = makeDoc(html);
     expect(CLEAN_007.check(doc, OPTIONS_CDC)).toHaveLength(0);
   });
+
+  it('aborts removal when a metadata label has NBSP before the colon (e.g. "OpDiv\\u00a0:")', () => {
+    // Word can introduce a non-breaking space between a field name and its colon.
+    // The metadata guard must normalize NBSPs before matching or it misses the label.
+    const html =
+      '<p>OpDiv : CDC</p>' +
+      '<table><tbody><tr><td>CDC/DGHT NOFO Content Guide</td></tr></tbody></table>' +
+      '<h2>Step 1: Review the Opportunity</h2>';
+    const doc = makeDoc(html);
+    expect(CLEAN_007.check(doc, OPTIONS_CDC)).toHaveLength(0);
+  });
+
+  it('aborts removal when a metadata label has a regular space before the colon (e.g. "OpDiv :")', () => {
+    const html =
+      '<p>OpDiv : CDC</p>' +
+      '<table><tbody><tr><td>CDC/DGHT NOFO Content Guide</td></tr></tbody></table>' +
+      '<h2>Step 1: Review the Opportunity</h2>';
+    const doc = makeDoc(html);
+    expect(CLEAN_007.check(doc, OPTIONS_CDC)).toHaveLength(0);
+  });
+
+  it('still detects scaffolding when "before you begin" contains NBSP characters', () => {
+    // NBSP normalization in preambleLower must not break the scaffolding check.
+    const html =
+      '<table><tbody><tr><td>CDC/DGHP Content Guide</td></tr></tbody></table>' +
+      '<p>Before you begin, read these instructions.</p>' +
+      '<h2>Step 1: Review the Opportunity</h2>';
+    const doc = makeDoc(html);
+    expect(CLEAN_007.check(doc, OPTIONS_DGHP)).toHaveLength(1);
+  });
 });
 
 // ─── No-op cases ──────────────────────────────────────────────────────────────

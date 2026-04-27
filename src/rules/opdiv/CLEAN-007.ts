@@ -26,39 +26,35 @@ import { DGHT_STEP1_ANCHOR } from './CLEAN-007-constants';
  */
 
 /**
- * NOFO metadata field label prefixes that appear at the start of paragraphs in
- * the standard CDC metadata block (OpDiv, Agency, Opportunity name, etc.).
- * Content containing these labels is real document content and must never be
- * removed as part of preamble clean-up.
+ * Matches a NOFO metadata field label at the start of paragraph text.
+ * The \s* between the label name and the colon tolerates optional whitespace
+ * (including NBSP after normalization) that Word can introduce, e.g.
+ * "OpDiv :" or "OpDiv\u00a0:" — variants a bare startsWith() would miss.
  */
-const METADATA_LABEL_PREFIXES = [
-  'opdiv:',
-  'agency:',
-  'subagency:',
-  'opportunity name:',
-  'opportunity number:',
-  'cfda number:',
-  'program name:',
-  'due date:',
-];
+const METADATA_LABEL_RE =
+  /^(opdiv|agency|subagency|opportunity name|opportunity number|cfda number|program name|due date)\s*:/i;
 
 /**
  * Returns true when the first cell of a table matches a known CDC/DGHT
  * editorial scaffolding signature, indicating a genuine preamble table.
- * Also accepts "CDC/DGHP" in the first cell when "Before you begin" appears
- * anywhere in the pre-Step-1 text.
+ * Accepts "CDC/DGHP" in the first cell when "before you begin" appears
+ * anywhere in the pre-Step-1 text. preambleLower must already be lowercased
+ * and NBSP-normalized by the caller.
  */
-function hasScaffoldingTable(preambleElements: Element[], preambleText: string): boolean {
+function hasScaffoldingTable(preambleElements: Element[], preambleLower: string): boolean {
   for (const el of preambleElements) {
     if (el.tagName.toLowerCase() !== 'table') continue;
     const firstCell = el.querySelector('td, th');
     if (!firstCell) continue;
-    const firstCellText = (firstCell.textContent ?? '').trim().toLowerCase();
+    const firstCellText = (firstCell.textContent ?? '')
+      .replace(/\u00a0/g, ' ')
+      .trim()
+      .toLowerCase();
     if (firstCellText.includes('here is the color coding')) return true;
     if (firstCellText.includes('cdc/dght nofo content guide')) return true;
     if (
       firstCellText.includes('cdc/dghp') &&
-      preambleText.toLowerCase().includes('before you begin')
+      preambleLower.includes('before you begin')
     ) return true;
   }
   return false;
@@ -67,11 +63,13 @@ function hasScaffoldingTable(preambleElements: Element[], preambleText: string):
 /**
  * Returns true when any pre-Step-1 element's text starts with a known NOFO
  * metadata field label. Such content must never be removed.
+ * Normalizes non-breaking spaces before matching so Word-generated variants
+ * like "OpDiv\u00a0:" or "OpDiv :" are not missed by the safety guard.
  */
 function hasPreambleMetadataLabels(preambleElements: Element[]): boolean {
   return preambleElements.some(el => {
-    const text = (el.textContent ?? '').trim().toLowerCase();
-    return METADATA_LABEL_PREFIXES.some(label => text.startsWith(label));
+    const text = (el.textContent ?? '').replace(/\u00a0/g, ' ').trim();
+    return METADATA_LABEL_RE.test(text);
   });
 }
 
@@ -103,8 +101,13 @@ const CLEAN_007: Rule = {
         el => (el.textContent ?? '').trim().length > 0
       );
       if (hasPreamble) {
-        const preambleText = preambleElements.map(el => el.textContent ?? '').join(' ');
-        const isScaffolding = hasScaffoldingTable(preambleElements, preambleText);
+        // Compute once; passed into hasScaffoldingTable to avoid repeated .toLowerCase() calls.
+        const preambleLower = preambleElements
+          .map(el => el.textContent ?? '')
+          .join(' ')
+          .replace(/\u00a0/g, ' ')
+          .toLowerCase();
+        const isScaffolding = hasScaffoldingTable(preambleElements, preambleLower);
         const hasMetadata = hasPreambleMetadataLabels(preambleElements);
         if (isScaffolding && !hasMetadata) {
           results.push({
