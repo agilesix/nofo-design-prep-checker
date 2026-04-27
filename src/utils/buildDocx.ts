@@ -1098,7 +1098,12 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
 
 /**
  * Return the numeric heading level of a <w:p> element (1–6), or 0 if the
- * paragraph is not a heading. Matches both "Heading2" and "Heading 2" styles.
+ * paragraph is not a heading or uses a level outside the 1–6 range (e.g.
+ * Word's built-in Heading 7–9 styles). Matches both "Heading2" and "Heading 2"
+ * styles. Callers that compute heading ordinal indices (applyHeadingLevel-
+ * Corrections, applyHeadingTextCorrections) rely on this returning 0 for
+ * out-of-range levels so their headingCount stays aligned with the indices
+ * encoded by HEAD-003/HEAD-004 check(), which also excludes levels > 6.
  */
 function getHeadingLevel(wP: Element): number {
   const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
@@ -1107,7 +1112,9 @@ function getHeadingLevel(wP: Element): number {
   if (!pStyle) return 0;
   const val = pStyle.getAttribute('w:val') ?? '';
   const m = val.match(/^Heading\s*(\d+)$/i);
-  return m ? parseInt(m[1]!, 10) : 0;
+  if (!m) return 0;
+  const level = parseInt(m[1]!, 10);
+  return level >= 1 && level <= 6 ? level : 0;
 }
 
 /**
