@@ -125,7 +125,7 @@ describe('HEAD-001: toTitleCase conversion rules', () => {
   });
 
   it('does not auto-fix an H2 containing standalone "CDC" (CDC exception)', () => {
-    // Headings with "CDC" as a standalone word are exempt from all cap checks.
+    // Headings with standalone "CDC" are exempt from this title-case/all-caps auto-fix path.
     const results = HEAD_001.check(makeDoc('<h2>CDC funding overview</h2>'), OPTIONS);
     expect(results).toHaveLength(0);
   });
