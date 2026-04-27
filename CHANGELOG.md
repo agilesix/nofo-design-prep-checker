@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.7.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.6.1...v1.7.0) (2026-04-27)
+
+
+### Features
+
+* add mobile site alert on upload page; remove iOS-specific download code ([db33d87](https://github.com/agilesix/nofo-design-prep-checker/commit/db33d87350fd09bdb70e2f298880d043969d5b89))
+* **CLEAN-017:** populate nearestHeading/location on Issues; add buildDocx tests ([6706cb9](https://github.com/agilesix/nofo-design-prep-checker/commit/6706cb9b075ab1499aefdc863f0bc246635eefd6))
+* **rules:** add CLEAN-017 Grants.gov link text and URL normalization ([19bd293](https://github.com/agilesix/nofo-design-prep-checker/commit/19bd2933488e88381b9bcfb98c6c9df55261bc5b))
+* **rules:** add CLEAN-017 Grants.gov link text and URL normalization ([a2d6f70](https://github.com/agilesix/nofo-design-prep-checker/commit/a2d6f70974eb6c755a73daa737f2fedfb3bbc8ca))
+* **rules:** add CLEAN-018 universal instruction box table removal ([662f966](https://github.com/agilesix/nofo-design-prep-checker/commit/662f966f98bd3efee3ca6996ff4ce6c86bdec313))
+* **rules:** add CLEAN-018 universal instruction box table removal ([f60435a](https://github.com/agilesix/nofo-design-prep-checker/commit/f60435ad8a17feb0c6d37459964a315e08f5d650))
+
+
+### Bug Fixes
+
+* add getAttributeNS fallback to heading-level readers ([abba4e4](https://github.com/agilesix/nofo-design-prep-checker/commit/abba4e43afca876d21095a18e7bc362412450ea5))
+* add usa-site-alert--emergency to render icon and brown styling ([169b83a](https://github.com/agilesix/nofo-design-prep-checker/commit/169b83a5fc5b86e37fac0ffd66a0fc1f555eb68a))
+* **buildDocx:** clamp getHeadingLevel to 1–6 ([a66bd76](https://github.com/agilesix/nofo-design-prep-checker/commit/a66bd76038c664b7ad072f23472ea0c240342b31))
+* **CLEAN-007:** require scaffolding table; guard NOFO metadata block ([6cbc3ca](https://github.com/agilesix/nofo-design-prep-checker/commit/6cbc3ca1497439a5e949a64f3f533e165cba33bb))
+* **CLEAN-007:** require scaffolding table; guard NOFO metadata block ([bc872e7](https://github.com/agilesix/nofo-design-prep-checker/commit/bc872e733228d592bd5a5d32d919ba1556612e42))
+* **CLEAN-007:** require scaffolding table; guard NOFO metadata block ([ac54210](https://github.com/agilesix/nofo-design-prep-checker/commit/ac54210551f97c676b64c3d8c7a77066b40cb530))
+* **CLEAN-007:** require scaffolding table; guard NOFO metadata block ([351a930](https://github.com/agilesix/nofo-design-prep-checker/commit/351a930539cf7d1e296ccf90409a2385227bd101))
+* **CLEAN-018:** exclude BCD6F4 tables and add nested-table regression test ([b3bc7ed](https://github.com/agilesix/nofo-design-prep-checker/commit/b3bc7edbb02d7dbf19a5b47e339068dc4af83887))
+* **HEAD-003:** clamp Heading7-9, fix JSDoc, assert OOXML index ([5c6ea39](https://github.com/agilesix/nofo-design-prep-checker/commit/5c6ea39dfd3320e899d07c8055789baea60540a6))
+* **HEAD-003:** include headings inside w:sdt content controls ([f32d0c0](https://github.com/agilesix/nofo-design-prep-checker/commit/f32d0c04093276c68aefef354921dc90be300bef))
+* **HEAD-003:** include headings inside w:sdt content controls ([1e4f95b](https://github.com/agilesix/nofo-design-prep-checker/commit/1e4f95ba524749ceb9895ab3c845d8ecbd4d0722))
+* **LINK-007:** skip [PDF] label for size-annotated and positional variants ([d1b6a63](https://github.com/agilesix/nofo-design-prep-checker/commit/d1b6a639cd8beee595dd1a52793f207e89f5abfe))
+* resolve merge conflicts in CLEAN-007 accepting NBSP normalization from head-003-incorrect ([27c5a6e](https://github.com/agilesix/nofo-design-prep-checker/commit/27c5a6e680dc039b6a8de63ba0912c95b4b78366))
+* **rules:** add CDC and CDC-funded heading capitalization exceptions to HEAD-001 ([65bdf86](https://github.com/agilesix/nofo-design-prep-checker/commit/65bdf867f2e151e7ca4942d8a73b8775ccb5ca6d))
+* **rules:** add CDC and CDC-funded heading capitalization exceptions to HEAD-001 ([9f468fc](https://github.com/agilesix/nofo-design-prep-checker/commit/9f468fc0cf936efd43c2bec87e744626f8e19248))
+* **rules:** extend CLEAN-011 to insert missing glyphs and cover Step 3 checklist tables ([c3f36e6](https://github.com/agilesix/nofo-design-prep-checker/commit/c3f36e6e10ab0582ba6ed154c4db84a892117037))
+* **rules:** extend CLEAN-011 to insert missing glyphs and cover Step 3 checklist tables ([a9003eb](https://github.com/agilesix/nofo-design-prep-checker/commit/a9003eb9ed1704a830eeb9e7dc3f12ba5b8cdb59))
+* **rules:** skip PDF link text append when [PDF already present in link text ([b4f7384](https://github.com/agilesix/nofo-design-prep-checker/commit/b4f73848eaaf0d99a2e78b8e3b13c8a8033bb2b2))
+* **rules:** skip PDF link text append when [PDF already present in link text ([599acd9](https://github.com/agilesix/nofo-design-prep-checker/commit/599acd92ac1fd395237184d044ed977b389da738))
+* use default (emergency) style for mobile site alert on upload page ([5fa2acf](https://github.com/agilesix/nofo-design-prep-checker/commit/5fa2acf5502f528d0ef3c76f3407f50a37ac067b))
+
 ## [1.6.1](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.6.0...v1.6.1) (2026-04-23)
 
 
