@@ -2065,7 +2065,7 @@ async function applyPdfLabelFix(zip: JSZip): Promise<void> {
     const allWTs = runs.flatMap(r => Array.from(r.getElementsByTagName('w:t')));
     const linkText = allWTs.map(t => t.textContent ?? '').join('');
 
-    // Case 2: already contains [PDF anywhere (e.g. [PDF], [PDF - 312KB]) → skip
+    // Case 2: already contains "[PDF" anywhere (e.g. [PDF], [PDF - 312KB]) → skip
     if (/\[pdf/i.test(linkText.trim())) continue;
 
     // Case 3: check if the run immediately after the hyperlink is plain "[PDF]"
