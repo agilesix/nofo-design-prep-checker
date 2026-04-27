@@ -124,8 +124,10 @@ describe('HEAD-001: toTitleCase conversion rules', () => {
     );
   });
 
-  it('handles a CDC acronym mixed with lowercase content words', () => {
-    expect(getNew('<h2>CDC funding overview</h2>')).toBe('CDC Funding Overview');
+  it('does not auto-fix an H2 containing standalone "CDC" (CDC exception)', () => {
+    // Headings with standalone "CDC" are exempt from this title-case/all-caps auto-fix path.
+    const results = HEAD_001.check(makeDoc('<h2>CDC funding overview</h2>'), OPTIONS);
+    expect(results).toHaveLength(0);
   });
 });
 
@@ -447,6 +449,55 @@ describe('HEAD-001: form identifier headings are exempt from the general cap che
     // No general sentence-case suggestion — form identifier heading is exempt
     const titleCaseIssue = results.find(r => (r as Issue).title?.includes('sentence case'));
     expect(titleCaseIssue).toBeUndefined();
+  });
+});
+
+// ─── CDC / CDC-funded exemption ──────────────────────────────────────────────
+
+describe('HEAD-001: CDC and CDC-funded headings are exempt from the general cap check', () => {
+  it('does not flag an H3 containing standalone "CDC" for title case', () => {
+    // "CDC Requirements" would normally be flagged as title case, but the
+    // standalone "CDC" word makes this heading exempt (case-sensitive match).
+    const doc = makeDoc('<h3>CDC Requirements Overview</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not auto-fix an H2 containing standalone "CDC"', () => {
+    const doc = makeDoc('<h2>CDC funding overview</h2>');
+    const changes = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as AutoAppliedChange).targetField === 'heading.h2.titlecase'
+    );
+    expect(changes).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "CDC-Funded" (mixed case) for title case', () => {
+    const doc = makeDoc('<h3>CDC-Funded Programs And Activities</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "cdc-funded" (all lowercase) for title case', () => {
+    // The CDC-funded match is case-insensitive, so lowercase "cdc-funded" is also exempt.
+    const doc = makeDoc('<h3>cdc-funded Programs And Activities</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does NOT exempt a heading containing lowercase "cdc" alone', () => {
+    // The standalone-word match is case-sensitive: "cdc" does not match "CDC".
+    // "Accessing cdc Resources" has title-case words → should still be flagged.
+    const doc = makeDoc('<h3>Accessing cdc Resources Online</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(1);
   });
 });
 

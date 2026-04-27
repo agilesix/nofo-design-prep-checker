@@ -25,6 +25,10 @@ import { DESIGNATOR_RE, isComponentLabel } from '../../constants';
  *     USASpending.gov, PaymentManagement.gov, GrantSolutions) are exempt from the general
  *     capitalization check — these proper names use non-standard casing by convention.
  *     The "Form" capitalization check still applies.
+ *   • Headings containing "CDC" as a standalone word (case-sensitive, whole word) or the
+ *     phrase "CDC-funded" (case-insensitive) are exempt from the general capitalization
+ *     check — these reference the agency name by convention. The "Form" capitalization
+ *     check still applies.
  *   • First word of the heading (always capitalised in both styles).
  *   • First word after a colon within the heading (sentence restart).
  *   • Minor words: articles (a/an/the), short prepositions, conjunctions.
@@ -284,6 +288,16 @@ function isFederalSystemException(text: string): boolean {
 }
 
 /**
+ * Returns true when the heading contains "CDC" as a standalone word (case-sensitive)
+ * or the phrase "CDC-funded" (case-insensitive). Such headings reference the agency
+ * name by convention and are exempt from the general capitalization check. The "Form"
+ * capitalization check still applies.
+ */
+function isCdcException(text: string): boolean {
+  return /\bCDC\b/.test(text) || /\bCDC-funded\b/i.test(text);
+}
+
+/**
  * Returns the set of word-array indices covered by a recognized Native American
  * or Indigenous proper-noun term per IHS style guide and federal usage
  * conventions. looksLikeTitleCase skips these positions so their
@@ -490,7 +504,7 @@ const HEAD_001: Rule = {
       // H1 is not checked. Headings with form identifiers (SF-424, PHS 398, R&R)
       // or federal grants system names (eRA Commons, Grants.gov, etc.) are exempt
       // from the general cap check — their capitalization is intentional.
-      if (level === 1 || isFormIdentifierHeading(text) || isFederalSystemException(text)) return;
+      if (level === 1 || isFormIdentifierHeading(text) || isFederalSystemException(text) || isCdcException(text)) return;
 
       if (level === 2 && looksLikeSentenceCase(text)) {
         const corrected = toTitleCase(text);
