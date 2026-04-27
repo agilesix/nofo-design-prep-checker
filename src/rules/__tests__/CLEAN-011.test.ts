@@ -218,3 +218,132 @@ describe('CLEAN-011: no changes when no corrections needed', () => {
     expect(CLEAN_011.check(makeDoc(xml), OPTIONS)).toHaveLength(0);
   });
 });
+
+// ─── Step 3 scope: H4 headings within "Build Your Application" ────────────────
+
+/**
+ * Builds a document with Step 3 heading (H2) + qualifying H4 + one table
+ * whose first-column first row has the given cell text.
+ */
+function makeStep3Doc(
+  h4Heading: string,
+  firstCellText: string,
+  step3Heading = 'Step 3: Build Your Application',
+  headerRow = false,
+): string {
+  const trPr = headerRow ? `<w:trPr><w:tblHeader/></w:trPr>` : '';
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W}"><w:body>` +
+    `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+    `<w:r><w:t>${step3Heading}</w:t></w:r></w:p>` +
+    `<w:p><w:pPr><w:pStyle w:val="Heading4"/></w:pPr>` +
+    `<w:r><w:t>${h4Heading}</w:t></w:r></w:p>` +
+    `<w:tbl><w:tr>${trPr}` +
+    `<w:tc><w:p><w:r><w:t>${firstCellText}</w:t></w:r></w:p></w:tc>` +
+    `<w:tc><w:p><w:r><w:t>Col 2</w:t></w:r></w:p></w:tc>` +
+    `</w:tr></w:tbl>` +
+    `<w:sectPr/></w:body></w:document>`
+  );
+}
+
+describe('CLEAN-011: Step 3 scope — H4 Narratives / Attachments / Other required forms', () => {
+  it('detects a wrong glyph in a table under H4 "Narratives" within Step 3', () => {
+    const doc = makeDoc(makeStep3Doc('Narratives', '☐ Item'));
+    const results = CLEAN_011.check(doc, OPTIONS) as AutoAppliedChange[];
+    expect(results).toHaveLength(1);
+    expect(results[0]!.ruleId).toBe('CLEAN-011');
+    expect(results[0]!.value).toBe('1');
+  });
+
+  it('detects a wrong glyph under H4 "Attachments" (case-insensitive match)', () => {
+    const doc = makeDoc(makeStep3Doc('attachments', '☐ Item'));
+    expect(CLEAN_011.check(doc, OPTIONS)).toHaveLength(1);
+  });
+
+  it('detects a wrong glyph under H4 "Other required forms"', () => {
+    const doc = makeDoc(makeStep3Doc('Other required forms', '☐ Item'));
+    expect(CLEAN_011.check(doc, OPTIONS)).toHaveLength(1);
+  });
+
+  it('does not flag a table under a non-matching H4 (e.g., "Budget forms") within Step 3', () => {
+    const doc = makeDoc(makeStep3Doc('Budget forms', '☐ Item'));
+    expect(CLEAN_011.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a table under H4 "Narratives" outside Step 3', () => {
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W}"><w:body>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:r><w:t>Step 2: Prepare Your Application</w:t></w:r></w:p>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading4"/></w:pPr>` +
+      `<w:r><w:t>Narratives</w:t></w:r></w:p>` +
+      `<w:tbl><w:tr>` +
+      `<w:tc><w:p><w:r><w:t>☐ Item</w:t></w:r></w:p></w:tc>` +
+      `</w:tr></w:tbl>` +
+      `<w:sectPr/></w:body></w:document>`;
+    expect(CLEAN_011.check(makeDoc(xml), OPTIONS)).toHaveLength(0);
+  });
+
+  it('stops collecting Step 3 tables after a new H4 that does not match', () => {
+    // Step3 H4 "Narratives" followed by H4 "Budget" — table under Budget must not be flagged
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W}"><w:body>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:r><w:t>Step 3: Build Your Application</w:t></w:r></w:p>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading4"/></w:pPr>` +
+      `<w:r><w:t>Narratives</w:t></w:r></w:p>` +
+      `<w:tbl><w:tr><w:tc><w:p><w:r><w:t>◻ Correct item</w:t></w:r></w:p></w:tc></w:tr></w:tbl>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading4"/></w:pPr>` +
+      `<w:r><w:t>Budget forms</w:t></w:r></w:p>` +
+      `<w:tbl><w:tr><w:tc><w:p><w:r><w:t>☐ Wrong glyph out of scope</w:t></w:r></w:p></w:tc></w:tr></w:tbl>` +
+      `<w:sectPr/></w:body></w:document>`;
+    expect(CLEAN_011.check(makeDoc(xml), OPTIONS)).toHaveLength(0);
+  });
+});
+
+// ─── Missing glyph insertion ──────────────────────────────────────────────────
+
+describe('CLEAN-011: missing glyph detection', () => {
+  it('detects a cell with no glyph at all (starts with alphanumeric) in an Application checklist table', () => {
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W}"><w:body>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:r><w:t>Application checklist</w:t></w:r></w:p>` +
+      `<w:tbl><w:tr>` +
+      `<w:tc><w:p><w:r><w:t>Required document</w:t></w:r></w:p></w:tc>` +
+      `</w:tr></w:tbl>` +
+      `<w:sectPr/></w:body></w:document>`;
+    const results = CLEAN_011.check(makeDoc(xml), OPTIONS) as AutoAppliedChange[];
+    expect(results).toHaveLength(1);
+    expect(results[0]!.value).toBe('1');
+  });
+
+  it('detects a missing glyph in a Step 3 H4 table', () => {
+    const doc = makeDoc(makeStep3Doc('Attachments', 'Budget justification'));
+    const results = CLEAN_011.check(doc, OPTIONS) as AutoAppliedChange[];
+    expect(results).toHaveLength(1);
+    expect(results[0]!.value).toBe('1');
+  });
+
+  it('does not insert a glyph for a header row (w:tblHeader)', () => {
+    const doc = makeDoc(makeStep3Doc('Narratives', 'Document name', 'Step 3: Build Your Application', true));
+    expect(CLEAN_011.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not double-count a cell that already has TARGET_GLYPH', () => {
+    const doc = makeDoc(makeStep3Doc('Narratives', '◻ Item with correct glyph'));
+    expect(CLEAN_011.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not treat a wrong-glyph cell as also needing a missing-glyph insert', () => {
+    // ☐ triggers needsGlyphFix → must not additionally count as needsMissingGlyphInsert
+    const doc = makeDoc(makeStep3Doc('Narratives', '☐ Item'));
+    const results = CLEAN_011.check(doc, OPTIONS) as AutoAppliedChange[];
+    expect(results).toHaveLength(1);
+    expect(results[0]!.value).toBe('1'); // counted once, not twice
+  });
+});

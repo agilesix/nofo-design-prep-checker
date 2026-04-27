@@ -2610,6 +2610,7 @@ async function applyAsteriskedBoldFix(zip: JSZip): Promise<void> {
 const CHECKLIST_TARGET_GLYPH = '◻'; // U+25FB WHITE MEDIUM SQUARE
 const CHECKLIST_ALWAYS_REPLACE = new Set(['☐', '☑', '☒', '□', '•']);
 const CHECKLIST_REPLACE_IF_SPACE = new Set(['o', 'O']);
+const CHECKLIST_STEP3_H4_NAMES = /^(narratives|attachments|other\s+required\s+forms)$/i;
 
 function checklistNeedsGlyphFix(text: string): boolean {
   const trimmed = text.trimStart();
@@ -2626,6 +2627,20 @@ function checklistNeedsGlyphFix(text: string): boolean {
 
 function checklistIsListStyle(styleVal: string): boolean {
   return /list|bullet/i.test(styleVal);
+}
+
+function checklistIsHeaderRow(row: Element): boolean {
+  const trPr = Array.from(row.children).find(c => c.localName === 'trPr');
+  if (!trPr) return false;
+  return Array.from(trPr.children).some(c => c.localName === 'tblHeader');
+}
+
+function checklistNeedsMissingGlyphInsert(text: string): boolean {
+  if (checklistNeedsGlyphFix(text)) return false;
+  const trimmed = text.trimStart();
+  if (!trimmed) return false;
+  const first = trimmed[0]!;
+  return first !== CHECKLIST_TARGET_GLYPH && /[a-zA-Z0-9]/.test(first);
 }
 
 function checklistGetPStyle(para: Element): string {
@@ -2691,10 +2706,49 @@ function checklistFindTables(xmlDoc: Document): Element[] {
   return checklistCollectTablesInSection(xmlDoc, checklistIsApplicationChecklistHeading);
 }
 
+function checklistFindStep3Tables(xmlDoc: Document): Element[] {
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return [];
+
+  const tables: Element[] = [];
+  let inStep3 = false;
+  let step3Level = 0;
+  let inQualifyingH4 = false;
+
+  for (const child of Array.from(body.children)) {
+    if (child.localName === 'p') {
+      const styleVal = checklistGetPStyle(child);
+      const level = checklistGetHeadingLevel(styleVal);
+      if (level !== null) {
+        const text = checklistGetParaText(child).trim();
+
+        if (inStep3 && level <= step3Level) {
+          inStep3 = false;
+          inQualifyingH4 = false;
+        } else if (inQualifyingH4 && level <= 4) {
+          inQualifyingH4 = false;
+        }
+
+        if ((level === 2 || level === 3) && /step\s*3\b/i.test(text) && /build\s+your\s+application/i.test(text)) {
+          inStep3 = true;
+          step3Level = level;
+          inQualifyingH4 = false;
+        } else if (inStep3 && level === 4 && CHECKLIST_STEP3_H4_NAMES.test(text)) {
+          inQualifyingH4 = true;
+        }
+      }
+    } else if (child.localName === 'tbl' && inQualifyingH4) {
+      tables.push(child);
+    }
+  }
+
+  return tables;
+}
+
 /**
  * Normalize application checklist checkbox glyphs and remove list paragraph
  * styles from first-column cells of tables within the Application checklist
- * section.
+ * section and qualifying Step 3 H4 sections.
  */
 async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
   const docFile = zip.file('word/document.xml');
@@ -2705,11 +2759,16 @@ async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
   const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
-  const tables = checklistFindTables(xmlDoc);
+  const tables = [
+    ...checklistFindTables(xmlDoc),
+    ...checklistFindStep3Tables(xmlDoc),
+  ];
   let changed = false;
 
   for (const table of tables) {
     for (const row of Array.from(table.children).filter(c => c.localName === 'tr')) {
+      if (checklistIsHeaderRow(row)) continue;
+
       const firstCell = Array.from(row.children).find(c => c.localName === 'tc');
       if (!firstCell) continue;
       const firstPara = Array.from(firstCell.children).find(c => c.localName === 'p');
@@ -2740,6 +2799,16 @@ async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
             pStyle.setAttributeNS(W, 'w:val', 'Normal');
             changed = true;
           }
+        }
+      }
+
+      // Fix 3: Missing glyph — prepend ◻ + space when no glyph was present
+      if (checklistNeedsMissingGlyphInsert(cellText)) {
+        const firstWt = firstPara.getElementsByTagName('w:t')[0];
+        if (firstWt) {
+          firstWt.textContent = CHECKLIST_TARGET_GLYPH + ' ' + (firstWt.textContent ?? '');
+          firstWt.setAttribute('xml:space', 'preserve');
+          changed = true;
         }
       }
     }
