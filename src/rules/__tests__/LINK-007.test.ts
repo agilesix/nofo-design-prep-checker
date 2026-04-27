@@ -54,11 +54,9 @@ describe('LINK-007: detection', () => {
     expect((results[0] as AutoAppliedChange).value).toBe('3');
   });
 
-  it('flags a PDF link where [PDF] appears in the middle but not at the end', () => {
+  it('does not flag a PDF link where [PDF] appears at the start of the link text', () => {
     const doc = makeDoc('<p><a href="https://example.com/report.pdf">[PDF] Annual Report</a></p>');
-    const results = LINK_007.check(doc, OPTIONS);
-    expect(results).toHaveLength(1);
-    expect((results[0] as AutoAppliedChange).value).toBe('1');
+    expect(LINK_007.check(doc, OPTIONS)).toHaveLength(0);
   });
 
   it('detects a PDF link with uppercase .PDF in the URL', () => {
@@ -71,7 +69,7 @@ describe('LINK-007: detection', () => {
 
 // ─── No-ops ───────────────────────────────────────────────────────────────────
 
-describe('LINK-007: no changes when [PDF] is already present', () => {
+describe('LINK-007: no changes when [PDF] is already present in link text', () => {
   it('does not flag a PDF link that already ends with [PDF]', () => {
     const doc = makeDoc('<p><a href="https://example.com/report.pdf">Annual Report [PDF]</a></p>');
     expect(LINK_007.check(doc, OPTIONS)).toHaveLength(0);
@@ -85,6 +83,23 @@ describe('LINK-007: no changes when [PDF] is already present', () => {
   it('does not flag a PDF link that ends with [PDF] when URL is uppercase .PDF', () => {
     const doc = makeDoc('<p><a href="https://example.com/REPORT.PDF">Annual Report [PDF]</a></p>');
     expect(LINK_007.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a PDF link whose text contains "[PDF - 312KB]"', () => {
+    const doc = makeDoc('<p><a href="https://example.com/report.pdf">Annual Report [PDF - 312KB]</a></p>');
+    expect(LINK_007.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag a PDF link whose text contains "[PDF - 1.2MB]"', () => {
+    const doc = makeDoc('<p><a href="https://example.com/report.pdf">Annual Report [PDF - 1.2MB]</a></p>');
+    expect(LINK_007.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag when link text contains "[PDF]" or a "[PDF - ...]" label anywhere in the text', () => {
+    const start = makeDoc('<p><a href="https://example.com/r.pdf">[PDF - 500KB] Report</a></p>');
+    const middle = makeDoc('<p><a href="https://example.com/r.pdf">Report [PDF] Appendix</a></p>');
+    expect(LINK_007.check(start, OPTIONS)).toHaveLength(0);
+    expect(LINK_007.check(middle, OPTIONS)).toHaveLength(0);
   });
 });
 

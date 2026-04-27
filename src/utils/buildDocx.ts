@@ -2008,12 +2008,13 @@ async function applyTimeFormatCorrections(zip: JSZip): Promise<void> {
 /**
  * Append " [PDF]" to the link text of every external hyperlink whose
  * relationship target URL contains ".pdf" (case-insensitive) and whose current
- * link text does not already end with "[PDF]" (case-insensitive).
+ * link text does not already contain "[PDF" (case-insensitive).
  *
  * Three cases are handled:
- *  1. Link text does not already end with "[PDF]" (case-insensitive)
+ *  1. Link text does not contain "[PDF" anywhere (case-insensitive)
  *     → " [PDF]" is appended to the link text.
- *  2. Link text already ends with "[PDF]" (case-insensitive) → no change.
+ *  2. Link text already contains "[PDF" anywhere — including "[PDF]",
+ *     "[PDF - 312KB]", "[PDF - 1.2MB]", "[PDF]" at the start, etc. → no change.
  *  3. "[PDF]" appears as plain text in the run immediately following the
  *     hyperlink element → " [PDF]" is appended to the link text AND the
  *     adjacent plain-text run is removed.
@@ -2073,8 +2074,8 @@ async function applyPdfLabelFix(zip: JSZip): Promise<void> {
     const allWTs = runs.flatMap(r => Array.from(r.getElementsByTagName('w:t')));
     const linkText = allWTs.map(t => t.textContent ?? '').join('');
 
-    // Case 2: already ends with [PDF] → skip
-    if (/\[pdf\]$/i.test(linkText.trim())) continue;
+    // Case 2: already contains "[PDF" anywhere (e.g. [PDF], [PDF - 312KB]) → skip
+    if (/\[pdf/i.test(linkText.trim())) continue;
 
     // Case 3: check if the run immediately after the hyperlink is plain "[PDF]"
     let adjacentPdfRun: Element | null = null;
