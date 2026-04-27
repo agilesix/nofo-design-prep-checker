@@ -143,4 +143,45 @@ describe('CLEAN-018: no changes when table does not qualify', () => {
       `<w:sectPr/></w:body></w:document>`;
     expect(CLEAN_018.check(makeDoc(xml), OPTIONS)).toHaveLength(0);
   });
+
+  it('does not flag a BCD6F4-shaded single-cell table (handled by CLEAN-007 for CDC content guides)', () => {
+    // BCD6F4 tables are DGHT/DGHP instruction boxes owned by CLEAN-007;
+    // excluding them here prevents duplicate auto-applied entries on CDC documents.
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS}"><w:body>` +
+      `<w:tbl><w:tr>` +
+      `<w:tc>` +
+      `<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="BCD6F4"/></w:tcPr>` +
+      `<w:p><w:r><w:t>DGHT-SPECIFIC INSTRUCTIONS: Do not include in submission.</w:t></w:r></w:p>` +
+      `</w:tc>` +
+      `</w:tr></w:tbl>` +
+      `<w:sectPr/></w:body></w:document>`;
+    expect(CLEAN_018.check(makeDoc(xml), OPTIONS)).toHaveLength(0);
+  });
+});
+
+// ─── Nested table regression ──────────────────────────────────────────────────
+
+describe('CLEAN-018: direct-cell logic ignores nested w:tc elements', () => {
+  it('detects a single-cell outer table even when that cell contains a nested table with multiple cells', () => {
+    // With getElementsByTagName('w:tc'), the 2 nested cells would make the count 3,
+    // causing a false negative. getDirectTableCells counts only direct cells → count 1.
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS}"><w:body>` +
+      `<w:tbl><w:tr>` +
+      `<w:tc>` +
+      `<w:p><w:r><w:t>Instructions for completing this section.</w:t></w:r></w:p>` +
+      `<w:tbl><w:tr>` +
+      `<w:tc><w:p><w:r><w:t>nested cell 1</w:t></w:r></w:p></w:tc>` +
+      `<w:tc><w:p><w:r><w:t>nested cell 2</w:t></w:r></w:p></w:tc>` +
+      `</w:tr></w:tbl>` +
+      `</w:tc>` +
+      `</w:tr></w:tbl>` +
+      `<w:sectPr/></w:body></w:document>`;
+    const results = CLEAN_018.check(makeDoc(xml), OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as import('../../types').AutoAppliedChange).value).toBe('1');
+  });
 });

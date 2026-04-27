@@ -3140,6 +3140,11 @@ function c18GetSingleDirectCell(tbl: Element): Element | undefined {
 function c18IsInstructionBoxTbl(tbl: Element): boolean {
   const cell = c18GetSingleDirectCell(tbl);
   if (!cell) return false;
+
+  // Exclude BCD6F4-shaded tables — DGHT/DGHP instruction boxes handled by CLEAN-007.
+  const shd = cell.getElementsByTagName('w:shd')[0];
+  if (shd && (shd.getAttribute('w:fill') ?? '').toLowerCase() === 'bcd6f4') return false;
+
   const firstPara = Array.from(cell.childNodes).find(
     n => n.nodeType === 1 && (n as Element).tagName === 'w:p'
   ) as Element | undefined;
