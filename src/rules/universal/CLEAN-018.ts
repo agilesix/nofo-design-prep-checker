@@ -45,13 +45,33 @@ const CLEAN_018: Rule = {
 };
 
 /**
+ * Returns the direct w:tc children that belong to the table's direct w:tr rows.
+ * Nested-table cells are intentionally excluded.
+ */
+function getDirectTableCells(tbl: Element): Element[] {
+  const cells: Element[] = [];
+
+  for (const rowNode of Array.from(tbl.childNodes)) {
+    if (rowNode.nodeType !== 1 || (rowNode as Element).tagName !== 'w:tr') continue;
+
+    for (const cellNode of Array.from(rowNode.childNodes)) {
+      if (cellNode.nodeType === 1 && (cellNode as Element).tagName === 'w:tc') {
+        cells.push(cellNode as Element);
+      }
+    }
+  }
+
+  return cells;
+}
+
+/**
  * Returns true when the table is a single-cell instruction box:
- *   1. Exactly one w:tc across all rows.
+ *   1. Exactly one direct w:tc across all direct w:tr rows.
  *   2. The first direct w:p child of the cell has concatenated text
  *      containing the word "instructions" (case-insensitive).
  */
 export function isInstructionBoxTbl(tbl: Element): boolean {
-  const cells = Array.from(tbl.getElementsByTagName('w:tc'));
+  const cells = getDirectTableCells(tbl);
   if (cells.length !== 1) return false;
 
   const cell = cells[0]!;
