@@ -13,15 +13,6 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@v5
+      - uses: googleapis/release-please-action@v4
         with:
           release-type: node
-          # Caps the GraphQL commit-history pagination at 200 commits.
-          # Without this, release-please paginates the full branch history and
-          # the GitHub GraphQL API returned an internal server error on the
-          # second page (2026-04-27, trace 2481:23F4C9:CB6C13:32FEF78:69EF8CA3).
-          # 200 comfortably exceeds the number of commits between any two
-          # releases in this repo. If release-please starts missing commits
-          # between releases (e.g. a CHANGELOG entry is skipped), increase this
-          # value in increments of 100 until it covers the longest release gap.
-          commit-search-depth: 200
