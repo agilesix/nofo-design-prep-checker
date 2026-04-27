@@ -3126,11 +3126,12 @@ function c18GetSingleDirectCell(tbl: Element): Element | undefined {
   const rows = Array.from(tbl.childNodes).filter(
     n => n.nodeType === 1 && (n as Element).tagName === 'w:tr'
   ) as Element[];
-  if (rows.length !== 1) return undefined;
 
-  const cells = Array.from(rows[0]!.childNodes).filter(
-    n => n.nodeType === 1 && (n as Element).tagName === 'w:tc'
-  ) as Element[];
+  const cells = rows.flatMap(row =>
+    Array.from(row.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:tc'
+    ) as Element[]
+  );
   if (cells.length !== 1) return undefined;
 
   return cells[0];
