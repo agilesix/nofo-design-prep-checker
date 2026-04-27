@@ -24,7 +24,7 @@ const CLEAN_018: Rule = {
   check(doc: ParsedDocument, _options: RuleRunnerOptions): AutoAppliedChange[] {
     const xml = doc.documentXml;
     if (!xml) return [];
-    if (!xml.toLowerCase().includes('instructions')) return [];
+    if (!/instructions/i.test(xml)) return [];
 
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(xml, 'application/xml');
