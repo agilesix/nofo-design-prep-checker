@@ -452,6 +452,55 @@ describe('HEAD-001: form identifier headings are exempt from the general cap che
   });
 });
 
+// ─── CDC / CDC-funded exemption ──────────────────────────────────────────────
+
+describe('HEAD-001: CDC and CDC-funded headings are exempt from the general cap check', () => {
+  it('does not flag an H3 containing standalone "CDC" for title case', () => {
+    // "CDC Requirements" would normally be flagged as title case, but the
+    // standalone "CDC" word makes this heading exempt (case-sensitive match).
+    const doc = makeDoc('<h3>CDC Requirements Overview</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not auto-fix an H2 containing standalone "CDC"', () => {
+    const doc = makeDoc('<h2>CDC funding overview</h2>');
+    const changes = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as AutoAppliedChange).targetField === 'heading.h2.titlecase'
+    );
+    expect(changes).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "CDC-Funded" (mixed case) for title case', () => {
+    const doc = makeDoc('<h3>CDC-Funded Programs And Activities</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does not flag an H3 containing "cdc-funded" (all lowercase) for title case', () => {
+    // The CDC-funded match is case-insensitive, so lowercase "cdc-funded" is also exempt.
+    const doc = makeDoc('<h3>cdc-funded Programs And Activities</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(0);
+  });
+
+  it('does NOT exempt a heading containing lowercase "cdc" alone', () => {
+    // The standalone-word match is case-sensitive: "cdc" does not match "CDC".
+    // "Accessing cdc Resources" has title-case words → should still be flagged.
+    const doc = makeDoc('<h3>Accessing cdc Resources Online</h3>');
+    const issues = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(issues).toHaveLength(1);
+  });
+});
+
 // ─── Capitalized "Form" suggestion ───────────────────────────────────────────
 
 describe('HEAD-001: capitalized "Form" suggestion', () => {
