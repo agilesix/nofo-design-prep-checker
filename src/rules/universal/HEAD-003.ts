@@ -1,5 +1,29 @@
 import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
 
+// Returns the heading level (1–6) of a <w:p> XML element, or 0 if not a heading.
+function xmlHeadingLevel(wP: Element): number {
+  const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
+  if (!pPr) return 0;
+  const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+  if (!pStyle) return 0;
+  const val = pStyle.getAttribute('w:val') ?? '';
+  const m = val.match(/^Heading\s*(\d+)$/i);
+  return m ? parseInt(m[1]!, 10) : 0;
+}
+
+// Returns concatenated text of all <w:t> descendants inside a <w:p> XML element.
+function xmlParaText(wP: Element): string {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const byNS = Array.from(wP.getElementsByTagNameNS(W, 't'));
+  const byTag = Array.from(wP.getElementsByTagName('w:t'));
+  const seen = new Set<Element>();
+  const nodes: Element[] = [];
+  for (const el of [...byNS, ...byTag]) {
+    if (!seen.has(el)) { seen.add(el); nodes.push(el); }
+  }
+  return nodes.map(t => t.textContent ?? '').join('');
+}
+
 /**
  * HEAD-003: Skipped heading levels
  *
@@ -32,16 +56,27 @@ const HEAD_003: Rule = {
   check(doc: ParsedDocument, _options: RuleRunnerOptions): Issue[] {
     const issues: Issue[] = [];
 
-    const parser = new DOMParser();
-    const htmlDoc = parser.parseFromString(doc.html, 'text/html');
-    const headings = Array.from(htmlDoc.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+    // Build the heading sequence using a deep traversal so that headings nested
+    // inside w:sdt content controls are included. When documentXml is available
+    // (real documents), parse the OOXML directly; fall back to mammoth HTML for
+    // environments that provide only HTML (e.g. unit tests without XML).
+    let headingData: Array<{ level: number; text: string }>;
 
-    if (headings.length < 2) return [];
-
-    const headingData = headings.map(h => ({
-      level: parseInt(h.tagName[1] ?? '0', 10),
-      text: (h.textContent ?? '').trim(),
-    }));
+    if (doc.documentXml) {
+      const xmlParser = new DOMParser();
+      const xmlDoc = xmlParser.parseFromString(doc.documentXml, 'application/xml');
+      headingData = Array.from(xmlDoc.getElementsByTagName('w:p'))
+        .map(wP => ({ level: xmlHeadingLevel(wP), text: xmlParaText(wP).trim() }))
+        .filter(h => h.level > 0);
+    } else {
+      const htmlParser = new DOMParser();
+      const htmlDoc = htmlParser.parseFromString(doc.html, 'text/html');
+      headingData = Array.from(htmlDoc.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+        .map(h => ({
+          level: parseInt(h.tagName[1] ?? '0', 10),
+          text: (h.textContent ?? '').trim(),
+        }));
+    }
 
     for (let i = 1; i < headingData.length; i++) {
       const prev = headingData[i - 1]!;

@@ -3,13 +3,13 @@ import JSZip from 'jszip';
 import HEAD_003 from '../universal/HEAD-003';
 import type { ParsedDocument, Issue } from '../../types';
 
-function makeDoc(html: string): ParsedDocument {
+function makeDoc(html: string, documentXml = ''): ParsedDocument {
   return {
     html,
     sections: [],
     rawText: '',
     zipArchive: new JSZip(),
-    documentXml: '',
+    documentXml,
     footnotesXml: '',
     endnotesXml: '',
     activeContentGuide: null,
@@ -225,5 +225,56 @@ describe('HEAD-003: Content guide agnostic', () => {
     expect(HEAD_003.check(doc, { contentGuideId: 'hrsa-rr' })).toHaveLength(1);
     expect(HEAD_003.check(doc, { contentGuideId: 'acf' })).toHaveLength(1);
     expect(HEAD_003.check(doc, OPTIONS)).toHaveLength(1);
+  });
+});
+
+// ─── Headings inside w:sdt content controls ──────────────────────────────────
+
+const W_NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+
+function makeXmlDoc(bodyInnerXml: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<w:document ${W_NS}><w:body>${bodyInnerXml}</w:body></w:document>`
+  );
+}
+
+function xmlHeading(level: number, text: string): string {
+  return (
+    `<w:p><w:pPr><w:pStyle w:val="Heading${level}"/></w:pPr>` +
+    `<w:r><w:t>${text}</w:t></w:r></w:p>`
+  );
+}
+
+describe('HEAD-003: w:sdt content control traversal', () => {
+  it('does not flag H3 → H4 (in sdt) → H5 (in sdt) → H5 as a skip', () => {
+    // Mammoth would emit H3 → H5 from this doc (missing the sdt headings),
+    // which looks like a skip. The rule must use the documentXml path to see
+    // the intervening H4 and first H5 inside the content control.
+    const documentXml = makeXmlDoc(
+      xmlHeading(3, 'Level Three') +
+      `<w:sdt><w:sdtContent>` +
+        xmlHeading(4, 'Level Four in Control') +
+        xmlHeading(5, 'Level Five in Control') +
+      `</w:sdtContent></w:sdt>` +
+      xmlHeading(5, 'Level Five')
+    );
+    // html represents what mammoth would have produced — sdt headings absent
+    const doc = makeDoc('<h3>Level Three</h3><h5>Level Five</h5>', documentXml);
+    expect(HEAD_003.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('still flags a genuine skip that spans content controls', () => {
+    // H3 → H6 (in sdt) is a real two-level skip regardless of the wrapper
+    const documentXml = makeXmlDoc(
+      xmlHeading(3, 'Level Three') +
+      `<w:sdt><w:sdtContent>` +
+        xmlHeading(6, 'Level Six in Control') +
+      `</w:sdtContent></w:sdt>`
+    );
+    const doc = makeDoc('<h3>Level Three</h3>', documentXml);
+    const results = HEAD_003.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect(results[0]!.ruleId).toBe('HEAD-003');
   });
 });
