@@ -1,6 +1,8 @@
 import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
 
-// Returns the heading level (1–6) of a <w:p> XML element, or 0 if not a heading.
+// Returns the heading level (1–6) of a <w:p> XML element, or 0 if the paragraph
+// is not a Heading style or uses a level outside the 1–6 range (e.g. Heading 7–9,
+// which are valid Word styles but outside this rule's contract).
 function xmlHeadingLevel(wP: Element): number {
   const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
   if (!pPr) return 0;
@@ -8,7 +10,9 @@ function xmlHeadingLevel(wP: Element): number {
   if (!pStyle) return 0;
   const val = pStyle.getAttribute('w:val') ?? '';
   const m = val.match(/^Heading\s*(\d+)$/i);
-  return m ? parseInt(m[1]!, 10) : 0;
+  if (!m) return 0;
+  const level = parseInt(m[1]!, 10);
+  return level >= 1 && level <= 6 ? level : 0;
 }
 
 // Returns concatenated text of all <w:t> descendants inside a <w:p> XML element.
@@ -46,7 +50,10 @@ function xmlParaText(wP: Element): string {
  * targetField format for accepted fixes:
  *   "heading.level.H{fromLevel}.{headingIndex}::{headingText}"
  *   headingIndex is the 0-based ordinal position of the heading among all
- *   headings in the document (as returned by querySelectorAll('h1,…,h6')).
+ *   Heading 1–6 paragraphs in the document. When documentXml is present the
+ *   ordinal comes from a deep getElementsByTagName('w:p') traversal of the
+ *   OOXML (matching applyHeadingLevelCorrections); when only HTML is available
+ *   it falls back to querySelectorAll('h1,…,h6') ordering.
  *   This disambiguates headings with identical text.
  * value: the confirmed target level as a string (e.g. "2")
  */
