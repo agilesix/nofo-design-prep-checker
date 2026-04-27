@@ -107,6 +107,9 @@ export async function buildDocx(
   const hasGrantsGovNormalize = autoAppliedChanges.some(
     c => c.targetField === 'link.grantsgov.normalize'
   );
+  const hasUniversalInstructionBoxRemoval = autoAppliedChanges.some(
+    c => c.targetField === 'struct.universal.removeinstructionboxes'
+  );
   const h2TitleCaseChanges = autoAppliedChanges.filter(
     c => c.targetField === 'heading.h2.titlecase' && c.value
   );
@@ -231,6 +234,11 @@ export async function buildDocx(
   // Normalize Grants.gov link text and URLs
   if (hasGrantsGovNormalize) {
     await applyGrantsGovNormalization(zip);
+  }
+
+  // Remove universal instruction box tables (single-cell, first paragraph contains "instructions")
+  if (hasUniversalInstructionBoxRemoval) {
+    await applyUniversalInstructionBoxRemoval(zip);
   }
 
   // Move partial-word characters that are outside w:hyperlink into it
@@ -3084,6 +3092,79 @@ async function applyRemoveContentControls(zip: JSZip): Promise<void> {
       zip.file(path, serializeXml(xmlDoc));
     }
   }
+}
+
+// ─── CLEAN-018: Remove universal instruction box tables ──────────────────────
+
+/**
+ * Removes single-cell tables from word/document.xml whose first paragraph
+ * text contains the word "instructions" (case-insensitive). Covers all
+ * template instruction-box patterns regardless of content guide.
+ */
+async function applyUniversalInstructionBoxRemoval(zip: JSZip): Promise<void> {
+  const xmlStr = await zip.file('word/document.xml')?.async('string');
+  if (!xmlStr) return;
+
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const tables = Array.from(xmlDoc.getElementsByTagName('w:tbl'));
+  let removed = false;
+  for (const tbl of tables) {
+    if (c18IsInstructionBoxTbl(tbl)) {
+      tbl.parentNode?.removeChild(tbl);
+      removed = true;
+    }
+  }
+
+  if (!removed) return;
+
+  zip.file('word/document.xml', serializeXml(xmlDoc));
+}
+
+function c18GetSingleDirectCell(tbl: Element): Element | undefined {
+  const rows = Array.from(tbl.childNodes).filter(
+    n => n.nodeType === 1 && (n as Element).tagName === 'w:tr'
+  ) as Element[];
+
+  const cells = rows.flatMap(row =>
+    Array.from(row.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:tc'
+    ) as Element[]
+  );
+  if (cells.length !== 1) return undefined;
+
+  return cells[0];
+}
+
+function c18GetDirectChildByTagName(parent: Element, tagName: string): Element | undefined {
+  return Array.from(parent.childNodes).find(
+    n => n.nodeType === 1 && (n as Element).tagName === tagName
+  ) as Element | undefined;
+}
+
+function c18IsInstructionBoxTbl(tbl: Element): boolean {
+  const cell = c18GetSingleDirectCell(tbl);
+  if (!cell) return false;
+
+  // Exclude BCD6F4-shaded tables — DGHT/DGHP instruction boxes handled by CLEAN-007.
+  const tcPr = c18GetDirectChildByTagName(cell, 'w:tcPr');
+  const shd = tcPr ? c18GetDirectChildByTagName(tcPr, 'w:shd') : undefined;
+  if (shd && (shd.getAttribute('w:fill') ?? '').toLowerCase() === 'bcd6f4') return false;
+
+  const firstPara = Array.from(cell.childNodes).find(
+    n => n.nodeType === 1 && (n as Element).tagName === 'w:p'
+  ) as Element | undefined;
+  if (!firstPara) return false;
+
+  const text = Array.from(firstPara.getElementsByTagName('w:t'))
+    .map(t => t.textContent ?? '')
+    .join('')
+    .replace(/\u00a0/g, ' ')
+    .trim()
+    .toLowerCase();
+
+  return text.includes('instructions');
 }
 
 /**
