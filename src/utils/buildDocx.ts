@@ -3122,11 +3122,23 @@ async function applyUniversalInstructionBoxRemoval(zip: JSZip): Promise<void> {
   zip.file('word/document.xml', serializeXml(xmlDoc));
 }
 
-function c18IsInstructionBoxTbl(tbl: Element): boolean {
-  const cells = Array.from(tbl.getElementsByTagName('w:tc'));
-  if (cells.length !== 1) return false;
+function c18GetSingleDirectCell(tbl: Element): Element | undefined {
+  const rows = Array.from(tbl.childNodes).filter(
+    n => n.nodeType === 1 && (n as Element).tagName === 'w:tr'
+  ) as Element[];
+  if (rows.length !== 1) return undefined;
 
-  const cell = cells[0]!;
+  const cells = Array.from(rows[0]!.childNodes).filter(
+    n => n.nodeType === 1 && (n as Element).tagName === 'w:tc'
+  ) as Element[];
+  if (cells.length !== 1) return undefined;
+
+  return cells[0];
+}
+
+function c18IsInstructionBoxTbl(tbl: Element): boolean {
+  const cell = c18GetSingleDirectCell(tbl);
+  if (!cell) return false;
   const firstPara = Array.from(cell.childNodes).find(
     n => n.nodeType === 1 && (n as Element).tagName === 'w:p'
   ) as Element | undefined;
