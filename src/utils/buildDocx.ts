@@ -1110,7 +1110,14 @@ function getHeadingLevel(wP: Element): number {
   if (!pPr) return 0;
   const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
   if (!pStyle) return 0;
-  const val = pStyle.getAttribute('w:val') ?? '';
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  // Some DOM/XMLSerializer paths store attributes under the namespace URI rather
+  // than the qualified name, so fall through all three forms before giving up.
+  const val =
+    pStyle.getAttribute('w:val') ??
+    pStyle.getAttributeNS(W, 'val') ??
+    pStyle.getAttribute('val') ??
+    '';
   const m = val.match(/^Heading\s*(\d+)$/i);
   if (!m) return 0;
   const level = parseInt(m[1]!, 10);

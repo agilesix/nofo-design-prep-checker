@@ -8,7 +8,12 @@ function xmlHeadingLevel(wP: Element): number {
   if (!pPr) return 0;
   const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
   if (!pStyle) return 0;
-  const val = pStyle.getAttribute('w:val') ?? '';
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const val =
+    pStyle.getAttribute('w:val') ??
+    pStyle.getAttributeNS(W, 'val') ??
+    pStyle.getAttribute('val') ??
+    '';
   const m = val.match(/^Heading\s*(\d+)$/i);
   if (!m) return 0;
   const level = parseInt(m[1]!, 10);
