@@ -3137,12 +3137,19 @@ function c18GetSingleDirectCell(tbl: Element): Element | undefined {
   return cells[0];
 }
 
+function c18GetDirectChildByTagName(parent: Element, tagName: string): Element | undefined {
+  return Array.from(parent.childNodes).find(
+    n => n.nodeType === 1 && (n as Element).tagName === tagName
+  ) as Element | undefined;
+}
+
 function c18IsInstructionBoxTbl(tbl: Element): boolean {
   const cell = c18GetSingleDirectCell(tbl);
   if (!cell) return false;
 
   // Exclude BCD6F4-shaded tables — DGHT/DGHP instruction boxes handled by CLEAN-007.
-  const shd = cell.getElementsByTagName('w:shd')[0];
+  const tcPr = c18GetDirectChildByTagName(cell, 'w:tcPr');
+  const shd = tcPr ? c18GetDirectChildByTagName(tcPr, 'w:shd') : undefined;
   if (shd && (shd.getAttribute('w:fill') ?? '').toLowerCase() === 'bcd6f4') return false;
 
   const firstPara = Array.from(cell.childNodes).find(
