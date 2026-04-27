@@ -7,9 +7,10 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
  * "[PDF]" at the end of the link text so readers know the link opens a PDF.
  *
  * Three cases are handled:
- *  1. Link text does not already end with "[PDF]" (case-insensitive)
+ *  1. Link text does not already contain "[PDF" (case-insensitive)
  *     → Append " [PDF]" to the link text in the downloaded document.
- *  2. Link text already ends with "[PDF]" (case-insensitive)
+ *  2. Link text already contains "[PDF" anywhere (case-insensitive) — including
+ *     "[PDF]", "[PDF - 312KB]", "[PDF - 1.2MB]", etc.
  *     → No change needed.
  *  3. "[PDF]" appears as plain text immediately after the hyperlink but is not
  *     part of the link text itself (e.g. "Report<a>…</a>[PDF]")
@@ -46,8 +47,8 @@ const LINK_007: Rule = {
 
       const linkText = (link.textContent ?? '').trim();
 
-      // Case 2: already ends with [PDF] (case-insensitive) → no change
-      if (/\[pdf\]$/i.test(linkText)) continue;
+      // Case 2: already contains [PDF anywhere (e.g. [PDF], [PDF - 312KB]) → no change
+      if (/\[pdf/i.test(linkText)) continue;
 
       // Cases 1 and 3: link needs [PDF] added
       count++;
