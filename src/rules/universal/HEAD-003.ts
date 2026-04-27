@@ -52,7 +52,7 @@ function xmlParaText(wP: Element): string {
  *   headingIndex is the 0-based ordinal position of the heading among all
  *   Heading 1–6 paragraphs in the document. When documentXml is present the
  *   ordinal comes from a deep getElementsByTagName('w:p') traversal of the
- *   OOXML (matching applyHeadingLevelCorrections); when only HTML is available
+ *   OOXML, counting only Heading 1–6 paragraphs; when only HTML is available
  *   it falls back to querySelectorAll('h1,…,h6') ordering.
  *   This disambiguates headings with identical text.
  * value: the confirmed target level as a string (e.g. "2")
