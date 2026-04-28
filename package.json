@@ -20,7 +20,7 @@
     "mammoth": "^1.8.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
-    "react-router-dom": "^6.0.0"
+    "react-router-dom": "^7.13.2"
   },
   "engines": {
     "node": ">=20.19.0"
