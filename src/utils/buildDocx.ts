@@ -107,6 +107,9 @@ export async function buildDocx(
   const hasGrantsGovNormalize = autoAppliedChanges.some(
     c => c.targetField === 'link.grantsgov.normalize'
   );
+  const hasGrantsGovCapitalizationFix = autoAppliedChanges.some(
+    c => c.targetField === 'link.grantsgov.capitalization'
+  );
   const hasUniversalInstructionBoxRemoval = autoAppliedChanges.some(
     c => c.targetField === 'struct.universal.removeinstructionboxes'
   );
@@ -242,6 +245,11 @@ export async function buildDocx(
   // Normalize Grants.gov link text and URLs
   if (hasGrantsGovNormalize) {
     await applyGrantsGovNormalization(zip);
+  }
+
+  // Correct "grants.gov" capitalization to "Grants.gov" in all text runs
+  if (hasGrantsGovCapitalizationFix) {
+    await applyGrantsGovCapitalizationFix(zip);
   }
 
   // Remove universal instruction box tables (single-cell, first paragraph contains "instructions")
@@ -2292,6 +2300,37 @@ async function applyGrantsGovNormalization(zip: JSZip): Promise<void> {
   }
 
   if (docChanged) {
+    zip.file('word/document.xml', serializeXml(xmlDoc));
+  }
+}
+
+// ─── LINK-003: Grants.gov capitalization fix ─────────────────────────────────
+
+/**
+ * Replaces every case-insensitive occurrence of "grants.gov" in w:t text
+ * content with "Grants.gov". Applies to all text runs — both inside
+ * w:hyperlink elements and in plain body paragraphs. Hyperlink URLs
+ * (relationship targets in word/_rels/document.xml.rels) are not touched.
+ */
+async function applyGrantsGovCapitalizationFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  let changed = false;
+  for (const wT of Array.from(xmlDoc.getElementsByTagName('w:t'))) {
+    const text = wT.textContent ?? '';
+    const replaced = text.replace(/grants\.gov/gi, 'Grants.gov');
+    if (replaced !== text) {
+      wT.textContent = replaced;
+      changed = true;
+    }
+  }
+
+  if (changed) {
     zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }

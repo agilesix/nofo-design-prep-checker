@@ -82,6 +82,7 @@ export const allRules: Rule[] = [
   CLEAN_016,
   CLEAN_017,
   CLEAN_018,
+  LINK_003,
   LINK_007,
   LINK_009,
   TABLE_004,
@@ -103,7 +104,6 @@ export const allRules: Rule[] = [
   // Link rules
   LINK_001,
   LINK_002,
-  LINK_003,
   LINK_004,
   LINK_006,
   LINK_008,

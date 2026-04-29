@@ -1949,6 +1949,75 @@ describe('buildDocx — CLEAN-017: Grants.gov link normalization OOXML patch', (
   });
 });
 
+// ─── LINK-003: Grants.gov capitalization OOXML patch ─────────────────────────
+
+const LINK_003_CAP_CHANGE: AutoAppliedChange = {
+  ruleId: 'LINK-003',
+  description: 'Grants.gov capitalization corrected in 1 location.',
+  targetField: 'link.grantsgov.capitalization',
+  value: '1',
+};
+
+function makeLink003DocXml(text: string, inHyperlink = false, rId = 'rId1'): string {
+  const run = `<w:r><w:t>${text}</w:t></w:r>`;
+  const para = inHyperlink
+    ? `<w:p><w:hyperlink r:id="${rId}">${run}</w:hyperlink></w:p>`
+    : `<w:p>${run}</w:p>`;
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}">` +
+    `<w:body>${para}<w:sectPr/></w:body></w:document>`
+  );
+}
+
+describe('buildDocx — LINK-003: Grants.gov capitalization OOXML patch', () => {
+  it('corrects "grants.gov" as full hyperlink text', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeLink003DocXml('grants.gov', true));
+    const outXml = await getOutputDocXml(zip, [], [LINK_003_CAP_CHANGE]);
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('Grants.gov');
+  });
+
+  it('corrects only the substring when "grants.gov" is embedded in longer hyperlink text', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeLink003DocXml('visit grants.gov for more details', true));
+    const outXml = await getOutputDocXml(zip, [], [LINK_003_CAP_CHANGE]);
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('visit Grants.gov for more details');
+  });
+
+  it('corrects "grants.gov" in plain body text', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeLink003DocXml('Submit at grants.gov today.'));
+    const outXml = await getOutputDocXml(zip, [], [LINK_003_CAP_CHANGE]);
+    expect(outXml).toContain('Submit at Grants.gov today.');
+    expect(outXml).not.toContain('grants.gov');
+  });
+
+  it('leaves already-correct "Grants.gov" unchanged', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeLink003DocXml('Visit Grants.gov for details.'));
+    const outXml = await getOutputDocXml(zip, [], [LINK_003_CAP_CHANGE]);
+    expect(outXml).toContain('Visit Grants.gov for details.');
+  });
+
+  it('does not touch the hyperlink URL (relationship target)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeLink003DocXml('grants.gov', true));
+    zip.file('word/_rels/document.xml.rels', makeGrantsGovRelsXml('rId1', 'http://grants.gov'));
+    const blob = await buildDocx(zip, [], [LINK_003_CAP_CHANGE]);
+    const outZip = await JSZip.loadAsync(blob);
+    const relsXml = await outZip.file('word/_rels/document.xml.rels')!.async('string');
+    expect(getRelTarget(relsXml, 'rId1')).toBe('http://grants.gov');
+  });
+
+  it('makes no changes when the autoAppliedChange flag is absent', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeLink003DocXml('grants.gov', true));
+    const outXml = await getOutputDocXml(zip, [], []);
+    expect(getHyperlinkText(outXml, 'rId1')).toBe('grants.gov');
+  });
+});
+
 // ─── CLEAN-012: asterisked bold OOXML patch ───────────────────────────────────
 
 /**
