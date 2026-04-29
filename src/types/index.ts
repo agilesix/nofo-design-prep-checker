@@ -97,6 +97,10 @@ export interface Issue {
   location?: string;
   nearestHeading?: string | null;
   inputRequired?: IssueInputSpec;
+  /** targetField for accept-only cards that have no inputRequired (e.g. HEAD-005). */
+  targetField?: string;
+  /** Custom label for the Accept button. Falls back to the default "Accept fix" label. */
+  acceptLabel?: string;
   headingCard?: {
     boldText: string;
     matchType: 'exact' | 'partial' | 'positional' | 'none';

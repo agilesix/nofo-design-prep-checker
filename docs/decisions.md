@@ -4,6 +4,22 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
+## 2026-04-29 — HEAD-004 and HEAD-005: two separate heading-length rules with suppression
+
+**Decision:** Two separate rules handle heading length: HEAD-004 (heading may be too long, 10+ words or 80+ chars) and HEAD-005 (heading may be misformatted normal text, 20+ words or 150+ chars). HEAD-005 suppresses HEAD-004 on the same heading. Any heading exceeding HEAD-005's thresholds is excluded from HEAD-004 even if HEAD-005 does not fire (e.g. headings ending with a colon).
+
+**Reason — two rules instead of one:** The two rules serve different purposes. HEAD-004 asks the user to shorten a heading while keeping it as a heading. HEAD-005 asks whether the text should be a heading at all. These are different actions with different user interactions: HEAD-004 shows a text input for a replacement; HEAD-005 shows an accept/skip card that converts the paragraph to Normal style. Combining them into one rule would require conditional UI logic that is better expressed as separate rules with clear, single-purpose contracts.
+
+**Reason — different thresholds:** HEAD-004 fires at 10+ words or 80+ characters — lengths that are plausibly long but still within normal heading territory. HEAD-005 fires at 20+ words or 150+ characters — lengths that are so extreme that the text is more likely body copy. The gap between the thresholds (10–20 words) is where HEAD-004 alone fires.
+
+**Reason — HEAD-005 suppresses HEAD-004:** If text is long enough to question whether it belongs as a heading at all, asking the user to shorten it is redundant. The higher-priority question is "should this be a heading?" not "what should the shorter heading say?"
+
+**Reason — colon exception excludes from HEAD-004 too:** Headings ending with a colon are intentional section labels (e.g. "Eligibility:") regardless of length. HEAD-005's colon exception means it doesn't fire on those headings. Since any heading exceeding HEAD-005's thresholds is already excluded from HEAD-004, colon-ending headings that are very long are excluded from both rules — neither fires.
+
+**Fix mechanics:** HEAD-004's accepted fix calls `applyHeadingTextCorrections` (updates `w:t` text, preserves `w:pStyle`). HEAD-005's accepted fix calls `applyHeadingStyleToNormal` (updates `w:pStyle` to `Normal`, preserves all text and run formatting). Both use the same heading ordinal-index counting convention as HEAD-003.
+
+---
+
 ## 2026-04-23 — Mobile: slim site alert on upload page replaces iOS-specific download branching
 
 **Decision:** A `usa-site-alert--slim` (info type) is shown above the H1 on the Upload page on small screens only (hidden at ≥768px via `.mobile-only { @media (min-width: 48em) { display: none } }`). Alert text: "This tool works best on a desktop or laptop. Downloading your corrected document may not work on mobile devices or tablets."

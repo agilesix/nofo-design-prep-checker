@@ -11,6 +11,10 @@ import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types
  * word starts with an uppercase letter) are also excluded — long organization
  * names are not heading length violations.
  *
+ * Suppression: if a heading would also trigger HEAD-005 (>20 words or >150
+ * characters, not ending with a colon), HEAD-004 is skipped for that heading
+ * to avoid showing both rules simultaneously.
+ *
  * When flagged, a text input pre-filled with the current heading text is shown
  * so the user can enter a shorter replacement. The heading level (H3–H6) is
  * preserved exactly in the downloaded document; only the w:t text content is
@@ -23,6 +27,10 @@ import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types
 
 const WORD_LIMIT = 10;
 const CHAR_LIMIT = 80;
+
+// HEAD-005 thresholds — used to suppress HEAD-004 when HEAD-005 would also fire
+const HEAD_005_WORD_LIMIT = 20;
+const HEAD_005_CHAR_LIMIT = 150;
 
 const CONNECTORS = new Set([
   'of', 'and', 'or', 'for', 'the', 'a', 'an', 'in', 'at', 'by', 'on',
@@ -65,6 +73,11 @@ const HEAD_004: Rule = {
       const charCount = text.length;
 
       if (wordCount <= WORD_LIMIT && charCount <= CHAR_LIMIT) continue;
+
+      // Suppress HEAD-004 for any heading that exceeds HEAD-005 thresholds —
+      // either HEAD-005 will flag it (no colon) or the colon exception makes it
+      // an intentional section label; either way HEAD-004 is redundant.
+      if (wordCount > HEAD_005_WORD_LIMIT || charCount > HEAD_005_CHAR_LIMIT) continue;
 
       if (isProperNounPhrase(text)) continue;
 
