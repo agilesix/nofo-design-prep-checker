@@ -89,7 +89,7 @@ describe('TABLE-004: detection', () => {
     const results = TABLE_004.check(doc, OPTIONS) as AutoAppliedChange[];
     expect(results).toHaveLength(1);
     expect(results[0]!.value).toBe('2');
-    expect(results[0]!.description).toContain('2 tables');
+    expect(results[0]!.description).toContain('2 callout boxes');
   });
 
   it('does not detect when the first paragraph is the only content in the cell', () => {
@@ -119,7 +119,7 @@ describe('TABLE-004: detection', () => {
   it('returns a singular description for exactly one table', () => {
     const doc = makeDoc(wrap(singleCellTable('Important: public information')));
     const results = TABLE_004.check(doc, OPTIONS) as AutoAppliedChange[];
-    expect(results[0]!.description).toMatch(/in 1 table\./);
+    expect(results[0]!.description).toMatch(/in 1 callout box\./);
   });
 
   it('returns a plural description for two or more tables', () => {
@@ -128,6 +128,6 @@ describe('TABLE-004: detection', () => {
       singleCellTable('Important: public information')
     ));
     const results = TABLE_004.check(doc, OPTIONS) as AutoAppliedChange[];
-    expect(results[0]!.description).toMatch(/in 2 tables\./);
+    expect(results[0]!.description).toMatch(/in 2 callout boxes\./);
   });
 });

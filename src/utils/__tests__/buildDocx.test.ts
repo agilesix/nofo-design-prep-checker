@@ -4218,7 +4218,7 @@ describe('buildDocx — LINK-008: email mailto conversion', () => {
 const W_NS_T4 = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const TABLE_004_CHANGE: AutoAppliedChange = {
   ruleId: 'TABLE-004',
-  description: 'Heading style applied to "Important: public information" in 1 table.',
+  description: 'Heading style applied to "Important: public information" in 1 callout box.',
   targetField: 'table.importantpublic.heading',
   value: '1',
 };

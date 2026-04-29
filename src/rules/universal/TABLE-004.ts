@@ -36,7 +36,7 @@ const TABLE_004: Rule = {
     return [
       {
         ruleId: 'TABLE-004',
-        description: `Heading style applied to "Important: public information" in ${count} table${count === 1 ? '' : 's'}.`,
+        description: `Heading style applied to "Important: public information" in ${count} callout box${count === 1 ? '' : 'es'}.`,
         targetField: 'table.importantpublic.heading',
         value: String(count),
       },
