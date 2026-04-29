@@ -11,9 +11,10 @@ import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types
  * word starts with an uppercase letter) are also excluded — long organization
  * names are not heading length violations.
  *
- * Suppression: if a heading would also trigger HEAD-005 (>20 words or >150
- * characters, not ending with a colon), HEAD-004 is skipped for that heading
- * to avoid showing both rules simultaneously.
+ * Suppression: HEAD-004 is skipped for any heading that exceeds the HEAD-005
+ * thresholds (>20 words or >150 characters), regardless of whether the heading
+ * ends with a colon. The colon exception in HEAD-005 only determines whether
+ * HEAD-005 surfaces an issue card — it does not affect this suppression.
  *
  * When flagged, a text input pre-filled with the current heading text is shown
  * so the user can enter a shorter replacement. The heading level (H3–H6) is
@@ -28,7 +29,7 @@ import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types
 const WORD_LIMIT = 10;
 const CHAR_LIMIT = 80;
 
-// HEAD-005 thresholds — used to suppress HEAD-004 when HEAD-005 would also fire
+// HEAD-005 thresholds — HEAD-004 is suppressed for any heading that exceeds these
 const HEAD_005_WORD_LIMIT = 20;
 const HEAD_005_CHAR_LIMIT = 150;
 
