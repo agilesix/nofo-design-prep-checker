@@ -2650,6 +2650,126 @@ describe('buildDocx — applyHeadingTextCorrections (HEAD-004)', () => {
   });
 });
 
+// ─── applyHeadingStyleToNormal (HEAD-005) ────────────────────────────────────
+
+/**
+ * Parse all paragraphs from a serialized word/document.xml, returning their
+ * pStyle value (or '' if absent) and their concatenated w:t text content.
+ */
+function extractAllParaStyles(xml: string): Array<{ style: string; text: string }> {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'application/xml');
+  const result: Array<{ style: string; text: string }> = [];
+  for (const wP of Array.from(doc.getElementsByTagName('w:p'))) {
+    const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
+    const pStyle = pPr
+      ? Array.from(pPr.children).find(c => c.localName === 'pStyle')
+      : undefined;
+    const style = pStyle?.getAttribute('w:val') ?? '';
+    const text = Array.from(wP.getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '')
+      .join('');
+    result.push({ style, text });
+  }
+  return result;
+}
+
+describe('buildDocx — applyHeadingStyleToNormal (HEAD-005)', () => {
+  it('changes the targeted heading pStyle to Normal while preserving text', async () => {
+    // H1(0), H3(1) with a very long body-like heading — user accepts HEAD-005
+    const longText =
+      'This paragraph was accidentally styled as a heading and should be converted to normal text in the output document';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'NOFO Title'),
+      headingPara(3, longText),
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-005-1',
+      ruleId: 'HEAD-005',
+      targetField: `heading.style.H3.1::${longText}`,
+      value: 'apply',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const paras = extractAllParaStyles(xml);
+    // H1 stays H1
+    expect(paras[0]).toMatchObject({ style: 'Heading1', text: 'NOFO Title' });
+    // H3 → Normal; text unchanged
+    expect(paras[1]).toMatchObject({ style: 'Normal', text: longText });
+  });
+
+  it('does not change a heading at a different ordinal position', async () => {
+    const longText =
+      'This paragraph was accidentally styled as a heading and should be converted to normal text in the output document';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'Title'),       // index 0
+      headingPara(3, longText),      // index 1 — NOT targeted
+      headingPara(2, 'Section'),     // index 2
+      headingPara(3, longText),      // index 3 — targeted
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-005-3',
+      ruleId: 'HEAD-005',
+      targetField: `heading.style.H3.3::${longText}`,
+      value: 'apply',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const paras = extractAllParaStyles(xml);
+    // Index 1 must still be Heading3 (not targeted)
+    expect(paras[1]).toMatchObject({ style: 'Heading3', text: longText });
+    // Index 3 → Normal
+    expect(paras[3]).toMatchObject({ style: 'Normal', text: longText });
+  });
+
+  it('preserves run-level formatting (bold w:b) when converting to Normal', async () => {
+    const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const longText =
+      'This paragraph was accidentally styled as a heading and should be converted to normal text in the output document';
+    // Heading paragraph with a bold run — simulates real-world heading formatting
+    const boldRunPara =
+      `<w:p xmlns:w="${W_NS}">` +
+      `<w:pPr><w:pStyle w:val="Heading3"/></w:pPr>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>${longText}</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([boldRunPara]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-005-0',
+      ruleId: 'HEAD-005',
+      targetField: `heading.style.H3.0::${longText}`,
+      value: 'apply',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    // pStyle changed to Normal
+    expect(xml).toContain('w:val="Normal"');
+    expect(xml).not.toContain('w:val="Heading3"');
+    // w:b run property still present — run formatting untouched
+    expect(xml).toContain('<w:b/>');
+    // Text unchanged
+    expect(xml).toContain(longText);
+  });
+
+  it('leaves the document unchanged when no heading-style fixes are present', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(1, 'Title'),
+      headingPara(3, 'Long heading that was not accepted'),
+    ]));
+
+    const xml = await getOutputDocXml(zip, []);
+    const paras = extractAllParaStyles(xml);
+    expect(paras[0]).toMatchObject({ style: 'Heading1' });
+    expect(paras[1]).toMatchObject({ style: 'Heading3' });
+  });
+});
+
 // ─── LINK-006 auto-applied bookmark retargets ─────────────────────────────────
 
 function makeSimpleHyperlinkDocXml(anchor: string): string {
