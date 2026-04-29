@@ -76,8 +76,8 @@ export default function IssueCard({
     onAccept({
       issueId: issue.id,
       ruleId: issue.ruleId,
-      targetField: issue.inputRequired?.targetField,
-      value: issue.inputRequired ? inputValue.trim() : undefined,
+      targetField: issue.inputRequired?.targetField ?? issue.targetField,
+      value: issue.inputRequired ? inputValue.trim() : (issue.targetField ? 'apply' : undefined),
     });
   }
 
@@ -252,7 +252,7 @@ export default function IssueCard({
                 onClick={handleAccept}
                 disabled={belowMinTerms}
               >
-                {content.review.actions.accept}
+                {issue.acceptLabel ?? content.review.actions.accept}
               </button>
             )}
 

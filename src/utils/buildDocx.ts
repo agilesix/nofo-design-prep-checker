@@ -119,6 +119,9 @@ export async function buildDocx(
   const headingTextFixes = acceptedFixes.filter(
     f => f.targetField?.startsWith('heading.text.H') && !!f.value
   );
+  const headingStyleFixes = acceptedFixes.filter(
+    f => f.targetField?.startsWith('heading.style.H')
+  );
   const autoLinkBookmarkChanges = autoAppliedChanges
     .filter(c => c.ruleId === 'LINK-006' && c.targetField?.startsWith('link.bookmark.') && !!c.value)
     .map(
@@ -157,6 +160,11 @@ export async function buildDocx(
   // Apply accepted heading text corrections (HEAD-004)
   if (headingTextFixes.length > 0) {
     await applyHeadingTextCorrections(zip, headingTextFixes);
+  }
+
+  // Apply accepted heading style → Normal conversions (HEAD-005)
+  if (headingStyleFixes.length > 0) {
+    await applyHeadingStyleToNormal(zip, headingStyleFixes);
   }
 
   // Apply double-space collapse
@@ -1410,6 +1418,73 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
 
   if (changed) {
   
+    zip.file('word/document.xml', serializeXml(xmlDoc));
+  }
+}
+
+// ─── HEAD-005: Convert heading paragraph style to Normal ─────────────────────
+
+/**
+ * HEAD-005: Change the paragraph style of accepted heading paragraphs from
+ * Heading N to Normal. Only the w:pStyle value is updated; text content and
+ * all run-level formatting (w:rPr) are left untouched.
+ *
+ * Each AcceptedFix carries:
+ *   targetField: "heading.style.H{level}.{headingIndex}::{originalText}"
+ *   value:       sentinel "apply" — no user-supplied text needed
+ *
+ * headingIndex is the 0-based ordinal among ALL heading paragraphs in document
+ * order (same convention as HEAD-003 / HEAD-004).
+ */
+async function applyHeadingStyleToNormal(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
+  const fixIndices = new Set<number>();
+
+  for (const fix of fixes) {
+    if (!fix.targetField) continue;
+    // Format: "heading.style.H{level}.{headingIndex}::{originalText}"
+    const encoded = fix.targetField.replace('heading.style.H', '');
+    const dotIdx = encoded.indexOf('.');
+    if (dotIdx === -1) continue;
+    const rest = encoded.slice(dotIdx + 1);
+    const sepIdx = rest.indexOf('::');
+    if (sepIdx === -1) continue;
+    const headingIndex = parseInt(rest.slice(0, sepIdx), 10);
+    if (isNaN(headingIndex)) continue;
+    fixIndices.add(headingIndex);
+  }
+
+  if (fixIndices.size === 0) return;
+
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  let headingCount = 0;
+  let changed = false;
+
+  for (const wP of paragraphs) {
+    const level = getHeadingLevel(wP);
+    if (level === 0) continue;
+
+    const currentIndex = headingCount++;
+    if (!fixIndices.has(currentIndex)) continue;
+
+    const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
+    if (!pPr) continue;
+
+    const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+    if (!pStyle) continue;
+
+    pStyle.setAttributeNS(W, 'w:val', 'Normal');
+    changed = true;
+  }
+
+  if (changed) {
     zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
