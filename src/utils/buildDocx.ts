@@ -104,8 +104,8 @@ export async function buildDocx(
   const hasImportantPublicHeadingFix = autoAppliedChanges.some(
     c => c.targetField === 'table.importantpublic.heading'
   );
-  const hasGrantsGovNormalize = autoAppliedChanges.some(
-    c => c.targetField === 'link.grantsgov.normalize'
+  const hasGrantsGovCapitalize = autoAppliedChanges.some(
+    c => c.targetField === 'text.grantsgov.capitalize'
   );
   const hasGrantsGovCapitalizationFix = autoAppliedChanges.some(
     c => c.targetField === 'link.grantsgov.capitalization'
@@ -242,9 +242,9 @@ export async function buildDocx(
     await applyPdfLabelFix(zip);
   }
 
-  // Normalize Grants.gov link text and URLs
-  if (hasGrantsGovNormalize) {
-    await applyGrantsGovNormalization(zip);
+  // Correct Grants.gov capitalization in all text runs
+  if (hasGrantsGovCapitalize) {
+    await applyGrantsGovCapitalization(zip);
   }
 
   // Correct "grants.gov" capitalization to "Grants.gov" in all text runs
@@ -2209,97 +2209,34 @@ async function applyPdfLabelFix(zip: JSZip): Promise<void> {
   }
 }
 
-// ─── CLEAN-017: Normalize Grants.gov links ───────────────────────────────────
+// ─── CLEAN-017: Correct Grants.gov capitalization ────────────────────────────
 
 /**
- * Normalize Grants.gov link text and root-domain URLs.
- *
- * For every external hyperlink whose Target in word/_rels/document.xml.rels
- * is a root Grants.gov URL (any http/https variant, with or without www,
- * with or without trailing slash):
- *   1. Updates the Target to the canonical URL (https://www.grants.gov).
- *   2. If the concatenated link-run text is "grants.gov" or "www.grants.gov"
- *      (case-insensitive, not already "Grants.gov"), replaces it with "Grants.gov".
+ * CLEAN-017: Replace all case-insensitive occurrences of "grants.gov" with
+ * "Grants.gov" in every w:t text run in word/document.xml. Runs inside
+ * w:hyperlink elements are included. No other content is modified — URLs,
+ * relationships, and all run-level formatting are untouched.
  */
-async function applyGrantsGovNormalization(zip: JSZip): Promise<void> {
-  const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
-  const RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
-  const HYPERLINK_TYPE_URI =
-    'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
-  const CANONICAL_URL = 'https://www.grants.gov';
-  const GRANTSGOV_ROOT_URL_RE = /^https?:\/\/(www\.)?grants\.gov\/?$/i;
-  const GRANTSGOV_TEXT_RE = /^(www\.)?grants\.gov$/i;
-
-  const relsPath = 'word/_rels/document.xml.rels';
-  const relsFile = zip.file(relsPath);
-  if (!relsFile) return;
-
-  const relsStr = await relsFile.async('string');
-  const parser = new DOMParser();
-  const relsDoc = parser.parseFromString(relsStr, 'application/xml');
-
-  const grantsGovRelIds = new Set<string>();
-  let relsChanged = false;
-
-  for (const rel of Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'))) {
-    const type = rel.getAttribute('Type') ?? '';
-    const targetMode = rel.getAttribute('TargetMode') ?? '';
-    const target = rel.getAttribute('Target') ?? '';
-
-    if (type !== HYPERLINK_TYPE_URI) continue;
-    if (targetMode !== 'External') continue;
-    if (!GRANTSGOV_ROOT_URL_RE.test(target)) continue;
-
-    const id = rel.getAttribute('Id') ?? '';
-    if (!id) continue;
-
-    grantsGovRelIds.add(id);
-
-    if (target !== CANONICAL_URL) {
-      rel.setAttribute('Target', CANONICAL_URL);
-      relsChanged = true;
-    }
-  }
-
-  if (grantsGovRelIds.size === 0) return;
-
-  if (relsChanged) {
-    zip.file(relsPath, serializeXml(relsDoc), { compression: 'STORE' });
-  }
-
-  // Patch link text in document.xml
+async function applyGrantsGovCapitalization(zip: JSZip): Promise<void> {
   const docFile = zip.file('word/document.xml');
   if (!docFile) return;
 
   const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
 
-  let docChanged = false;
+  let changed = false;
 
-  for (const hyperlink of Array.from(xmlDoc.getElementsByTagName('w:hyperlink'))) {
-    const rId = hyperlink.getAttributeNS(R, 'id');
-    if (!rId || !grantsGovRelIds.has(rId)) continue;
-
-    const runs = Array.from(hyperlink.childNodes).filter(
-      (n): n is Element => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'r'
-    );
-    const allWTs = runs.flatMap(r => Array.from(r.getElementsByTagName('w:t')));
-    const linkText = allWTs.map(t => t.textContent ?? '').join('').trim();
-
-    if (!GRANTSGOV_TEXT_RE.test(linkText) || linkText === 'Grants.gov') continue;
-
-    const firstWT = allWTs[0];
-    if (!firstWT) continue;
-
-    firstWT.textContent = 'Grants.gov';
-    firstWT.setAttribute('xml:space', 'preserve');
-    for (let i = 1; i < allWTs.length; i++) {
-      allWTs[i]!.textContent = '';
+  for (const wt of Array.from(xmlDoc.getElementsByTagName('w:t'))) {
+    const original = wt.textContent ?? '';
+    const corrected = original.replace(/(?<![.\w])grants\.gov(?!\.[a-zA-Z])/gi, 'Grants.gov');
+    if (corrected !== original) {
+      wt.textContent = corrected;
+      changed = true;
     }
-    docChanged = true;
   }
 
-  if (docChanged) {
+  if (changed) {
     zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
