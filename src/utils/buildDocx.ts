@@ -3541,16 +3541,24 @@ function att_hasNumPr(wP: Element): boolean {
   return !!pPr && !!Array.from(pPr.children).find(c => c.localName === 'numPr');
 }
 
+const ATT_W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function att_getTextElements(el: Element): Element[] {
+  const byNs = Array.from(el.getElementsByTagNameNS(ATT_W_NS, 't'));
+  const byPrefixedName = Array.from(el.getElementsByTagName('w:t'));
+  return Array.from(new Set([...byNs, ...byPrefixedName]));
+}
+
 /** Concatenate all <w:t> text content in a run. */
 function att_runText(run: Element): string {
-  return Array.from(run.getElementsByTagName('w:t'))
+  return att_getTextElements(run)
     .map(wt => wt.textContent ?? '')
     .join('');
 }
 
 /** Concatenate all <w:t> text content in a paragraph. */
 function att_paraText(wP: Element): string {
-  return Array.from(wP.getElementsByTagName('w:t'))
+  return att_getTextElements(wP)
     .map(wt => wt.textContent ?? '')
     .join('');
 }
