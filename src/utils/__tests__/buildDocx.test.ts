@@ -1855,6 +1855,34 @@ describe('buildDocx — CLEAN-017: Grants.gov capitalization OOXML patch', () =>
     expect(xml).toContain('>grants.gov</w:t>');
     expect(xml).not.toContain('>Grants.gov</w:t>');
   });
+
+  it('does not modify "notgrants.gov" (word char immediately before)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS}">` +
+      `<w:body><w:p><w:r><w:t>notgrants.gov</w:t></w:r></w:p>` +
+      `<w:sectPr/></w:body></w:document>`
+    );
+
+    const xml = await getOutputDocXml(zip, [], [CAPITALIZE_CHANGE]);
+    expect(xml).toContain('>notgrants.gov</w:t>');
+    expect(xml).not.toContain('notGrants.gov');
+  });
+
+  it('does not modify "grants.gov.uk" (dot + alpha TLD extension after)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS}">` +
+      `<w:body><w:p><w:r><w:t>grants.gov.uk</w:t></w:r></w:p>` +
+      `<w:sectPr/></w:body></w:document>`
+    );
+
+    const xml = await getOutputDocXml(zip, [], [CAPITALIZE_CHANGE]);
+    expect(xml).toContain('>grants.gov.uk</w:t>');
+    expect(xml).not.toContain('Grants.gov.uk');
+  });
 });
 
 // ─── LINK-003: Grants.gov capitalization OOXML patch ─────────────────────────

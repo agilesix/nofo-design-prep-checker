@@ -8,26 +8,36 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
  * elements. Only text content is updated — URLs, relationships, and all
  * formatting are untouched.
  *
- * Detection parses the HTML body text for occurrences of "grants.gov" (any
- * case) that are not already the correct "Grants.gov". If any are found, a
- * single AutoAppliedChange is emitted and buildDocx applies the fix to the
- * OOXML via applyGrantsGovCapitalization.
+ * Detection counts matches directly from doc.documentXml w:t nodes using the
+ * same boundary-aware regex as the OOXML patch, so the reported count matches
+ * what buildDocx will actually change. Occurrences inside longer domains
+ * (e.g. "notgrants.gov", "grants.gov.uk", "apply.grants.gov") are excluded.
  *
  * Summary: "Grants.gov capitalization corrected in N location(s)."
  */
+
+// Matches "grants.gov" (any case) only when it is not preceded by a word
+// character or dot, and not followed by a dot + alpha (TLD extension).
+// This avoids false positives on "notgrants.gov", "grants.gov.uk", etc.
+const GRANTSGOV_RE = /(?<![.\w])grants\.gov(?!\.[a-zA-Z])/gi;
 
 const CLEAN_017: Rule = {
   id: 'CLEAN-017',
   autoApply: true,
   check(doc: ParsedDocument, _options: RuleRunnerOptions): AutoAppliedChange[] {
-    if (!doc.html) return [];
+    if (!doc.documentXml) return [];
 
     const parser = new DOMParser();
-    const htmlDoc = parser.parseFromString(doc.html, 'text/html');
-    const bodyText = htmlDoc.body?.textContent ?? '';
+    const xmlDoc = parser.parseFromString(doc.documentXml, 'application/xml');
+    const wtNodes = Array.from(xmlDoc.getElementsByTagName('w:t'));
 
-    const matches = bodyText.match(/grants\.gov/gi) ?? [];
-    const count = matches.filter(m => m !== 'Grants.gov').length;
+    let count = 0;
+    for (const wt of wtNodes) {
+      const text = wt.textContent ?? '';
+      const matches = text.match(GRANTSGOV_RE) ?? [];
+      count += matches.filter(m => m !== 'Grants.gov').length;
+    }
+
     if (count === 0) return [];
 
     return [

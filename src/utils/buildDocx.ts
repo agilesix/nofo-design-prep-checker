@@ -2229,7 +2229,7 @@ async function applyGrantsGovCapitalization(zip: JSZip): Promise<void> {
 
   for (const wt of Array.from(xmlDoc.getElementsByTagName('w:t'))) {
     const original = wt.textContent ?? '';
-    const corrected = original.replace(/grants\.gov/gi, 'Grants.gov');
+    const corrected = original.replace(/(?<![.\w])grants\.gov(?!\.[a-zA-Z])/gi, 'Grants.gov');
     if (corrected !== original) {
       wt.textContent = corrected;
       changed = true;
