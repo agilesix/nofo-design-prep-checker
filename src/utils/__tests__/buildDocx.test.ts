@@ -1943,7 +1943,7 @@ const CLEAN_017_CAP_CHANGE: AutoAppliedChange = {
   value: '1',
 };
 
-function makeLink003DocXml(text: string, inHyperlink = false, rId = 'rId1'): string {
+function makeGrantsGovDocXml(text: string, inHyperlink = false, rId = 'rId1'): string {
   const run = `<w:r><w:t>${text}</w:t></w:r>`;
   const para = inHyperlink
     ? `<w:p><w:hyperlink r:id="${rId}">${run}</w:hyperlink></w:p>`
@@ -1958,21 +1958,21 @@ function makeLink003DocXml(text: string, inHyperlink = false, rId = 'rId1'): str
 describe('buildDocx — CLEAN-017: Grants.gov capitalization OOXML patch (story parts)', () => {
   it('corrects "grants.gov" as full hyperlink text', async () => {
     const zip = new JSZip();
-    zip.file('word/document.xml', makeLink003DocXml('grants.gov', true));
+    zip.file('word/document.xml', makeGrantsGovDocXml('grants.gov', true));
     const outXml = await getOutputDocXml(zip, [], [CLEAN_017_CAP_CHANGE]);
     expect(getHyperlinkText(outXml, 'rId1')).toBe('Grants.gov');
   });
 
   it('corrects only the substring when "grants.gov" is embedded in longer hyperlink text', async () => {
     const zip = new JSZip();
-    zip.file('word/document.xml', makeLink003DocXml('visit grants.gov for more details', true));
+    zip.file('word/document.xml', makeGrantsGovDocXml('visit grants.gov for more details', true));
     const outXml = await getOutputDocXml(zip, [], [CLEAN_017_CAP_CHANGE]);
     expect(getHyperlinkText(outXml, 'rId1')).toBe('visit Grants.gov for more details');
   });
 
   it('corrects "grants.gov" in plain body text', async () => {
     const zip = new JSZip();
-    zip.file('word/document.xml', makeLink003DocXml('Submit at grants.gov today.'));
+    zip.file('word/document.xml', makeGrantsGovDocXml('Submit at grants.gov today.'));
     const outXml = await getOutputDocXml(zip, [], [CLEAN_017_CAP_CHANGE]);
     expect(outXml).toContain('Submit at Grants.gov today.');
     expect(outXml).not.toContain('grants.gov');
@@ -1980,14 +1980,14 @@ describe('buildDocx — CLEAN-017: Grants.gov capitalization OOXML patch (story 
 
   it('leaves already-correct "Grants.gov" unchanged', async () => {
     const zip = new JSZip();
-    zip.file('word/document.xml', makeLink003DocXml('Visit Grants.gov for details.'));
+    zip.file('word/document.xml', makeGrantsGovDocXml('Visit Grants.gov for details.'));
     const outXml = await getOutputDocXml(zip, [], [CLEAN_017_CAP_CHANGE]);
     expect(outXml).toContain('Visit Grants.gov for details.');
   });
 
   it('does not touch the hyperlink URL (relationship target)', async () => {
     const zip = new JSZip();
-    zip.file('word/document.xml', makeLink003DocXml('grants.gov', true));
+    zip.file('word/document.xml', makeGrantsGovDocXml('grants.gov', true));
     zip.file('word/_rels/document.xml.rels', makeGrantsGovRelsXml('rId1', 'http://grants.gov'));
     const blob = await buildDocx(zip, [], [CLEAN_017_CAP_CHANGE]);
     const outZip = await JSZip.loadAsync(blob);
@@ -2002,13 +2002,29 @@ describe('buildDocx — CLEAN-017: Grants.gov capitalization OOXML patch (story 
       `<w:footnote w:id="1"><w:p><w:r><w:t>See grants.gov for more.</w:t></w:r></w:p></w:footnote>` +
       `</w:footnotes>`;
     const zip = new JSZip();
-    zip.file('word/document.xml', makeLink003DocXml('Body text.'));
+    zip.file('word/document.xml', makeGrantsGovDocXml('Body text.'));
     zip.file('word/footnotes.xml', footnotesXml);
     const blob = await buildDocx(zip, [], [CLEAN_017_CAP_CHANGE]);
     const outZip = await JSZip.loadAsync(blob);
     const outFootnotes = await outZip.file('word/footnotes.xml')!.async('string');
     expect(outFootnotes).toContain('Grants.gov');
     expect(outFootnotes).not.toContain('grants.gov');
+  });
+
+  it('corrects "grants.gov" in word/endnotes.xml', async () => {
+    const endnotesXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:endnotes xmlns:w="${W_NS}">` +
+      `<w:endnote w:id="1"><w:p><w:r><w:t>Source: GRANTS.GOV.</w:t></w:r></w:p></w:endnote>` +
+      `</w:endnotes>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeGrantsGovDocXml('Body text.'));
+    zip.file('word/endnotes.xml', endnotesXml);
+    const blob = await buildDocx(zip, [], [CLEAN_017_CAP_CHANGE]);
+    const outZip = await JSZip.loadAsync(blob);
+    const outEndnotes = await outZip.file('word/endnotes.xml')!.async('string');
+    expect(outEndnotes).toContain('Grants.gov');
+    expect(outEndnotes).not.toContain('GRANTS.GOV');
   });
 
   it('does not correct "grants.gov" split across adjacent w:t nodes (known limitation)', async () => {
@@ -2028,7 +2044,7 @@ describe('buildDocx — CLEAN-017: Grants.gov capitalization OOXML patch (story 
 
   it('makes no changes when the autoAppliedChange flag is absent', async () => {
     const zip = new JSZip();
-    zip.file('word/document.xml', makeLink003DocXml('grants.gov', true));
+    zip.file('word/document.xml', makeGrantsGovDocXml('grants.gov', true));
     const outXml = await getOutputDocXml(zip, [], []);
     expect(getHyperlinkText(outXml, 'rId1')).toBe('grants.gov');
   });

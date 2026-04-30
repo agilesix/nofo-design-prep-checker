@@ -525,10 +525,6 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
       }
     }
 
-    // LINK-003: update link text
-    if (fix.ruleId === 'LINK-003' && fix.targetField?.startsWith('link.')) {
-      // Production implementation: match by relationship ID stored in the issue
-    }
   }
 
 
@@ -2221,9 +2217,12 @@ async function applyPdfLabelFix(zip: JSZip): Promise<void> {
 
 /**
  * CLEAN-017: Replace all case-insensitive occurrences of "grants.gov" with
- * "Grants.gov" in every w:t text run in word/document.xml. Runs inside
- * w:hyperlink elements are included. No other content is modified — URLs,
- * relationships, and all run-level formatting are untouched.
+ * "Grants.gov" in every w:t text run across all story parts — document body,
+ * footnotes, endnotes, headers, and footers. Runs inside w:hyperlink elements
+ * are included. No other content is modified — URLs, relationships, and all
+ * run-level formatting are untouched. Uses a boundary-aware regex to avoid
+ * false positives on subdomains (apply.grants.gov) or TLD extensions
+ * (grants.gov.uk).
  */
 async function applyGrantsGovCapitalization(zip: JSZip): Promise<void> {
   const parser = new DOMParser();
