@@ -3357,8 +3357,11 @@ async function applyAttachmentsRequiredPositioning(zip: JSZip): Promise<void> {
     // Skip h5 if Required paragraph is a list item
     if (att_hasNumPr(requiredPara)) continue;
 
-    // Already in position only if Required is the first direct body child after h5
-    if (bodyChildren[0] === requiredPara) continue;
+    // Find first non-empty paragraph among direct body children
+    const firstNonEmptyIdx = paras.findIndex(p => getParaText(p).trim() !== '');
+
+    // Already in position — do nothing
+    if (firstNonEmptyIdx === requiredIdx) continue;
 
     // Move Required to absolute first position after h5
     h5.parentNode!.insertBefore(requiredPara, h5.nextSibling);
@@ -3554,13 +3557,6 @@ function att_getTextElements(el: Element): Element[] {
 /** Concatenate all <w:t> text content in a run. */
 function att_runText(run: Element): string {
   return att_getTextElements(run)
-    .map(wt => wt.textContent ?? '')
-    .join('');
-}
-
-/** Concatenate all <w:t> text content in a paragraph. */
-function att_paraText(wP: Element): string {
-  return att_getTextElements(wP)
     .map(wt => wt.textContent ?? '')
     .join('');
 }

@@ -1,4 +1,5 @@
 import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from '../../types';
+import { attHeadingLevel, attParaText } from './attachmentHelpers';
 
 /**
  * ATTACH-001: Ensure "Required." is the first body paragraph under each h5
@@ -34,7 +35,6 @@ const ATTACH_001: Rule = {
 function countMisplacedRequiredParagraphs(documentXml: string): number {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(documentXml, 'application/xml');
-  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
   const body = xmlDoc.getElementsByTagName('w:body')[0];
   if (!body) return 0;
 
@@ -58,13 +58,13 @@ function countMisplacedRequiredParagraphs(documentXml: string): number {
       continue;
     }
 
-    const headingLevel = localHeadingLevel(node, W);
+    const headingLevel = attHeadingLevel(node);
     if (headingLevel > 0) {
       if (inAttachmentsH5 && headingLevel <= 5) {
         finalizeCurrentH5Block();
       }
 
-      if (headingLevel === 4 && localParaText(node).trim() === 'Attachments') {
+      if (headingLevel === 4 && attParaText(node).trim() === 'Attachments') {
         inAttachments = true;
         continue;
       }
@@ -120,28 +120,6 @@ function startsWithRequiredBoldRun(wP: Element): boolean {
     return /^Required\b/i.test(text);
   }
   return false;
-}
-
-function localHeadingLevel(wP: Element, W: string): number {
-  const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
-  if (!pPr) return 0;
-  const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
-  if (!pStyle) return 0;
-  const val =
-    pStyle.getAttribute('w:val') ??
-    pStyle.getAttributeNS(W, 'val') ??
-    pStyle.getAttribute('val') ??
-    '';
-  const m = val.match(/^Heading\s*(\d+)$/i);
-  if (!m) return 0;
-  const level = parseInt(m[1]!, 10);
-  return level >= 1 && level <= 6 ? level : 0;
-}
-
-function localParaText(wP: Element): string {
-  return Array.from(wP.getElementsByTagName('w:t'))
-    .map(wt => wt.textContent ?? '')
-    .join('');
 }
 
 export default ATTACH_001;

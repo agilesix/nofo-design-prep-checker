@@ -5214,3 +5214,193 @@ describe('buildDocx — CLEAN-018: universal instruction box removal', () => {
     expect(outXml).toContain('DGHT-SPECIFIC INSTRUCTIONS');
   });
 });
+
+// ─── ATTACH-001: Required. paragraph positioning ──────────────────────────────
+
+const ATTACH_001_CHANGE: AutoAppliedChange = {
+  ruleId: 'ATTACH-001',
+  description: 'Required. paragraph position normalized in Attachments h5 blocks.',
+  targetField: 'struct.attachments.required.position',
+  value: '1',
+};
+
+/**
+ * Build a minimal document.xml with:
+ *   h4 "Attachments"
+ *     h5 "Organizational chart"
+ *       [optionally some other content first]
+ *       Required.  (bold)
+ */
+function makeAttach001DocXml(requiredIsFirst: boolean): string {
+  const h4 = `<w:p><w:pPr><w:pStyle w:val="Heading4"/></w:pPr><w:r><w:t>Attachments</w:t></w:r></w:p>`;
+  const h5 = `<w:p><w:pPr><w:pStyle w:val="Heading5"/></w:pPr><w:r><w:t>Organizational chart</w:t></w:r></w:p>`;
+  const other = `<w:p><w:r><w:t>File name: Org Chart</w:t></w:r></w:p>`;
+  const required = `<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Required.</w:t></w:r></w:p>`;
+  const body = requiredIsFirst
+    ? `${h4}${h5}${required}${other}`
+    : `${h4}${h5}${other}${required}`;
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS}">` +
+    `<w:body>${body}<w:sectPr/></w:body></w:document>`
+  );
+}
+
+function makeAttach001ListDocXml(): string {
+  const h4 = `<w:p><w:pPr><w:pStyle w:val="Heading4"/></w:pPr><w:r><w:t>Attachments</w:t></w:r></w:p>`;
+  const h5 = `<w:p><w:pPr><w:pStyle w:val="Heading5"/></w:pPr><w:r><w:t>Organizational chart</w:t></w:r></w:p>`;
+  const other = `<w:p><w:r><w:t>File name: Org Chart</w:t></w:r></w:p>`;
+  // Required. with numPr (list item)
+  const required = `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>Required.</w:t></w:r></w:p>`;
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS}">` +
+    `<w:body>${h4}${h5}${other}${required}<w:sectPr/></w:body></w:document>`
+  );
+}
+
+describe('buildDocx — ATTACH-001: Required. paragraph positioning', () => {
+  it('moves Required. to first position under h5 when it follows other content', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAttach001DocXml(false));
+
+    const outXml = await getOutputDocXml(zip, [], [ATTACH_001_CHANGE]);
+
+    // Required. should appear before "File name:" in the output
+    const requiredPos = outXml.indexOf('>Required.</w:t>');
+    const fileNamePos = outXml.indexOf('>File name: Org Chart</w:t>');
+    expect(requiredPos).toBeGreaterThan(-1);
+    expect(fileNamePos).toBeGreaterThan(-1);
+    expect(requiredPos).toBeLessThan(fileNamePos);
+  });
+
+  it('leaves document unchanged when Required. is already first', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAttach001DocXml(true));
+
+    const originalXml = makeAttach001DocXml(true);
+    const outXml = await getOutputDocXml(zip, [], [ATTACH_001_CHANGE]);
+
+    // Required. should still be before "File name:"
+    const requiredPos = outXml.indexOf('>Required.</w:t>');
+    const fileNamePos = outXml.indexOf('>File name: Org Chart</w:t>');
+    expect(requiredPos).toBeLessThan(fileNamePos);
+    // The document XML content should be unchanged (serializeXml is not called)
+    expect(outXml).toContain(originalXml.slice(originalXml.indexOf('<w:body>')));
+  });
+
+  it('does not reorder Required. when it is a list item (numPr)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAttach001ListDocXml());
+
+    const outXml = await getOutputDocXml(zip, [], [ATTACH_001_CHANGE]);
+
+    // Required. should still be AFTER "File name:" (not moved)
+    const requiredPos = outXml.indexOf('>Required.</w:t>');
+    const fileNamePos = outXml.indexOf('>File name: Org Chart</w:t>');
+    expect(requiredPos).toBeGreaterThan(fileNamePos);
+  });
+
+  it('makes no change when no Attachments h4 exists', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS}">` +
+      `<w:body><w:p><w:r><w:t>No attachments section here.</w:t></w:r></w:p>` +
+      `<w:sectPr/></w:body></w:document>`
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [ATTACH_001_CHANGE]);
+    expect(outXml).toContain('No attachments section here.');
+  });
+});
+
+// ─── ATTACH-002: File name sentence case ─────────────────────────────────────
+
+const ATTACH_002_CHANGE: AutoAppliedChange = {
+  ruleId: 'ATTACH-002',
+  description: 'File name values in Attachments h5 blocks normalized to sentence case.',
+  targetField: 'struct.attachments.filename.sentencecase',
+  value: '1',
+};
+
+function makeAttach002DocXml(fileNameValue: string, multiRun = false): string {
+  const h4 = `<w:p><w:pPr><w:pStyle w:val="Heading4"/></w:pPr><w:r><w:t>Attachments</w:t></w:r></w:p>`;
+  const h5 = `<w:p><w:pPr><w:pStyle w:val="Heading5"/></w:pPr><w:r><w:t>Organizational chart</w:t></w:r></w:p>`;
+
+  const fileNamePara = multiRun
+    ? `<w:p>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>File name:</w:t></w:r>` +
+      `<w:r><w:t xml:space="preserve"> ${fileNameValue.split(' ')[0] ?? ''}</w:t></w:r>` +
+      `<w:r><w:t xml:space="preserve"> ${fileNameValue.split(' ').slice(1).join(' ')}</w:t></w:r>` +
+      `</w:p>`
+    : `<w:p>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>File name:</w:t></w:r>` +
+      `<w:r><w:t xml:space="preserve"> ${fileNameValue}</w:t></w:r>` +
+      `</w:p>`;
+
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS}">` +
+    `<w:body>${h4}${h5}${fileNamePara}<w:sectPr/></w:body></w:document>`
+  );
+}
+
+describe('buildDocx — ATTACH-002: File name sentence case', () => {
+  it('converts "Organizational Chart" to "Organizational chart"', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAttach002DocXml('Organizational Chart'));
+
+    const outXml = await getOutputDocXml(zip, [], [ATTACH_002_CHANGE]);
+
+    expect(outXml).toContain('Organizational chart');
+    expect(outXml).not.toContain('Organizational Chart');
+    // Bold "File name:" label must be unchanged
+    expect(outXml).toContain('>File name:</w:t>');
+  });
+
+  it('does not modify a value containing a 2+ char all-caps acronym', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAttach002DocXml('DMP Plan'));
+
+    const outXml = await getOutputDocXml(zip, [], [ATTACH_002_CHANGE]);
+
+    expect(outXml).toContain('DMP Plan');
+    expect(outXml).not.toContain('Dmp plan');
+  });
+
+  it('leaves an already-correct sentence-case value unchanged', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAttach002DocXml('Organizational chart'));
+
+    const outXml = await getOutputDocXml(zip, [], [ATTACH_002_CHANGE]);
+
+    expect(outXml).toContain('Organizational chart');
+  });
+
+  it('merges multi-run value into single run with sentence case applied', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAttach002DocXml('Organizational Chart', true));
+
+    const outXml = await getOutputDocXml(zip, [], [ATTACH_002_CHANGE]);
+
+    expect(outXml).toContain('Organizational chart');
+    // The multi-run "Chart" text node should no longer appear separately
+    expect(outXml).not.toContain('>Chart</w:t>');
+  });
+
+  it('makes no change when no Attachments h4 exists', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS}">` +
+      `<w:body><w:p><w:r><w:t>No attachments section.</w:t></w:r></w:p>` +
+      `<w:sectPr/></w:body></w:document>`
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [ATTACH_002_CHANGE]);
+    expect(outXml).toContain('No attachments section.');
+  });
+});
