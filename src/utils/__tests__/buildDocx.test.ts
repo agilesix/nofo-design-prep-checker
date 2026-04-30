@@ -2010,6 +2010,37 @@ describe('buildDocx — LINK-003: Grants.gov capitalization OOXML patch', () => 
     expect(getRelTarget(relsXml, 'rId1')).toBe('http://grants.gov');
   });
 
+  it('corrects "grants.gov" in word/footnotes.xml', async () => {
+    const footnotesXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:footnotes xmlns:w="${W_NS}">` +
+      `<w:footnote w:id="1"><w:p><w:r><w:t>See grants.gov for more.</w:t></w:r></w:p></w:footnote>` +
+      `</w:footnotes>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeLink003DocXml('Body text.'));
+    zip.file('word/footnotes.xml', footnotesXml);
+    const blob = await buildDocx(zip, [], [LINK_003_CAP_CHANGE]);
+    const outZip = await JSZip.loadAsync(blob);
+    const outFootnotes = await outZip.file('word/footnotes.xml')!.async('string');
+    expect(outFootnotes).toContain('Grants.gov');
+    expect(outFootnotes).not.toContain('grants.gov');
+  });
+
+  it('does not correct "grants.gov" split across adjacent w:t nodes (known limitation)', async () => {
+    // Word can split a word across runs when inline formatting changes mid-word.
+    // The fix only operates within individual w:t nodes; split occurrences are unchanged.
+    const splitRunDocXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS}"><w:body>` +
+      `<w:p><w:r><w:t>grants</w:t></w:r><w:r><w:t>.gov</w:t></w:r></w:p>` +
+      `<w:sectPr/></w:body></w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', splitRunDocXml);
+    const outXml = await getOutputDocXml(zip, [], [LINK_003_CAP_CHANGE]);
+    expect(outXml).toContain('<w:t>grants</w:t>');
+    expect(outXml).toContain('<w:t>.gov</w:t>');
+  });
+
   it('makes no changes when the autoAppliedChange flag is absent', async () => {
     const zip = new JSZip();
     zip.file('word/document.xml', makeLink003DocXml('grants.gov', true));

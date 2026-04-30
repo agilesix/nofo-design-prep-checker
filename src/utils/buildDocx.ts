@@ -2308,30 +2308,34 @@ async function applyGrantsGovNormalization(zip: JSZip): Promise<void> {
 
 /**
  * Replaces every case-insensitive occurrence of "grants.gov" in w:t text
- * content with "Grants.gov". Applies to all text runs — both inside
- * w:hyperlink elements and in plain body paragraphs. Hyperlink URLs
- * (relationship targets in word/_rels/document.xml.rels) are not touched.
+ * content with "Grants.gov". Runs across all story parts — document body,
+ * footnotes, endnotes, headers, and footers. Hyperlink URLs (relationship
+ * targets) are not touched. Occurrences split across multiple adjacent text
+ * runs are not corrected by this pass.
  */
 async function applyGrantsGovCapitalizationFix(zip: JSZip): Promise<void> {
-  const docFile = zip.file('word/document.xml');
-  if (!docFile) return;
-
-  const xmlStr = await docFile.async('string');
   const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
 
-  let changed = false;
-  for (const wT of Array.from(xmlDoc.getElementsByTagName('w:t'))) {
-    const text = wT.textContent ?? '';
-    const replaced = text.replace(/grants\.gov/gi, 'Grants.gov');
-    if (replaced !== text) {
-      wT.textContent = replaced;
-      changed = true;
+  for (const path of getStoryPartPaths(zip)) {
+    const file = zip.file(path);
+    if (!file) continue;
+
+    const xmlStr = await file.async('string');
+    const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+    let changed = false;
+    for (const wT of Array.from(xmlDoc.getElementsByTagName('w:t'))) {
+      const text = wT.textContent ?? '';
+      const replaced = text.replace(/grants\.gov/gi, 'Grants.gov');
+      if (replaced !== text) {
+        wT.textContent = replaced;
+        changed = true;
+      }
     }
-  }
 
-  if (changed) {
-    zip.file('word/document.xml', serializeXml(xmlDoc));
+    if (changed) {
+      zip.file(path, serializeXml(xmlDoc));
+    }
   }
 }
 
