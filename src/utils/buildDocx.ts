@@ -113,6 +113,12 @@ export async function buildDocx(
   const hasUniversalInstructionBoxRemoval = autoAppliedChanges.some(
     c => c.targetField === 'struct.universal.removeinstructionboxes'
   );
+  const hasAttachmentsRequiredPositioning = autoAppliedChanges.some(
+    c => c.targetField === 'struct.attachments.required.position'
+  );
+  const hasAttachmentsFileNameSentenceCase = autoAppliedChanges.some(
+    c => c.targetField === 'struct.attachments.filename.sentencecase'
+  );
   const h2TitleCaseChanges = autoAppliedChanges.filter(
     c => c.targetField === 'heading.h2.titlecase' && c.value
   );
@@ -255,6 +261,16 @@ export async function buildDocx(
   // Remove universal instruction box tables (single-cell, first paragraph contains "instructions")
   if (hasUniversalInstructionBoxRemoval) {
     await applyUniversalInstructionBoxRemoval(zip);
+  }
+
+  // Move Required. paragraph to first body position under each Attachments h5
+  if (hasAttachmentsRequiredPositioning) {
+    await applyAttachmentsRequiredPositioning(zip);
+  }
+
+  // Normalize File name values to sentence case under each Attachments h5
+  if (hasAttachmentsFileNameSentenceCase) {
+    await applyAttachmentsFileNameSentenceCase(zip);
   }
 
   // Move partial-word characters that are outside w:hyperlink into it
@@ -3302,6 +3318,265 @@ function c18IsInstructionBoxTbl(tbl: Element): boolean {
  * land inside the outer <w:sdtContent>, which the outer pass then hoists
  * correctly.
  */
+// ─── ATTACH-001: Required. paragraph positioning in Attachments h5 blocks ────
+
+/**
+ * Within the h4 whose paragraph text is exactly "Attachments", each h5 block
+ * may contain a standalone body paragraph whose first bold run begins with
+ * "Required". If that paragraph is not the first body element immediately
+ * after the h5, it is moved there.
+ *
+ * Skips any h5 where the Required paragraph carries list formatting (numPr).
+ * Paragraphs inside tables are not visible as direct body children and are
+ * therefore automatically excluded by the body-element iteration.
+ */
+async function applyAttachmentsRequiredPositioning(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  const blocksResult = att_collectH5Blocks(body);
+  if (!blocksResult.found) return;
+
+  let changed = false;
+
+  for (const { h5, bodyChildren } of blocksResult.h5Blocks) {
+    const paras = bodyChildren.filter(el => el.localName === 'p');
+
+    // Find first bold-Required paragraph
+    const requiredIdx = paras.findIndex(att_isRequiredParagraph);
+    if (requiredIdx === -1) continue;
+    const requiredPara = paras[requiredIdx]!;
+
+    // Skip h5 if Required paragraph is a list item
+    if (att_hasNumPr(requiredPara)) continue;
+
+    // Find first non-empty paragraph among direct body children
+    const firstNonEmptyIdx = paras.findIndex(p => att_paraText(p).trim() !== '');
+
+    // Already in position — do nothing
+    if (firstNonEmptyIdx === requiredIdx) continue;
+
+    // Move Required to absolute first position after h5
+    h5.parentNode!.insertBefore(requiredPara, h5.nextSibling);
+    changed = true;
+  }
+
+  if (changed) {
+    zip.file('word/document.xml', serializeXml(xmlDoc));
+  }
+}
+
+// ─── ATTACH-002: File name sentence case in Attachments h5 blocks ─────────────
+
+/**
+ * Within the h4 whose paragraph text is exactly "Attachments", each h5 block
+ * may contain a paragraph with a bold run whose text (trimmed) is "File name:"
+ * followed by one or more non-bold runs containing the file name value.
+ *
+ * The value is converted to sentence case (first word capitalized, all others
+ * lowercased) and written back as a single normal run. Values containing an
+ * all-caps word of 2+ characters are skipped (likely an acronym).
+ * Already-correct values are left untouched.
+ *
+ * Each correction is logged to the console as:
+ *   [AUTO-FIX] File name sentence case: "<original>" → "<fixed>"
+ */
+async function applyAttachmentsFileNameSentenceCase(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  const blocksResult = att_collectH5Blocks(body);
+  if (!blocksResult.found) return;
+
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  let changed = false;
+
+  for (const { bodyChildren } of blocksResult.h5Blocks) {
+    const paras = bodyChildren.filter(el => el.localName === 'p');
+
+    for (const para of paras) {
+      const runs = Array.from(para.children).filter(c => c.localName === 'r');
+
+      // Find bold "File name:" run
+      const fileNameRunIdx = runs.findIndex(
+        r => att_isRunBold(r) && att_runText(r).trim() === 'File name:'
+      );
+      if (fileNameRunIdx === -1) continue;
+
+      // Collect non-bold runs after the File name: run
+      const afterRuns = runs.slice(fileNameRunIdx + 1);
+      const valueRuns = afterRuns.filter(r => !att_isRunBold(r));
+      if (valueRuns.length === 0) continue;
+
+      // Get combined value text, preserving leading whitespace from first run
+      const firstRunText = att_runText(valueRuns[0]!);
+      const leadingSpace = /^\s+/.exec(firstRunText)?.[0] ?? '';
+      const rawValue = valueRuns.map(r => att_runText(r)).join('');
+      const trimmedValue = rawValue.trimStart();
+
+      // Skip if contains a 2+ char all-caps word (acronym)
+      if (/\b[A-Z]{2,}\b/.test(trimmedValue)) continue;
+
+      // Apply sentence case
+      const sentenceCased =
+        trimmedValue.charAt(0).toUpperCase() + trimmedValue.slice(1).toLowerCase();
+
+      // Skip if already correct
+      if (sentenceCased === trimmedValue) continue;
+
+      const fixedText = leadingSpace + sentenceCased;
+
+      // Log the change
+      console.log(
+        `[AUTO-FIX] File name sentence case: "${trimmedValue}" → "${sentenceCased}"`
+      );
+
+      // Replace all value runs with a single run containing the fixed text
+      const firstValueRun = valueRuns[0]!;
+      const newWt = xmlDoc.createElementNS(W, 'w:t');
+      if (fixedText !== fixedText.trim()) {
+        newWt.setAttributeNS(
+          'http://www.w3.org/XML/1998/namespace',
+          'xml:space',
+          'preserve'
+        );
+      }
+      newWt.textContent = fixedText;
+
+      // Clear existing w:t nodes from the first value run and add the new one
+      for (const wt of Array.from(firstValueRun.getElementsByTagName('w:t'))) {
+        firstValueRun.removeChild(wt);
+      }
+      firstValueRun.appendChild(newWt);
+
+      // Remove all subsequent non-bold value runs
+      for (const r of valueRuns.slice(1)) {
+        r.parentNode?.removeChild(r);
+      }
+
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    zip.file('word/document.xml', serializeXml(xmlDoc));
+  }
+}
+
+// ─── ATTACH shared helpers ────────────────────────────────────────────────────
+
+/**
+ * Collect the h4 "Attachments" section and split it into h5 blocks.
+ * Returns `found: false` if no Attachments h4 exists.
+ */
+function att_collectH5Blocks(
+  body: Element
+): { found: false } | { found: true; h5Blocks: { h5: Element; bodyChildren: Element[] }[] } {
+  // Collect direct element children of <w:body>
+  const bodyChildren = Array.from(body.childNodes).filter(
+    n => n.nodeType === Node.ELEMENT_NODE
+  ) as Element[];
+
+  // Find the "Attachments" h4
+  const attachH4Idx = bodyChildren.findIndex(
+    el => el.localName === 'p' && getHeadingLevel(el) === 4 && getParaText(el).trim() === 'Attachments'
+  );
+  if (attachH4Idx === -1) return { found: false };
+
+  // Collect the Attachments section (until the next h1–h4)
+  const sectionEls: Element[] = [];
+  for (let i = attachH4Idx + 1; i < bodyChildren.length; i++) {
+    const el = bodyChildren[i]!;
+    if (el.localName === 'p') {
+      const lvl = getHeadingLevel(el);
+      if (lvl > 0 && lvl <= 4) break;
+    }
+    sectionEls.push(el);
+  }
+
+  // Split into h5 blocks
+  const h5Blocks: { h5: Element; bodyChildren: Element[] }[] = [];
+  let currentH5: Element | null = null;
+  let currentChildren: Element[] = [];
+
+  for (const el of sectionEls) {
+    if (el.localName === 'p' && getHeadingLevel(el) === 5) {
+      if (currentH5) h5Blocks.push({ h5: currentH5, bodyChildren: currentChildren });
+      currentH5 = el;
+      currentChildren = [];
+    } else if (currentH5) {
+      currentChildren.push(el);
+    }
+  }
+  if (currentH5) h5Blocks.push({ h5: currentH5, bodyChildren: currentChildren });
+
+  return { found: true, h5Blocks };
+}
+
+/** True if the paragraph's first bold run starts with "Required" (case-sensitive). */
+function att_isRequiredParagraph(wP: Element): boolean {
+  const runs = Array.from(wP.children).filter(c => c.localName === 'r');
+  for (const run of runs) {
+    const text = att_runText(run).trim();
+    if (!text) continue;
+    return att_isRunBold(run) && text.startsWith('Required');
+  }
+  return false;
+}
+
+/** True if the paragraph has list-item formatting (<w:numPr> in <w:pPr>). */
+function att_hasNumPr(wP: Element): boolean {
+  const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
+  return !!pPr && !!Array.from(pPr.children).find(c => c.localName === 'numPr');
+}
+
+/** Concatenate all <w:t> text content in a run. */
+function att_runText(run: Element): string {
+  return Array.from(run.getElementsByTagName('w:t'))
+    .map(wt => wt.textContent ?? '')
+    .join('');
+}
+
+/** Concatenate all <w:t> text content in a paragraph. */
+function att_paraText(wP: Element): string {
+  return Array.from(wP.getElementsByTagName('w:t'))
+    .map(wt => wt.textContent ?? '')
+    .join('');
+}
+
+/**
+ * True if the run has explicit bold formatting (<w:b/> with no val="false").
+ * Absence of <w:b> means not bold (rPr-inherited bold is not considered here
+ * because "File name:" labels and Required paragraphs carry explicit bold).
+ */
+function att_isRunBold(run: Element): boolean {
+  const rPr = Array.from(run.children).find(c => c.localName === 'rPr');
+  if (!rPr) return false;
+  const b = Array.from(rPr.children).find(c => c.localName === 'b');
+  if (!b) return false;
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const val =
+    b.getAttribute('w:val') ??
+    b.getAttributeNS(W, 'val') ??
+    b.getAttribute('val') ??
+    null;
+  return val === null || val === '' || val === 'true' || val === '1';
+}
+
 function stripContentControlsFromXmlDoc(xmlDoc: Document): boolean {
   const sdts = Array.from(xmlDoc.getElementsByTagName('w:sdt')).reverse();
   if (sdts.length === 0) return false;
