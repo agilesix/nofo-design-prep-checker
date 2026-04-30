@@ -1859,6 +1859,23 @@ describe('buildDocx — CLEAN-017: Grants.gov capitalization OOXML patch', () =>
 
 // ─── LINK-003: Grants.gov capitalization OOXML patch ─────────────────────────
 
+function makeGrantsGovRelsXml(rId: string, target: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<Relationships xmlns="${RELS_NS}">` +
+    `<Relationship Id="${rId}" Type="${HYPERLINK_TYPE_URI}" Target="${target}" TargetMode="External"/>` +
+    `</Relationships>`
+  );
+}
+
+function getRelTarget(relsXml: string, rId: string): string | null {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(relsXml, 'application/xml');
+  const rels = Array.from(doc.getElementsByTagNameNS(RELS_NS, 'Relationship'));
+  const rel = rels.find(r => r.getAttribute('Id') === rId);
+  return rel?.getAttribute('Target') ?? null;
+}
+
 const LINK_003_CAP_CHANGE: AutoAppliedChange = {
   ruleId: 'LINK-003',
   description: 'Grants.gov capitalization corrected in 1 location.',
