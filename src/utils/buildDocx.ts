@@ -3437,10 +3437,12 @@ async function applyAttachmentsFileNameSentenceCase(zip: JSZip): Promise<void> {
 
       const fixedText = leadingSpace + sentenceCased;
 
-      // Log the change
-      console.log(
-        `[AUTO-FIX] File name sentence case: "${trimmedValue}" → "${sentenceCased}"`
-      );
+      // Log the change in debug mode only
+      if (BUILD_DOCX_DEBUG) {
+        console.debug(
+          `[AUTO-FIX] File name sentence case: "${trimmedValue}" → "${sentenceCased}"`
+        );
+      }
 
       // Replace all value runs with a single run containing the fixed text
       const firstValueRun = valueRuns[0]!;
