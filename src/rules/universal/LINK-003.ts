@@ -1,75 +1,43 @@
-import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
-import { buildLocationLookup } from '../../utils/locationContext';
+import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from '../../types';
 
 /**
- * LINK-003: Missing protocol in link URL
- * Flags links that are missing http:// or https:// in their href.
+ * LINK-003: Correct "grants.gov" capitalization to "Grants.gov" (auto-apply)
+ *
+ * Scans all w:t text runs in the document body, footnotes, and endnotes and
+ * replaces any case-insensitive match of "grants.gov" with "Grants.gov". Only
+ * the matched substring within each individual w:t node is replaced; surrounding
+ * text, run properties, and hyperlink URLs are left untouched. Occurrences of
+ * "grants.gov" split across multiple adjacent text runs are not corrected.
  */
+
 const LINK_003: Rule = {
   id: 'LINK-003',
-  check(doc: ParsedDocument, _options: RuleRunnerOptions): Issue[] {
-    const issues: Issue[] = [];
+  autoApply: true,
+  check(doc: ParsedDocument, _options: RuleRunnerOptions): AutoAppliedChange[] {
+    const sources = [doc.documentXml, doc.footnotesXml, doc.endnotesXml].filter(Boolean);
+    if (sources.length === 0) return [];
 
     const parser = new DOMParser();
-    const htmlDoc = parser.parseFromString(doc.html, 'text/html');
-    const links = Array.from(htmlDoc.querySelectorAll('a[href]'));
-    const getContext = buildLocationLookup(htmlDoc);
-
-    links.forEach((link, index) => {
-      const href = (link.getAttribute('href') ?? '').trim();
-      const text = (link.textContent ?? '').trim();
-
-      // Skip internal anchors, mailto, tel, and properly formed URLs
-      if (
-        href.startsWith('#') ||
-        href.startsWith('mailto:') ||
-        href.startsWith('tel:') ||
-        href.startsWith('http://') ||
-        href.startsWith('https://') ||
-        href === ''
-      ) {
-        return;
+    let count = 0;
+    for (const xml of sources) {
+      const xmlDoc = parser.parseFromString(xml, 'application/xml');
+      for (const wT of Array.from(xmlDoc.getElementsByTagName('w:t'))) {
+        const text = wT.textContent ?? '';
+        if (text.replace(/grants\.gov/gi, 'Grants.gov') !== text) count++;
       }
+    }
 
-      // Check for www. without protocol
-      if (href.startsWith('www.') || /^[a-z0-9.-]+\.[a-z]{2,}\//i.test(href)) {
-        const sectionId = findSectionForElement(link, doc);
-        const { nearestHeading } = getContext(link);
-        const suggestedUrl = `https://${href}`;
+    if (count === 0) return [];
 
-        issues.push({
-          id: `LINK-003-${index}`,
-          ruleId: 'LINK-003',
-          title: 'Link is missing protocol (https://)',
-          severity: 'error',
-          sectionId,
-          nearestHeading,
-          description: `The link "${text}" has an href of "${href}" which is missing the protocol. Browsers may not resolve this correctly.`,
-          suggestedFix: `Change the href to "${suggestedUrl}"`,
-          location: href,
-          inputRequired: {
-            type: 'text',
-            label: 'Corrected URL',
-            prefill: suggestedUrl,
-            prefillNote: 'We added https:// — verify this is correct.',
-            targetField: `link.LINK-003-${index}.href`,
-          },
-        });
-      }
-    });
-
-    return issues;
+    return [
+      {
+        ruleId: 'LINK-003',
+        description: `Grants.gov capitalization corrected in ${count} location${count === 1 ? '' : 's'}.`,
+        targetField: 'link.grantsgov.capitalization',
+        value: String(count),
+      },
+    ];
   },
 };
-
-function findSectionForElement(el: Element, doc: ParsedDocument): string {
-  const text = el.textContent ?? '';
-  for (const section of doc.sections) {
-    if (section.rawText.includes(text)) {
-      return section.id;
-    }
-  }
-  return doc.sections[0]?.id ?? 'section-preamble';
-}
 
 export default LINK_003;
