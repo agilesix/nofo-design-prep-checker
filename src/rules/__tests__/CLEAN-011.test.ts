@@ -219,6 +219,61 @@ describe('CLEAN-011: no changes when no corrections needed', () => {
   });
 });
 
+// ─── Single-cell table exemption ──────────────────────────────────────────────
+
+describe('CLEAN-011: single-cell tables (callout boxes) are exempt', () => {
+  it('does not prepend a checkbox to "Important:" content in a single-cell table under Application checklist', () => {
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W}"><w:body>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:r><w:t>Application checklist</w:t></w:r></w:p>` +
+      `<w:tbl><w:tr>` +
+      `<w:tc><w:p><w:r><w:t>Important: public information</w:t></w:r></w:p>` +
+      `<w:p><w:r><w:t>Additional content in the callout box.</w:t></w:r></w:p></w:tc>` +
+      `</w:tr></w:tbl>` +
+      `<w:sectPr/></w:body></w:document>`;
+    expect(CLEAN_011.check(makeDoc(xml), OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not prepend a checkbox to a single-cell table under Step 3 H4 Attachments', () => {
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W}"><w:body>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:r><w:t>Step 3: Build Your Application</w:t></w:r></w:p>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading4"/></w:pPr>` +
+      `<w:r><w:t>Attachments</w:t></w:r></w:p>` +
+      `<w:tbl><w:tr>` +
+      `<w:tc><w:p><w:r><w:t>Important: public information</w:t></w:r></w:p>` +
+      `<w:p><w:r><w:t>Additional content in the callout box.</w:t></w:r></w:p></w:tc>` +
+      `</w:tr></w:tbl>` +
+      `<w:sectPr/></w:body></w:document>`;
+    expect(CLEAN_011.check(makeDoc(xml), OPTIONS)).toHaveLength(0);
+  });
+
+  it('still flags a multi-cell table in the same section that has wrong glyphs', () => {
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W}"><w:body>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:r><w:t>Application checklist</w:t></w:r></w:p>` +
+      // single-cell callout — exempt
+      `<w:tbl><w:tr>` +
+      `<w:tc><w:p><w:r><w:t>Important: public information</w:t></w:r></w:p></w:tc>` +
+      `</w:tr></w:tbl>` +
+      // two-column checklist table — should still be flagged
+      `<w:tbl><w:tr>` +
+      `<w:tc><w:p><w:r><w:t>☐ Item</w:t></w:r></w:p></w:tc>` +
+      `<w:tc><w:p><w:r><w:t>Description</w:t></w:r></w:p></w:tc>` +
+      `</w:tr></w:tbl>` +
+      `<w:sectPr/></w:body></w:document>`;
+    const results = CLEAN_011.check(makeDoc(xml), OPTIONS) as AutoAppliedChange[];
+    expect(results).toHaveLength(1);
+    expect(results[0]!.value).toBe('1');
+  });
+});
+
 // ─── Step 3 scope: H4 headings within "Build Your Application" ────────────────
 
 /**
@@ -315,6 +370,7 @@ describe('CLEAN-011: missing glyph detection', () => {
       `<w:r><w:t>Application checklist</w:t></w:r></w:p>` +
       `<w:tbl><w:tr>` +
       `<w:tc><w:p><w:r><w:t>Required document</w:t></w:r></w:p></w:tc>` +
+      `<w:tc><w:p><w:r><w:t>Description column</w:t></w:r></w:p></w:tc>` +
       `</w:tr></w:tbl>` +
       `<w:sectPr/></w:body></w:document>`;
     const results = CLEAN_011.check(makeDoc(xml), OPTIONS) as AutoAppliedChange[];
