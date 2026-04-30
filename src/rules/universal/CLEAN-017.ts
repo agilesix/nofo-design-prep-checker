@@ -4,14 +4,17 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
  * CLEAN-017: Correct "grants.gov" capitalization (auto-apply)
  *
  * Replaces all case-insensitive occurrences of "grants.gov" with "Grants.gov"
- * in every w:t text run in word/document.xml, including runs inside w:hyperlink
- * elements. Only text content is updated — URLs, relationships, and all
- * formatting are untouched.
+ * across all story parts — document body (doc.documentXml), footnotes
+ * (doc.footnotesXml), and endnotes (doc.endnotesXml). Runs inside w:hyperlink
+ * elements are included. Only text content is updated — URLs, relationships,
+ * and all formatting are untouched. The buildDocx patch additionally covers
+ * headers and footers via getStoryPartPaths.
  *
- * Detection counts matches directly from doc.documentXml w:t nodes using the
- * same boundary-aware regex as the OOXML patch, so the reported count matches
- * what buildDocx will actually change. Occurrences inside longer domains
- * (e.g. "notgrants.gov", "grants.gov.uk", "apply.grants.gov") are excluded.
+ * Detection counts matches across doc.documentXml, doc.footnotesXml, and
+ * doc.endnotesXml using the same boundary-aware regex as the OOXML patch, so
+ * the reported count matches what buildDocx will actually change. Occurrences
+ * inside longer domains (e.g. "notgrants.gov", "grants.gov.uk",
+ * "apply.grants.gov") are excluded.
  *
  * Summary: "Grants.gov capitalization corrected in N location(s)."
  */
@@ -25,17 +28,18 @@ const CLEAN_017: Rule = {
   id: 'CLEAN-017',
   autoApply: true,
   check(doc: ParsedDocument, _options: RuleRunnerOptions): AutoAppliedChange[] {
-    if (!doc.documentXml) return [];
+    const sources = [doc.documentXml, doc.footnotesXml, doc.endnotesXml].filter(Boolean);
+    if (sources.length === 0) return [];
 
     const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(doc.documentXml, 'application/xml');
-    const wtNodes = Array.from(xmlDoc.getElementsByTagName('w:t'));
-
     let count = 0;
-    for (const wt of wtNodes) {
-      const text = wt.textContent ?? '';
-      const matches = text.match(GRANTSGOV_RE) ?? [];
-      count += matches.filter(m => m !== 'Grants.gov').length;
+    for (const xml of sources) {
+      const xmlDoc = parser.parseFromString(xml, 'application/xml');
+      for (const wt of Array.from(xmlDoc.getElementsByTagName('w:t'))) {
+        const text = wt.textContent ?? '';
+        const matches = text.match(GRANTSGOV_RE) ?? [];
+        count += matches.filter(m => m !== 'Grants.gov').length;
+      }
     }
 
     if (count === 0) return [];
