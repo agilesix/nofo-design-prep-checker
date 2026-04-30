@@ -1485,6 +1485,38 @@ describe('buildDocx — CLEAN-011: checklist checkbox normalization', () => {
     const rows = extractChecklistFirstColInfo(outXml);
     expect(rows[0]!.text).toBe('☐ Item text');
   });
+
+  it('leaves a single-cell callout table untouched while fixing the multi-cell checklist table', async () => {
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_CHECKLIST}"><w:body>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:r><w:t>Application checklist</w:t></w:r></w:p>` +
+      // Single-cell callout box — must not be touched
+      `<w:tbl><w:tr>` +
+      `<w:tc><w:p><w:r><w:t>Important: public information</w:t></w:r></w:p>` +
+      `<w:p><w:r><w:t>More callout content.</w:t></w:r></w:p></w:tc>` +
+      `</w:tr></w:tbl>` +
+      // Two-column checklist table — wrong glyph should be fixed
+      `<w:tbl><w:tr>` +
+      `<w:tc><w:p><w:r><w:t>☐ Checklist item</w:t></w:r></w:p></w:tc>` +
+      `<w:tc><w:p><w:r><w:t>Description</w:t></w:r></w:p></w:tc>` +
+      `</w:tr></w:tbl>` +
+      `<w:sectPr/></w:body></w:document>`;
+
+    const zip = new JSZip();
+    zip.file('word/document.xml', xml);
+
+    const outXml = await getOutputDocXml(zip, [], [CHECKLIST_CHANGE]);
+
+    // Callout table: text must be preserved verbatim — no ◻ prepended
+    expect(outXml).toContain('Important: public information');
+    expect(outXml).not.toContain('◻ Important:');
+
+    // Checklist table: wrong glyph must have been corrected
+    expect(outXml).toContain('◻ Checklist item');
+    expect(outXml).not.toContain('☐ Checklist item');
+  });
 });
 
 // ─── LINK-006 link text fix: hyperlink attribute preservation ─────────────────

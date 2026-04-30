@@ -102,6 +102,15 @@ function needsMissingGlyphInsert(text: string): boolean {
   return first !== TARGET_GLYPH && /[a-zA-Z0-9]/.test(first);
 }
 
+function isSingleCellTable(table: Element): boolean {
+  let cellCount = 0;
+  for (const row of Array.from(table.children).filter(c => c.localName === 'tr')) {
+    cellCount += Array.from(row.children).filter(c => c.localName === 'tc').length;
+    if (cellCount > 1) return false;
+  }
+  return cellCount === 1;
+}
+
 function isListStyle(styleVal: string): boolean {
   return /list|bullet/i.test(styleVal);
 }
@@ -212,6 +221,7 @@ function countCellsNeedingFix(xmlDoc: Document): number {
   let count = 0;
 
   for (const table of tables) {
+    if (isSingleCellTable(table)) continue;
     for (const row of Array.from(table.children).filter(c => c.localName === 'tr')) {
       if (isHeaderRow(row)) continue;
 
