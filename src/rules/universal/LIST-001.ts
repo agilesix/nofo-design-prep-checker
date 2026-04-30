@@ -65,8 +65,10 @@ const LIST_001: Rule = {
         severity: 'warning',
         sectionId,
         nearestHeading,
-        description: `${count} consecutive paragraphs starting near "${text}…" appear to use manual ${group.type === 'bullet' ? 'bullet characters' : 'numbering'} instead of proper Word list formatting. This may not convert correctly to accessible HTML.`,
-        suggestedFix: `Select these paragraphs in the source document and apply the proper ${group.type === 'bullet' ? 'bulleted' : 'numbered'} list style from the Word paragraph formatting options.`,
+        description: `${count} consecutive paragraphs starting near "${text}…" appear to use manual ${group.type === 'bullet' ? 'bullet characters' : 'numbering'} instead of proper Word list formatting. This may not convert correctly in NOFO Builder, potentially causing garbled text or missing formatting in the designed PDF.`,
+        suggestedFix: group.type === 'bullet'
+          ? `In Word, select the affected paragraphs, open the Styles pane, and confirm they are tagged as 'List Paragraph' or a 'Bullet' style — anything tagged as 'Normal' may not convert correctly in NOFO Builder. To fix: select the paragraphs, open the Styles pane, select 'Clear Formatting', then click the 'Bullets' button in the ribbon. For nested bullets, use the 'Increase Indent' button.`
+          : `Select these paragraphs in the source document and apply the proper numbered list style from the Word paragraph formatting options.`,
         instructionOnly: true,
       });
     });
