@@ -44,7 +44,7 @@ export async function buildDocx(
   // Separate fixes by type for safe ordering
   const metaFixes = acceptedFixes.filter(f => f.targetField?.startsWith('metadata.'));
   const bodyFixes = acceptedFixes.filter(
-    f => f.ruleId.startsWith('LINK-003') || f.ruleId.startsWith('FORMAT-') || f.ruleId === 'LINK-006'
+    f => f.ruleId.startsWith('FORMAT-') || f.ruleId === 'LINK-006'
   );
   const imgFixes = acceptedFixes.filter(f => f.targetField?.startsWith('image.'));
   const emailChanges = autoAppliedChanges.filter(
@@ -106,9 +106,6 @@ export async function buildDocx(
   );
   const hasGrantsGovCapitalize = autoAppliedChanges.some(
     c => c.targetField === 'text.grantsgov.capitalize'
-  );
-  const hasGrantsGovCapitalizationFix = autoAppliedChanges.some(
-    c => c.targetField === 'link.grantsgov.capitalization'
   );
   const hasUniversalInstructionBoxRemoval = autoAppliedChanges.some(
     c => c.targetField === 'struct.universal.removeinstructionboxes'
@@ -251,11 +248,6 @@ export async function buildDocx(
   // Correct Grants.gov capitalization in all text runs
   if (hasGrantsGovCapitalize) {
     await applyGrantsGovCapitalization(zip);
-  }
-
-  // Correct "grants.gov" capitalization to "Grants.gov" in all text runs
-  if (hasGrantsGovCapitalizationFix) {
-    await applyGrantsGovCapitalizationFix(zip);
   }
 
   // Remove universal instruction box tables (single-cell, first paragraph contains "instructions")
@@ -2234,39 +2226,6 @@ async function applyPdfLabelFix(zip: JSZip): Promise<void> {
  * relationships, and all run-level formatting are untouched.
  */
 async function applyGrantsGovCapitalization(zip: JSZip): Promise<void> {
-  const docFile = zip.file('word/document.xml');
-  if (!docFile) return;
-
-  const xmlStr = await docFile.async('string');
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
-
-  let changed = false;
-
-  for (const wt of Array.from(xmlDoc.getElementsByTagName('w:t'))) {
-    const original = wt.textContent ?? '';
-    const corrected = original.replace(/(?<![.\w])grants\.gov(?!\.[a-zA-Z])/gi, 'Grants.gov');
-    if (corrected !== original) {
-      wt.textContent = corrected;
-      changed = true;
-    }
-  }
-
-  if (changed) {
-    zip.file('word/document.xml', serializeXml(xmlDoc));
-  }
-}
-
-// ─── LINK-003: Grants.gov capitalization fix ─────────────────────────────────
-
-/**
- * Replaces every case-insensitive occurrence of "grants.gov" in w:t text
- * content with "Grants.gov". Runs across all story parts — document body,
- * footnotes, endnotes, headers, and footers. Hyperlink URLs (relationship
- * targets) are not touched. Occurrences split across multiple adjacent text
- * runs are not corrected by this pass.
- */
-async function applyGrantsGovCapitalizationFix(zip: JSZip): Promise<void> {
   const parser = new DOMParser();
 
   for (const path of getStoryPartPaths(zip)) {
@@ -2277,11 +2236,11 @@ async function applyGrantsGovCapitalizationFix(zip: JSZip): Promise<void> {
     const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
 
     let changed = false;
-    for (const wT of Array.from(xmlDoc.getElementsByTagName('w:t'))) {
-      const text = wT.textContent ?? '';
-      const replaced = text.replace(/grants\.gov/gi, 'Grants.gov');
-      if (replaced !== text) {
-        wT.textContent = replaced;
+    for (const wt of Array.from(xmlDoc.getElementsByTagName('w:t'))) {
+      const original = wt.textContent ?? '';
+      const corrected = original.replace(/(?<![.\w])grants\.gov(?!\.[a-zA-Z])/gi, 'Grants.gov');
+      if (corrected !== original) {
+        wt.textContent = corrected;
         changed = true;
       }
     }

@@ -25,17 +25,38 @@ function makeHyperlinkDocXml(linkText: string): string {
   );
 }
 
-function makeDoc(documentXml: string): ParsedDocument {
+function makeDoc(
+  documentXml: string,
+  { footnotesXml = '', endnotesXml = '' }: { footnotesXml?: string; endnotesXml?: string } = {}
+): ParsedDocument {
   return {
     html: '',
     sections: [],
     rawText: '',
     zipArchive: new JSZip(),
     documentXml,
-    footnotesXml: '',
-    endnotesXml: '',
+    footnotesXml,
+    endnotesXml,
     activeContentGuide: null,
   };
+}
+
+function makeFootnotesXml(text: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:footnotes xmlns:w="${W_NS}">` +
+    `<w:footnote w:id="1"><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:footnote>` +
+    `</w:footnotes>`
+  );
+}
+
+function makeEndnotesXml(text: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:endnotes xmlns:w="${W_NS}">` +
+    `<w:endnote w:id="1"><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:endnote>` +
+    `</w:endnotes>`
+  );
 }
 
 const OPTIONS = { contentGuideId: null } as const;
@@ -125,5 +146,47 @@ describe('CLEAN-017: boundary matching — does not flag substrings in other dom
     const results = check(makeDocXml('grants.gov/apply'));
     expect(results).toHaveLength(1);
     expect(results[0]!.value).toBe('1');
+  });
+});
+
+// ─── Footnotes and endnotes coverage ─────────────────────────────────────────
+
+describe('CLEAN-017: detects incorrect Grants.gov capitalization in footnotes and endnotes', () => {
+  it('detects "grants.gov" in footnotesXml', () => {
+    const doc = makeDoc('', { footnotesXml: makeFootnotesXml('See grants.gov for details.') });
+    const results = CLEAN_017.check(doc, OPTIONS) as AutoAppliedChange[];
+    expect(results).toHaveLength(1);
+    expect(results[0]!.ruleId).toBe('CLEAN-017');
+    expect(results[0]!.value).toBe('1');
+  });
+
+  it('detects "grants.gov" in endnotesXml', () => {
+    const doc = makeDoc('', { endnotesXml: makeEndnotesXml('Source: GRANTS.GOV.') });
+    const results = CLEAN_017.check(doc, OPTIONS) as AutoAppliedChange[];
+    expect(results).toHaveLength(1);
+    expect(results[0]!.value).toBe('1');
+  });
+
+  it('counts matches across document body, footnotes, and endnotes', () => {
+    const doc = makeDoc(
+      makeDocXml('grants.gov'),
+      {
+        footnotesXml: makeFootnotesXml('grants.gov'),
+        endnotesXml: makeEndnotesXml('grants.gov'),
+      }
+    );
+    const results = CLEAN_017.check(doc, OPTIONS) as AutoAppliedChange[];
+    expect(results[0]!.value).toBe('3');
+    expect(results[0]!.description).toMatch(/3 locations/);
+  });
+
+  it('does not flag already-correct "Grants.gov" in footnotes', () => {
+    const doc = makeDoc('', { footnotesXml: makeFootnotesXml('See Grants.gov for details.') });
+    expect(CLEAN_017.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('applies boundary rules to footnote content — does not flag "apply.grants.gov"', () => {
+    const doc = makeDoc('', { footnotesXml: makeFootnotesXml('Go to apply.grants.gov to submit.') });
+    expect(CLEAN_017.check(doc, OPTIONS)).toHaveLength(0);
   });
 });
