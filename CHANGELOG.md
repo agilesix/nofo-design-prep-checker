@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.8.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.7.0...v1.8.0) (2026-04-30)
+
+
+### Features
+
+* add HEAD-005 to flag headings that may be misformatted normal text ([f5c9e58](https://github.com/agilesix/nofo-design-prep-checker/commit/f5c9e58d86da9bedf8d8ee834d23f860fb767702))
+* HEAD-005 — flag headings that may be misformatted normal text ([5a2fd81](https://github.com/agilesix/nofo-design-prep-checker/commit/5a2fd81e5225ad50c75825c2e7c704ac5eb22c23))
+
+
+### Bug Fixes
+
+* **LINK-003:** extend to all story parts; document split-run limitation ([1b035b2](https://github.com/agilesix/nofo-design-prep-checker/commit/1b035b2a9809d90bd52b082dfe40fb316d04d3b1))
+* **LINK-003:** reimplement as Grants.gov capitalization auto-fix ([2a283df](https://github.com/agilesix/nofo-design-prep-checker/commit/2a283df5b0baa9813252851a13f6a1b9f0ca8658))
+* **LIST-001:** improve bullet detection suggested fix and description ([658c143](https://github.com/agilesix/nofo-design-prep-checker/commit/658c143deea7f0669a6dc514e8208b6773ab4c78))
+* **TABLE-004:** update test assertions to match callout box label change ([8338446](https://github.com/agilesix/nofo-design-prep-checker/commit/8338446ae8d724866f4e7217efacdd1b4b14fa1b))
+* **TABLE-004:** use "callout box" instead of "table" in summary label ([a5541a4](https://github.com/agilesix/nofo-design-prep-checker/commit/a5541a4ef1599eec7f84a1a8e29c9155e08ce62f))
+
 ## [1.7.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.6.1...v1.7.0) (2026-04-27)
 
 
