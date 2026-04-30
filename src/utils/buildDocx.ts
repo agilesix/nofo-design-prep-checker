@@ -2696,6 +2696,15 @@ function checklistNeedsGlyphFix(text: string): boolean {
   return false;
 }
 
+function checklistIsSingleCellTable(table: Element): boolean {
+  let cellCount = 0;
+  for (const row of Array.from(table.children).filter(c => c.localName === 'tr')) {
+    cellCount += Array.from(row.children).filter(c => c.localName === 'tc').length;
+    if (cellCount > 1) return false;
+  }
+  return cellCount === 1;
+}
+
 function checklistIsListStyle(styleVal: string): boolean {
   return /list|bullet/i.test(styleVal);
 }
@@ -2837,6 +2846,7 @@ async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
   let changed = false;
 
   for (const table of tables) {
+    if (checklistIsSingleCellTable(table)) continue;
     for (const row of Array.from(table.children).filter(c => c.localName === 'tr')) {
       if (checklistIsHeaderRow(row)) continue;
 
