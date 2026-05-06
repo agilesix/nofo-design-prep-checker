@@ -2749,6 +2749,47 @@ describe('buildDocx — applyHeadingTextCorrections (HEAD-004)', () => {
     // All runs' text concatenated should equal just the new text (second run cleared)
     expect(styles[0]).toMatchObject({ style: 'Heading3', text: 'Short heading' });
   });
+
+  it('rewrites w:bookmarkStart w:name and w:hyperlink w:anchor to the new slug', async () => {
+    // "Eligibility Requirements" has bookmark "Eligibility_Requirements".
+    // A hyperlink in a later paragraph targets the same anchor.
+    // After HEAD-004 renames the heading to "Eligibility Criteria", both the
+    // bookmark name and the hyperlink anchor must be rewritten to the new slug.
+    const headingWithBookmark =
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:bookmarkStart w:id="1" w:name="Eligibility_Requirements"/>` +
+      `<w:r><w:t>Eligibility Requirements</w:t></w:r>` +
+      `<w:bookmarkEnd w:id="1"/>` +
+      `</w:p>`;
+    const linkPara =
+      `<w:p>` +
+      `<w:hyperlink w:anchor="Eligibility_Requirements">` +
+      `<w:r><w:t>see eligibility</w:t></w:r>` +
+      `</w:hyperlink>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([headingWithBookmark, linkPara]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-004-0',
+      ruleId: 'HEAD-004',
+      targetField: 'heading.text.H2.0::Eligibility Requirements',
+      value: 'Eligibility Criteria',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+
+    // Heading text updated
+    expect(xml).toContain('Eligibility Criteria');
+    expect(xml).not.toContain('Eligibility Requirements');
+    // Bookmark name rewritten to new slug
+    expect(xml).toContain('w:name="Eligibility_Criteria"');
+    expect(xml).not.toContain('w:name="Eligibility_Requirements"');
+    // Hyperlink anchor rewritten to new slug
+    expect(xml).toContain('w:anchor="Eligibility_Criteria"');
+    expect(xml).not.toContain('w:anchor="Eligibility_Requirements"');
+  });
 });
 
 // ─── applyHeadingStyleToNormal (HEAD-005) ────────────────────────────────────
