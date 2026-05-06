@@ -3098,7 +3098,8 @@ function p19IsEnabledOnOffProperty(el: Element | null): boolean {
   if (!el) return false;
   const val = el.getAttribute('w:val');
   if (val == null) return true;
-  return val !== '0' && val !== 'false' && val !== 'off';
+  const normalized = val.trim().toLowerCase();
+  return normalized !== '0' && normalized !== 'false' && normalized !== 'off';
 }
 
 function p19RunHasBold(run: Element): boolean {
