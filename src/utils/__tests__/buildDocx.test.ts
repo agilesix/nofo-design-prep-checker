@@ -5452,3 +5452,151 @@ describe('buildDocx — ATTACH-002: File name sentence case', () => {
     expect(outXml).toContain('No attachments section.');
   });
 });
+
+// ─── applyBoldColonFix (CLEAN-019) ───────────────────────────────────────────
+
+const W_NS_COLON = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function makeColonDocXml(body: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_COLON}">` +
+    `<w:body>${body}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+const BOLD_COLON_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-019',
+  description: 'Bold removed from 1 colon run following non-bold text.',
+  targetField: 'text.colon.unbold',
+};
+
+describe('buildDocx — CLEAN-019: bold colon run removal', () => {
+  it('removes w:b from a sole-colon run preceded by a non-bold run', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:t>Section Title</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>:</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeColonDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [BOLD_COLON_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    expect(runs).toHaveLength(2);
+
+    const colonRun = runs[1]!;
+    const rPr = Array.from(colonRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(rPr?.getElementsByTagName('w:b').length ?? 0).toBe(0);
+    expect(colonRun.getElementsByTagName('w:t')[0]?.textContent).toBe(':');
+  });
+
+  it('removes both w:b and w:bCs when both are present on the colon run', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:t>Label</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/><w:bCs/></w:rPr><w:t>:</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeColonDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [BOLD_COLON_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    const colonRun = runs[1]!;
+    const rPr = Array.from(colonRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(rPr?.getElementsByTagName('w:b').length ?? 0).toBe(0);
+    expect(rPr?.getElementsByTagName('w:bCs').length ?? 0).toBe(0);
+  });
+
+  it('does not modify the document when the preceding run is also bold', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>Bold Title</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>:</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeColonDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [BOLD_COLON_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    expect(runs).toHaveLength(2);
+    const colonRun = runs[1]!;
+    const rPr = Array.from(colonRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(rPr?.getElementsByTagName('w:b').length ?? 0).toBe(1);
+  });
+
+  it('does not modify a bold run whose text is "Section:" (not solely ":")', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:t>Before</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>Section:</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeColonDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [BOLD_COLON_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    expect(runs).toHaveLength(2);
+    const longRun = runs[1]!;
+    const rPr = Array.from(longRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    expect(rPr?.getElementsByTagName('w:b').length ?? 0).toBe(1);
+  });
+
+  it('does not apply the patch when targetField is absent from autoAppliedChanges', async () => {
+    const body =
+      `<w:p>` +
+      `<w:r><w:t>Title</w:t></w:r>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t>:</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeColonDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const runs = Array.from(wP!.childNodes).filter(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element[];
+    const colonRun = runs[1]!;
+    const rPr = Array.from(colonRun.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+    ) as Element | undefined;
+    // Bold should still be present — patch was not triggered
+    expect(rPr?.getElementsByTagName('w:b').length ?? 0).toBe(1);
+  });
+});
