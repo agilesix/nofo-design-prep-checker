@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import type { AcceptedFix, AutoAppliedChange } from '../types';
 import { DGHT_STEP1_ANCHOR } from '../rules/opdiv/CLEAN-007-constants';
 import { groupListParagraphs } from './listHelpers';
+import { slugifyHeading } from './anchorUtils';
 
 // XMLSerializer.serializeToString() drops the XML declaration. Word for iOS
 // (and strict XML consumers) require it — desktop Word auto-repairs missing
@@ -1016,7 +1017,7 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
     if (paraText.length === 0 || paraText[0] !== ' ') continue;
 
     dbg(`[CLEAN-008] Found heading with leading space: "${paraText}"`);
-    const oldAnchor = paraText.replace(/ /g, '_');
+    const oldAnchor = slugifyHeading(paraText);
     dbg(`[CLEAN-008]   oldAnchor = "${oldAnchor}"`);
 
     // Walk <w:t> nodes from the front, stripping leading spaces until we hit
@@ -1050,7 +1051,7 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
     }
 
     // Record the anchor remapping now that the paragraph text has been updated.
-    const newAnchor = getParaText(wP).replace(/ /g, '_');
+    const newAnchor = slugifyHeading(getParaText(wP));
     dbg(`[CLEAN-008]   newAnchor after fix = "${newAnchor}"`);
     if (newAnchor !== oldAnchor) {
       anchorRemap.set(oldAnchor, newAnchor);
@@ -1186,6 +1187,7 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
   const xmlStr = await docFile.async('string');
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
   // Build old → new lookup from all change entries
   const fixMap = new Map<string, string>();
@@ -1212,6 +1214,7 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
 
   const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
   let changed = false;
+  const anchorRemap = new Map<string, string>();
 
   for (const wP of paragraphs) {
     if (getHeadingLevel(wP) !== 2) continue;
@@ -1222,6 +1225,12 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
 
     const wTElements = Array.from(wP.getElementsByTagName('w:t'));
     if (wTElements.length === 0) continue;
+
+    const oldSlug = slugifyHeading(paraText);
+    const newSlug = slugifyHeading(corrected);
+    if (oldSlug !== newSlug) {
+      anchorRemap.set(oldSlug, newSlug);
+    }
 
     if (corrected.length !== paraText.length) {
       // Fall back to a full-run replacement when the corrected text no longer
@@ -1269,8 +1278,33 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
     changed = true;
   }
 
+  if (anchorRemap.size > 0) {
+    const allHyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    for (const link of allHyperlinks) {
+      const anchor =
+        link.getAttribute('w:anchor') ??
+        link.getAttributeNS(W, 'anchor') ??
+        link.getAttribute('anchor');
+      if (anchor && anchorRemap.has(anchor)) {
+        link.removeAttribute('anchor');
+        link.setAttributeNS(W, 'w:anchor', anchorRemap.get(anchor)!);
+      }
+    }
+
+    const allBookmarks = Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'));
+    for (const bm of allBookmarks) {
+      const name =
+        bm.getAttribute('w:name') ??
+        bm.getAttributeNS(W, 'name') ??
+        bm.getAttribute('name');
+      if (name && anchorRemap.has(name)) {
+        bm.removeAttribute('name');
+        bm.setAttributeNS(W, 'w:name', anchorRemap.get(name)!);
+      }
+    }
+  }
+
   if (changed) {
-  
     zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
@@ -1408,10 +1442,12 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
   const xmlStr = await docFile.async('string');
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
   const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
   let headingCount = 0;
   let changed = false;
+  const anchorRemap = new Map<string, string>();
 
   for (const wP of paragraphs) {
     const level = getHeadingLevel(wP);
@@ -1421,12 +1457,17 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
     const fix = fixesByIndex.get(currentIndex);
     if (fix === undefined) continue;
 
-    const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-    const allWTs = Array.from(wP.getElementsByTagNameNS(W_NS, 't'));
+    const allWTs = Array.from(wP.getElementsByTagNameNS(W, 't'));
     if (allWTs.length === 0) {
       allWTs.push(...Array.from(wP.getElementsByTagName('w:t')));
     }
     if (allWTs.length === 0) continue;
+
+    const oldSlug = slugifyHeading(getParaText(wP));
+    const newSlug = slugifyHeading(fix);
+    if (oldSlug !== newSlug) {
+      anchorRemap.set(oldSlug, newSlug);
+    }
 
     allWTs[0]!.textContent = fix;
     allWTs[0]!.removeAttribute('xml:space');
@@ -1436,8 +1477,33 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
     changed = true;
   }
 
+  if (anchorRemap.size > 0) {
+    const allHyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    for (const link of allHyperlinks) {
+      const anchor =
+        link.getAttribute('w:anchor') ??
+        link.getAttributeNS(W, 'anchor') ??
+        link.getAttribute('anchor');
+      if (anchor && anchorRemap.has(anchor)) {
+        link.removeAttribute('anchor');
+        link.setAttributeNS(W, 'w:anchor', anchorRemap.get(anchor)!);
+      }
+    }
+
+    const allBookmarks = Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'));
+    for (const bm of allBookmarks) {
+      const name =
+        bm.getAttribute('w:name') ??
+        bm.getAttributeNS(W, 'name') ??
+        bm.getAttribute('name');
+      if (name && anchorRemap.has(name)) {
+        bm.removeAttribute('name');
+        bm.setAttributeNS(W, 'w:name', anchorRemap.get(name)!);
+      }
+    }
+  }
+
   if (changed) {
-  
     zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
