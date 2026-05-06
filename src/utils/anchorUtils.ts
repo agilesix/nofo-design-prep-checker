@@ -1,8 +1,9 @@
 /**
  * Convert a heading's display text to an anchor slug, following the same
  * format NOFO Builder uses for Word bookmark names:
- *  0. Trim leading/trailing whitespace (defensive: prevents a leading space
- *     from producing a leading underscore even if the caller hasn't pre-trimmed)
+ *  0. Trim leading/trailing whitespace from raw heading text before slugifying.
+ *     Existing bookmark IDs (w:bookmarkStart w:name) must always be read as-is
+ *     from the document — never passed through this function as "old" anchors.
  *  1. Replace whitespace runs with underscores
  *  2. Replace any remaining non-alphanumeric characters with underscores
  *     (colons, slashes, parentheses, etc. — invalid in Word bookmark names)
