@@ -1017,12 +1017,18 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
     if (paraText.length === 0 || paraText[0] !== ' ') continue;
 
     dbg(`[CLEAN-008] Found heading with leading space: "${paraText}"`);
-    // Use the original space→underscore formula for oldAnchor: existing bookmarks
-    // in the document were created by NOFO Builder from the leading-space text
-    // without trimming, so they carry a leading underscore (e.g. "_Contacts_and_Support").
-    // slugifyHeading trims leading whitespace and would not match those names.
-    const oldAnchor = paraText.replace(/ /g, '_');
-    dbg(`[CLEAN-008]   oldAnchor = "${oldAnchor}"`);
+    // Read bookmark names already present in this paragraph — that is the ground
+    // truth for what the document actually contains. Computing from heading text
+    // is unreliable because NOFO Builder may have used a different formula.
+    const paraBookmarkNames: string[] = [];
+    for (const bm of Array.from(wP.getElementsByTagName('w:bookmarkStart'))) {
+      const name =
+        bm.getAttribute('w:name') ??
+        bm.getAttributeNS(W, 'name') ??
+        bm.getAttribute('name');
+      if (name) paraBookmarkNames.push(name);
+    }
+    dbg(`[CLEAN-008]   paraBookmarkNames = ${JSON.stringify(paraBookmarkNames)}`);
 
     // Walk <w:t> nodes from the front, stripping leading spaces until we hit
     // content. This correctly handles leading spaces spread across multiple runs.
@@ -1057,11 +1063,21 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
     // Record the anchor remapping now that the paragraph text has been updated.
     const newAnchor = slugifyHeading(getParaText(wP));
     dbg(`[CLEAN-008]   newAnchor after fix = "${newAnchor}"`);
-    if (newAnchor !== oldAnchor) {
-      anchorRemap.set(oldAnchor, newAnchor);
-      dbg(`[CLEAN-008]   Remap added: "${oldAnchor}" → "${newAnchor}"`);
-    } else {
-      dbg(`[CLEAN-008]   WARNING: oldAnchor === newAnchor ("${oldAnchor}"), no remap added`);
+    // If the paragraph has no bookmarks, fall back to computing the expected old
+    // anchor via the simple space→underscore formula. NOFO Builder creates bookmark
+    // names this way (no trimming, no special-char replacement), so the hyperlinks
+    // that target this heading will use that format.
+    const oldNames =
+      paraBookmarkNames.length > 0
+        ? paraBookmarkNames
+        : [paraText.replace(/ /g, '_')];
+    for (const oldName of oldNames) {
+      if (oldName !== newAnchor) {
+        anchorRemap.set(oldName, newAnchor);
+        dbg(`[CLEAN-008]   Remap added: "${oldName}" → "${newAnchor}"`);
+      } else {
+        dbg(`[CLEAN-008]   WARNING: name already equals newAnchor ("${oldName}"), no remap added`);
+      }
     }
   }
 
@@ -1230,10 +1246,19 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
     const wTElements = Array.from(wP.getElementsByTagName('w:t'));
     if (wTElements.length === 0) continue;
 
-    const oldSlug = slugifyHeading(paraText);
+    const paraBookmarkNames: string[] = [];
+    for (const bm of Array.from(wP.getElementsByTagName('w:bookmarkStart'))) {
+      const name =
+        bm.getAttribute('w:name') ??
+        bm.getAttributeNS(W, 'name') ??
+        bm.getAttribute('name');
+      if (name) paraBookmarkNames.push(name);
+    }
     const newSlug = slugifyHeading(corrected);
-    if (oldSlug !== newSlug) {
-      anchorRemap.set(oldSlug, newSlug);
+    for (const oldName of paraBookmarkNames) {
+      if (oldName !== newSlug) {
+        anchorRemap.set(oldName, newSlug);
+      }
     }
 
     if (corrected.length !== paraText.length) {
@@ -1467,10 +1492,19 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
     }
     if (allWTs.length === 0) continue;
 
-    const oldSlug = slugifyHeading(getParaText(wP));
+    const paraBookmarkNames: string[] = [];
+    for (const bm of Array.from(wP.getElementsByTagName('w:bookmarkStart'))) {
+      const name =
+        bm.getAttribute('w:name') ??
+        bm.getAttributeNS(W, 'name') ??
+        bm.getAttribute('name');
+      if (name) paraBookmarkNames.push(name);
+    }
     const newSlug = slugifyHeading(fix);
-    if (oldSlug !== newSlug) {
-      anchorRemap.set(oldSlug, newSlug);
+    for (const oldName of paraBookmarkNames) {
+      if (oldName !== newSlug) {
+        anchorRemap.set(oldName, newSlug);
+      }
     }
 
     allWTs[0]!.textContent = fix;
