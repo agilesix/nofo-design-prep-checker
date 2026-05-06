@@ -76,7 +76,20 @@ function c19RunText(run: Element): string {
 function c19RunHasBold(run: Element): boolean {
   const rPr = c19DirectChild(run, 'w:rPr');
   if (!rPr) return false;
-  return !!c19DirectChild(rPr, 'w:b') || !!c19DirectChild(rPr, 'w:bCs');
+
+  const wB = c19DirectChild(rPr, 'w:b');
+  const wBCs = c19DirectChild(rPr, 'w:bCs');
+  return c19OnOffIsEnabled(wB) || c19OnOffIsEnabled(wBCs);
+}
+
+function c19OnOffIsEnabled(node: Element | null): boolean {
+  if (!node) return false;
+
+  const rawVal = node.getAttribute('w:val');
+  if (rawVal == null) return true;
+
+  const normalizedVal = rawVal.trim().toLowerCase();
+  return normalizedVal !== '0' && normalizedVal !== 'false' && normalizedVal !== 'off';
 }
 
 function c19DirectChild(parent: Element, tagName: string): Element | null {
