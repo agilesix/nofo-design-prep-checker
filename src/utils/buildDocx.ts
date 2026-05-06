@@ -1017,7 +1017,11 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
     if (paraText.length === 0 || paraText[0] !== ' ') continue;
 
     dbg(`[CLEAN-008] Found heading with leading space: "${paraText}"`);
-    const oldAnchor = slugifyHeading(paraText);
+    // Use the original space→underscore formula for oldAnchor: existing bookmarks
+    // in the document were created by NOFO Builder from the leading-space text
+    // without trimming, so they carry a leading underscore (e.g. "_Contacts_and_Support").
+    // slugifyHeading trims leading whitespace and would not match those names.
+    const oldAnchor = paraText.replace(/ /g, '_');
     dbg(`[CLEAN-008]   oldAnchor = "${oldAnchor}"`);
 
     // Walk <w:t> nodes from the front, stripping leading spaces until we hit
