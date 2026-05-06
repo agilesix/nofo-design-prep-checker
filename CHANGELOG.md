@@ -9,7 +9,7 @@
 * **auto-fix:** Required. positioning and File name sentence case in Attachments h5 blocks ([f92bfb2](https://github.com/agilesix/nofo-design-prep-checker/commit/f92bfb28f47aacb919947e3edf2ef14bf913c507))
 * **auto-fix:** Required. positioning and File name sentence case in Attachments h5 blocks ([2c2fe96](https://github.com/agilesix/nofo-design-prep-checker/commit/2c2fe96bf76ef8ee74c73841b8f32dd3f5a3121e))
 * HEAD-005 — flag headings that may be misformatted normal text ([5a2fd81](https://github.com/agilesix/nofo-design-prep-checker/commit/5a2fd81e5225ad50c75825c2e7c704ac5eb22c23))
-* reimplment CLEAN-017 as Grants.gov capitalization auto-fix ([919dd76](https://github.com/agilesix/nofo-design-prep-checker/commit/919dd763dd8b53b95e3add2c4a5749eaa98b8c4c))
+* reimplement CLEAN-017 as Grants.gov capitalization auto-fix ([919dd76](https://github.com/agilesix/nofo-design-prep-checker/commit/919dd763dd8b53b95e3add2c4a5749eaa98b8c4c))
 
 
 ### Bug Fixes
