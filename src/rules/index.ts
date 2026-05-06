@@ -33,6 +33,7 @@ import CLEAN_015 from './universal/CLEAN-015';
 import CLEAN_016 from './universal/CLEAN-016';
 import CLEAN_017 from './universal/CLEAN-017';
 import CLEAN_018 from './universal/CLEAN-018';
+import CLEAN_019 from './universal/CLEAN-019';
 import ATTACH_001 from './universal/ATTACH-001';
 import ATTACH_002 from './universal/ATTACH-002';
 import HEAD_001 from './universal/HEAD-001';
@@ -83,6 +84,7 @@ export const allRules: Rule[] = [
   CLEAN_016,
   CLEAN_017,
   CLEAN_018,
+  CLEAN_019,
   ATTACH_001,
   ATTACH_002,
   LINK_007,

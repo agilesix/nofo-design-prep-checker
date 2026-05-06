@@ -98,6 +98,9 @@ export async function buildDocx(
   const hasTrailingPeriodBoldFix = autoAppliedChanges.some(
     c => c.targetField === 'text.trailing.period.unbold'
   );
+  const hasBoldColonFix = autoAppliedChanges.some(
+    c => c.targetField === 'text.colon.unbold'
+  );
   const hasPartialHyperlinkFix = autoAppliedChanges.some(
     c => c.targetField === 'link.partial.fix'
   );
@@ -288,6 +291,11 @@ export async function buildDocx(
   // Remove bold from trailing periods preceded by non-bold text
   if (hasTrailingPeriodBoldFix) {
     await applyTrailingPeriodBoldFix(zip);
+  }
+
+  // Remove bold from sole-colon runs immediately preceded by non-bold text
+  if (hasBoldColonFix) {
+    await applyBoldColonFix(zip);
   }
 
   // Strip content controls — unconditional, silent (documented on the Download
@@ -3034,6 +3042,82 @@ function p16SplitTrailingPeriod(wP: Element, lastRun: Element, fullText: string)
   } else {
     wP.appendChild(periodRun);
   }
+}
+
+// ─── CLEAN-019: Remove bold from sole-colon runs preceded by non-bold text ────
+
+/**
+ * For each paragraph, finds every direct w:r run whose trimmed text is exactly ":"
+ * that is bold AND whose immediately preceding direct w:r run is not bold.
+ * Removes w:b and w:bCs from the colon run in-place.
+ */
+async function applyBoldColonFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  let changed = false;
+
+  for (const wP of Array.from(xmlDoc.getElementsByTagName('w:p'))) {
+    const runs = p19DirectRuns(wP);
+    for (let i = 1; i < runs.length; i++) {
+      const run = runs[i]!;
+      const prev = runs[i - 1]!;
+      if (p19RunText(run).trim() === ':' && p19RunHasBold(run) && !p19RunHasBold(prev)) {
+        p19RemoveBold(run);
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    zip.file('word/document.xml', serializeXml(xmlDoc));
+  }
+}
+
+function p19DirectRuns(wP: Element): Element[] {
+  const result: Element[] = [];
+  for (const node of Array.from(wP.childNodes)) {
+    if (node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === 'w:r') {
+      result.push(node as Element);
+    }
+  }
+  return result;
+}
+
+function p19RunText(run: Element): string {
+  return Array.from(run.getElementsByTagName('w:t'))
+    .map(t => t.textContent ?? '')
+    .join('');
+}
+
+function p19IsEnabledOnOffProperty(el: Element | null): boolean {
+  if (!el) return false;
+  const val = el.getAttribute('w:val');
+  if (val == null) return true;
+  return val !== '0' && val !== 'false' && val !== 'off';
+}
+
+function p19RunHasBold(run: Element): boolean {
+  const rPr = directChildEl(run, 'w:rPr');
+  if (!rPr) return false;
+  return (
+    p19IsEnabledOnOffProperty(directChildEl(rPr, 'w:b')) ||
+    p19IsEnabledOnOffProperty(directChildEl(rPr, 'w:bCs'))
+  );
+}
+
+function p19RemoveBold(run: Element): void {
+  const rPr = directChildEl(run, 'w:rPr');
+  if (!rPr) return;
+  const toRemove = Array.from(rPr.childNodes).filter(
+    n => n.nodeType === Node.ELEMENT_NODE &&
+         ((n as Element).tagName === 'w:b' || (n as Element).tagName === 'w:bCs')
+  );
+  for (const node of toRemove) rPr.removeChild(node);
 }
 
 // ─── TABLE-004: Apply heading style to "Important: public information" ────────
