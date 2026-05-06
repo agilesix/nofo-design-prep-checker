@@ -1523,7 +1523,9 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
         link.getAttributeNS(W, 'anchor') ??
         link.getAttribute('anchor');
       if (anchor && anchorRemap.has(anchor)) {
-        link.removeAttribute('anchor');
+        link.removeAttributeNS(W, 'anchor');
+        link.removeAttributeNS(null, 'anchor');
+        link.removeAttribute('w:anchor');
         link.setAttributeNS(W, 'w:anchor', anchorRemap.get(anchor)!);
       }
     }
