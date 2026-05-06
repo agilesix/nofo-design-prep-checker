@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.8.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.7.0...v1.8.0) (2026-05-06)
+
+
+### Features
+
+* add HEAD-005 to flag headings that may be misformatted normal text ([f5c9e58](https://github.com/agilesix/nofo-design-prep-checker/commit/f5c9e58d86da9bedf8d8ee834d23f860fb767702))
+* **auto-fix:** Required. positioning and File name sentence case in Attachments h5 blocks ([f92bfb2](https://github.com/agilesix/nofo-design-prep-checker/commit/f92bfb28f47aacb919947e3edf2ef14bf913c507))
+* **auto-fix:** Required. positioning and File name sentence case in Attachments h5 blocks ([2c2fe96](https://github.com/agilesix/nofo-design-prep-checker/commit/2c2fe96bf76ef8ee74c73841b8f32dd3f5a3121e))
+* HEAD-005 — flag headings that may be misformatted normal text ([5a2fd81](https://github.com/agilesix/nofo-design-prep-checker/commit/5a2fd81e5225ad50c75825c2e7c704ac5eb22c23))
+* reimplement CLEAN-017 as Grants.gov capitalization auto-fix ([919dd76](https://github.com/agilesix/nofo-design-prep-checker/commit/919dd763dd8b53b95e3add2c4a5749eaa98b8c4c))
+
+
+### Bug Fixes
+
+* **CLEAN-011:** exempt single-cell table content from checkbox insertion ([3acb12b](https://github.com/agilesix/nofo-design-prep-checker/commit/3acb12b3554f613ceecb632845aaa6f871fdea59))
+* **CLEAN-011:** exempt single-cell table content from checkbox insertion ([fde133c](https://github.com/agilesix/nofo-design-prep-checker/commit/fde133c33b5b809e486b63ff87b0b0c4855ee47b))
+* **CLEAN-011:** exempt single-cell tables in buildDocx patch ([079af5a](https://github.com/agilesix/nofo-design-prep-checker/commit/079af5a785a2b2ce66ff75a3a81a98a1e52b0f83))
+* **CLEAN-017:** use boundary-aware regex and align detection with OOXML patch ([49c892f](https://github.com/agilesix/nofo-design-prep-checker/commit/49c892f49e2ecce1006aa42463ed5bf9a3f9bc61))
+* deduplicate Grants.gov capitalization fix summary message ([e07066d](https://github.com/agilesix/nofo-design-prep-checker/commit/e07066d79862d75baf1f3ec812e1420e5210a742))
+* deduplicate Grants.gov capitalization fix summary message ([e6789d8](https://github.com/agilesix/nofo-design-prep-checker/commit/e6789d8572cd177985f5e4bb54a45ad8f0b2e43e))
+* **LINK-003:** extend to all story parts; document split-run limitation ([1b035b2](https://github.com/agilesix/nofo-design-prep-checker/commit/1b035b2a9809d90bd52b082dfe40fb316d04d3b1))
+* **LINK-003:** reimplement as Grants.gov capitalization auto-fix ([2a283df](https://github.com/agilesix/nofo-design-prep-checker/commit/2a283df5b0baa9813252851a13f6a1b9f0ca8658))
+* **LIST-001:** improve bullet detection suggested fix and description ([658c143](https://github.com/agilesix/nofo-design-prep-checker/commit/658c143deea7f0669a6dc514e8208b6773ab4c78))
+* read oldAnchor from existing bookmarks instead of deriving from heading text ([d73245d](https://github.com/agilesix/nofo-design-prep-checker/commit/d73245d52aee29b719ceae2ae0abcf1e23c7ba1c))
+* reimplement CLEAN-017 as Grants.gov capitalization auto-fix ([08d9989](https://github.com/agilesix/nofo-design-prep-checker/commit/08d9989021a5dcc333e3dff86a71a1118b86942c))
+* restore CLEAN-008 oldAnchor formula to prevent remap lookup failure ([45eed49](https://github.com/agilesix/nofo-design-prep-checker/commit/45eed4957db479680e304b10f37fdc3d68746594))
+* restore rels helper definitions needed by LINK-003 tests ([ee6cdff](https://github.com/agilesix/nofo-design-prep-checker/commit/ee6cdff5614a537e9a926ebc4f217c209e2d3083))
+* restore space→underscore fallback in CLEAN-008 no-bookmark path ([9839ae2](https://github.com/agilesix/nofo-design-prep-checker/commit/9839ae29d926343acd9231c2f6ff6224f252e923))
+* **TABLE-004:** update test assertions to match callout box label change ([8338446](https://github.com/agilesix/nofo-design-prep-checker/commit/8338446ae8d724866f4e7217efacdd1b4b14fa1b))
+* **TABLE-004:** use "callout box" instead of "table" in summary label ([a5541a4](https://github.com/agilesix/nofo-design-prep-checker/commit/a5541a4ef1599eec7f84a1a8e29c9155e08ce62f))
+* **tests:** retarget LINK-003 buildDocx tests to CLEAN-017 ([8886f6b](https://github.com/agilesix/nofo-design-prep-checker/commit/8886f6b131802a5a8b86043dc178a5b2c651c63d))
+
 ## [1.7.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.6.1...v1.7.0) (2026-04-27)
 
 
