@@ -1064,13 +1064,13 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
     const newAnchor = slugifyHeading(getParaText(wP));
     dbg(`[CLEAN-008]   newAnchor after fix = "${newAnchor}"`);
     // If the paragraph has no bookmarks, fall back to computing the expected old
-    // anchor via the simple space→underscore formula. NOFO Builder creates bookmark
-    // names this way (no trimming, no special-char replacement), so the hyperlinks
-    // that target this heading will use that format.
+    // anchor from the original heading text via the shared slugifyHeading()
+    // contract. This keeps the inferred old name consistent with the rest of the
+    // codebase when hyperlinks target this heading.
     const oldNames =
       paraBookmarkNames.length > 0
         ? paraBookmarkNames
-        : [paraText.replace(/ /g, '_')];
+        : [slugifyHeading(paraText)];
     for (const oldName of oldNames) {
       if (oldName !== newAnchor) {
         anchorRemap.set(oldName, newAnchor);
