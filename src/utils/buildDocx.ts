@@ -1246,18 +1246,29 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
     const wTElements = Array.from(wP.getElementsByTagName('w:t'));
     if (wTElements.length === 0) continue;
 
-    const paraBookmarkNames: string[] = [];
+    const newSlug = slugifyHeading(corrected);
     for (const bm of Array.from(wP.getElementsByTagName('w:bookmarkStart'))) {
-      const name =
+      const nameAttr =
+        bm.hasAttribute('w:name')
+          ? 'w:name'
+          : bm.hasAttributeNS(W, 'name')
+            ? 'ns:name'
+            : bm.hasAttribute('name')
+              ? 'name'
+              : null;
+      const oldName =
         bm.getAttribute('w:name') ??
         bm.getAttributeNS(W, 'name') ??
         bm.getAttribute('name');
-      if (name) paraBookmarkNames.push(name);
-    }
-    const newSlug = slugifyHeading(corrected);
-    for (const oldName of paraBookmarkNames) {
-      if (oldName !== newSlug) {
-        anchorRemap.set(oldName, newSlug);
+      if (!oldName || oldName === newSlug) continue;
+
+      anchorRemap.set(oldName, newSlug);
+      if (nameAttr === 'w:name') {
+        bm.setAttribute('w:name', newSlug);
+      } else if (nameAttr === 'ns:name') {
+        bm.setAttributeNS(W, 'w:name', newSlug);
+      } else if (nameAttr === 'name') {
+        bm.setAttribute('name', newSlug);
       }
     }
 
