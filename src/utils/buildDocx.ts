@@ -1455,7 +1455,7 @@ async function applyHeadingLevelCorrections(zip: JSZip, fixes: AcceptedFix[]): P
  * elements are not touched.
  */
 async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
-  const fixesByIndex = new Map<number, string>();
+  const fixesByIndex = new Map<number, { newText: string; originalText: string }>();
 
   for (const fix of fixes) {
     if (!fix.targetField || !fix.value) continue;
@@ -1472,7 +1472,7 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
     if (isNaN(level) || isNaN(headingIndex)) continue;
     // Skip if value is unchanged — user accepted without editing
     if (fix.value.trim() === originalText.trim()) continue;
-    fixesByIndex.set(headingIndex, fix.value.trim());
+    fixesByIndex.set(headingIndex, { newText: fix.value.trim(), originalText: originalText.trim() });
   }
 
   if (fixesByIndex.size === 0) return;
@@ -1498,6 +1498,11 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
     const fix = fixesByIndex.get(currentIndex);
     if (fix === undefined) continue;
 
+    // Text guard: skip if the paragraph text doesn't match the encoded original —
+    // defence against index drift from content controls or other structural differences
+    // between the HTML heading ordinals (used by HEAD-004 detection) and OOXML.
+    if (getParaText(wP).trim() !== fix.originalText) continue;
+
     const allWTs = Array.from(wP.getElementsByTagNameNS(W, 't'));
     if (allWTs.length === 0) {
       allWTs.push(...Array.from(wP.getElementsByTagName('w:t')));
@@ -1512,14 +1517,14 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
         bm.getAttribute('name');
       if (name) paraBookmarkNames.push(name);
     }
-    const newSlug = slugifyHeading(fix);
+    const newSlug = slugifyHeading(fix.newText);
     for (const oldName of paraBookmarkNames) {
       if (oldName !== newSlug) {
         anchorRemap.set(oldName, newSlug);
       }
     }
 
-    allWTs[0]!.textContent = fix;
+    allWTs[0]!.textContent = fix.newText;
     allWTs[0]!.removeAttribute('xml:space');
     for (let i = 1; i < allWTs.length; i++) {
       allWTs[i]!.textContent = '';
@@ -1575,7 +1580,10 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
  * order (same convention as HEAD-003 / HEAD-004).
  */
 async function applyHeadingStyleToNormal(zip: JSZip, fixes: AcceptedFix[]): Promise<void> {
-  const fixIndices = new Set<number>();
+  // Map from headingIndex → originalText (from the targetField encoding).
+  // The text guard ensures we only patch when the OOXML heading text matches
+  // what HEAD-005 detected — defence against ordinal drift from content controls.
+  const fixesByIndex = new Map<number, string>();
 
   for (const fix of fixes) {
     if (!fix.targetField) continue;
@@ -1588,10 +1596,11 @@ async function applyHeadingStyleToNormal(zip: JSZip, fixes: AcceptedFix[]): Prom
     if (sepIdx === -1) continue;
     const headingIndex = parseInt(rest.slice(0, sepIdx), 10);
     if (isNaN(headingIndex)) continue;
-    fixIndices.add(headingIndex);
+    const originalText = rest.slice(sepIdx + 2);
+    fixesByIndex.set(headingIndex, originalText.trim());
   }
 
-  if (fixIndices.size === 0) return;
+  if (fixesByIndex.size === 0) return;
 
   const docFile = zip.file('word/document.xml');
   if (!docFile) return;
@@ -1610,7 +1619,11 @@ async function applyHeadingStyleToNormal(zip: JSZip, fixes: AcceptedFix[]): Prom
     if (level === 0) continue;
 
     const currentIndex = headingCount++;
-    if (!fixIndices.has(currentIndex)) continue;
+    const originalText = fixesByIndex.get(currentIndex);
+    if (originalText === undefined) continue;
+
+    // Text guard: skip if paragraph text doesn't match the encoded original
+    if (getParaText(wP).trim() !== originalText) continue;
 
     const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
     if (!pPr) continue;
@@ -1941,7 +1954,10 @@ function applyTrackedChangesAndCommentsToXmlDoc(xmlDoc: Document): boolean {
       name === 'rPrChange' ||
       name === 'pPrChange' ||
       name === 'sectPrChange' ||
-      name === 'tblPrChange'
+      name === 'tblPrChange' ||
+      name === 'tblGridChange' ||
+      name === 'tcPrChange' ||
+      name === 'trPrChange'
     ) {
       el.parentNode.removeChild(el);
       changed = true;

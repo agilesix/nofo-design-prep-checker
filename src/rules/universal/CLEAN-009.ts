@@ -32,6 +32,7 @@ const CLEAN_009: Rule = {
     const TRACKED_CHANGE_TAGS = [
       'w:ins', 'w:del', 'w:moveFrom', 'w:moveTo',
       'w:rPrChange', 'w:pPrChange', 'w:sectPrChange', 'w:tblPrChange',
+      'w:tblGridChange', 'w:tcPrChange', 'w:trPrChange',
     ];
     const COMMENT_TAGS = [
       'w:commentRangeStart', 'w:commentRangeEnd', 'w:commentReference',
