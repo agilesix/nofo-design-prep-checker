@@ -590,7 +590,9 @@ function makeLinkTextSuggestion(
       prefill: suggestedText,
       prefillNote:
         'Edit the suggested text as needed. Accepting will update the link text in the downloaded document and record your preferred wording.',
-      targetField: `link.text.${anchor}`,
+      // Encode anchor + original link text so buildDocx can scope the patch
+      // to this exact hyperlink instance rather than all links with the same anchor.
+      targetField: `link.text.${anchor}::${linkText}`,
     },
   } as Issue;
 }

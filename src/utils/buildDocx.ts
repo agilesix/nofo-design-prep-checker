@@ -452,12 +452,18 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
     }
 
     // LINK-006: update link display text
-    // targetField: "link.text.{anchor}", value: "{new link text}"
+    // targetField: "link.text.{anchor}::{originalLinkText}", value: "{new link text}"
+    // The "::{originalLinkText}" suffix scopes the patch to the exact hyperlink
+    // instance the user reviewed -- NOFOs often have multiple links pointing to
+    // the same anchor with intentionally different text.
     // Trim is used only to validate non-emptiness; the original value is written
     // to OOXML so the user's accepted text (including any intentional spacing) is
     // preserved verbatim.
     if (fix.ruleId === 'LINK-006' && fix.targetField?.startsWith('link.text.')) {
-      const anchor = fix.targetField.replace('link.text.', '');
+      const withoutPrefix = fix.targetField.replace('link.text.', '');
+      const sepIdx = withoutPrefix.indexOf('::');
+      const anchor = sepIdx === -1 ? withoutPrefix : withoutPrefix.slice(0, sepIdx);
+      const originalLinkText: string | null = sepIdx === -1 ? null : withoutPrefix.slice(sepIdx + 2);
       const newText = fix.value;
       if (anchor && newText?.trim()) {
         const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
@@ -469,6 +475,17 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
           // that store attributes namespace-aware but not under the qualified name.
           const elAnchor = el.getAttribute('w:anchor') ?? el.getAttributeNS(W, 'anchor');
           if (elAnchor !== anchor) continue;
+
+          // Scope to the exact hyperlink instance: skip if current text doesn't
+          // match the original link text that triggered the issue.
+          if (originalLinkText !== null) {
+            const currentText = Array.from(el.childNodes)
+              .filter((n): n is Element => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'r')
+              .flatMap(r => Array.from(r.getElementsByTagName('w:t')))
+              .map(t => t.textContent ?? '')
+              .join('');
+            if (currentText.trim() !== originalLinkText.trim()) continue;
+          }
 
           // Collect only the direct-child <w:r> runs of this hyperlink (bookmarks
           // and other sibling nodes are left untouched).
