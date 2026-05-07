@@ -461,6 +461,9 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
     // preserved verbatim.
     if (fix.ruleId === 'LINK-006' && fix.targetField?.startsWith('link.text.')) {
       const withoutPrefix = fix.targetField.replace('link.text.', '');
+      // Separator assumption: '::' is not a valid character sequence in a URL
+      // fragment anchor or in typical NOFO link text, so the first '::' reliably
+      // splits anchor from originalLinkText without ambiguity.
       const sepIdx = withoutPrefix.indexOf('::');
       const anchor = sepIdx === -1 ? withoutPrefix : withoutPrefix.slice(0, sepIdx);
       const originalLinkText: string | null = sepIdx === -1 ? null : withoutPrefix.slice(sepIdx + 2);
