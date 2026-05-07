@@ -424,7 +424,7 @@ describe('LINK-006 stop-word bidirectional match', () => {
     const suggestion = results[1] as Issue;
     expect(suggestion.severity).toBe('suggestion');
     expect(suggestion.title).toBe('Consider adding destination heading name to link text');
-    expect(suggestion.inputRequired?.targetField).toBe('link.text.Program_requirements_expectations');
+    expect(suggestion.inputRequired?.targetField).toBe('link.text.Program_requirements_expectations::link');
     expect(suggestion.inputRequired?.prefill).toBe('link (see Program requirements and expectations)');
   });
 
@@ -511,7 +511,7 @@ describe('LINK-006 numeric extraction fallback', () => {
     const suggestion = results[1] as Issue;
     expect(suggestion.severity).toBe('suggestion');
     expect(suggestion.title).toBe('Consider adding destination heading name to link text');
-    expect(suggestion.inputRequired?.targetField).toBe('link.text.Attach8OrgChart');
+    expect(suggestion.inputRequired?.targetField).toBe('link.text.Attach8OrgChart::link');
     expect(suggestion.inputRequired?.prefill).toBe('link (see Attachment 8: Non-duplication of federal funding)');
   });
 

@@ -77,7 +77,15 @@ function runText(run: Element): string {
 function runHasBold(run: Element): boolean {
   const rPr = c16DirectChild(run, 'w:rPr');
   if (!rPr) return false;
-  return !!c16DirectChild(rPr, 'w:b') || !!c16DirectChild(rPr, 'w:bCs');
+  return c16OnOffIsEnabled(c16DirectChild(rPr, 'w:b')) || c16OnOffIsEnabled(c16DirectChild(rPr, 'w:bCs'));
+}
+
+function c16OnOffIsEnabled(node: Element | null): boolean {
+  if (!node) return false;
+  const rawVal = node.getAttribute('w:val');
+  if (rawVal == null) return true;
+  const normalized = rawVal.trim().toLowerCase();
+  return normalized !== '0' && normalized !== 'false' && normalized !== 'off';
 }
 
 function c16DirectChild(parent: Element, tagName: string): Element | null {
