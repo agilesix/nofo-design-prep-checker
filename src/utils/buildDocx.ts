@@ -1437,7 +1437,7 @@ async function applyHeadingLevelCorrections(zip: JSZip, fixes: AcceptedFix[]): P
 
     // Text guard: skip if the paragraph at this index doesn't match what
     // check() encoded — defence against index drift from unexpected transforms.
-    if (getParaText(wP).trim() !== fix.text) continue;
+    if (getParaText(wP).trim().replace(/ /g, ' ') !== fix.text.replace(/ /g, ' ')) continue;
 
     const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
     if (!pPr) continue;
@@ -1521,7 +1521,7 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
     // Text guard: skip if the paragraph text doesn't match the encoded original —
     // defence against index drift from content controls or other structural differences
     // between the HTML heading ordinals (used by HEAD-004 detection) and OOXML.
-    if (getParaText(wP).trim() !== fix.originalText) continue;
+    if (getParaText(wP).trim().replace(/ /g, ' ') !== fix.originalText.replace(/ /g, ' ')) continue;
 
     const allWTs = Array.from(wP.getElementsByTagNameNS(W, 't'));
     if (allWTs.length === 0) {
@@ -1643,7 +1643,7 @@ async function applyHeadingStyleToNormal(zip: JSZip, fixes: AcceptedFix[]): Prom
     if (originalText === undefined) continue;
 
     // Text guard: skip if paragraph text doesn't match the encoded original
-    if (getParaText(wP).trim() !== originalText) continue;
+    if (getParaText(wP).trim().replace(/ /g, ' ') !== originalText.replace(/ /g, ' ')) continue;
 
     const pPr = Array.from(wP.children).find(c => c.localName === 'pPr');
     if (!pPr) continue;
