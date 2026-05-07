@@ -86,6 +86,40 @@ describe('CLEAN-009: detects tracked changes', () => {
     ));
     expect(CLEAN_009.check(doc, OPTIONS)).toHaveLength(1);
   });
+
+  it('detects a w:tblGridChange element (table column-grid change)', () => {
+    const doc = makeDoc(wrapDoc(
+      '<w:tbl><w:tblPr/>' +
+      '<w:tblGrid><w:gridCol w:w="3000"/>' +
+      '<w:tblGridChange w:id="5"><w:tblGrid><w:gridCol w:w="2880"/></w:tblGrid></w:tblGridChange>' +
+      '</w:tblGrid>' +
+      '<w:tr><w:tc><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+    ));
+    expect(CLEAN_009.check(doc, OPTIONS)).toHaveLength(1);
+  });
+
+  it('detects a w:tcPrChange element (table cell property change)', () => {
+    const doc = makeDoc(wrapDoc(
+      '<w:tbl><w:tblPr/><w:tr>' +
+      '<w:tc><w:tcPr>' +
+      '<w:tcPrChange w:id="6" w:author="User" w:date="2024-01-01T00:00:00Z"><w:tcPr/></w:tcPrChange>' +
+      '</w:tcPr><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc>' +
+      '</w:tr></w:tbl>'
+    ));
+    expect(CLEAN_009.check(doc, OPTIONS)).toHaveLength(1);
+  });
+
+  it('detects a w:trPrChange element (table row property change)', () => {
+    const doc = makeDoc(wrapDoc(
+      '<w:tbl><w:tblPr/><w:tr>' +
+      '<w:trPr>' +
+      '<w:trPrChange w:id="7" w:author="User" w:date="2024-01-01T00:00:00Z"><w:trPr/></w:trPrChange>' +
+      '</w:trPr>' +
+      '<w:tc><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc>' +
+      '</w:tr></w:tbl>'
+    ));
+    expect(CLEAN_009.check(doc, OPTIONS)).toHaveLength(1);
+  });
 });
 
 // ─── Detection: comments ──────────────────────────────────────────────────────

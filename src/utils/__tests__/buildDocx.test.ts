@@ -1102,6 +1102,86 @@ describe('buildDocx — CLEAN-009: accept tracked changes and remove comments', 
     expect(relsXml).toContain('styles.xml');
   });
 
+  // ── Table-level tracked change records (newly added) ─────────────────────
+
+  it('removes w:tblGridChange and preserves surrounding tblGrid content', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeTrackedChangeDocXml(
+        '<w:tbl>' +
+        '<w:tblPr/>' +
+        '<w:tblGrid>' +
+        '<w:gridCol w:w="3000"/>' +
+        '<w:tblGridChange w:id="5">' +
+        '<w:tblGrid><w:gridCol w:w="2880"/></w:tblGrid>' +
+        '</w:tblGridChange>' +
+        '</w:tblGrid>' +
+        '<w:tr><w:tc><w:p><w:r><w:t>cell text</w:t></w:r></w:p></w:tc></w:tr>' +
+        '</w:tbl>'
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [ACCEPT_CHANGES]);
+    // The tracked-change record must be gone
+    expect(outXml).not.toContain('tblGridChange');
+    // The current grid column and cell content must remain
+    expect(outXml).toContain('w:gridCol');
+    expect(outXml).toContain('cell text');
+  });
+
+  it('removes w:tcPrChange and preserves remaining cell properties', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeTrackedChangeDocXml(
+        '<w:tbl><w:tblPr/><w:tr>' +
+        '<w:tc>' +
+        '<w:tcPr>' +
+        '<w:tcW w:w="2000" w:type="dxa"/>' +
+        '<w:tcPrChange w:id="6" w:author="User" w:date="2024-01-01T00:00:00Z">' +
+        '<w:tcPr><w:tcW w:w="1800" w:type="dxa"/></w:tcPr>' +
+        '</w:tcPrChange>' +
+        '</w:tcPr>' +
+        '<w:p><w:r><w:t>cell</w:t></w:r></w:p>' +
+        '</w:tc>' +
+        '</w:tr></w:tbl>'
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [ACCEPT_CHANGES]);
+    expect(outXml).not.toContain('tcPrChange');
+    // Current cell width (2000) must remain; old width (1800) is inside the removed element
+    expect(outXml).toContain('w:w="2000"');
+    expect(outXml).not.toContain('w:w="1800"');
+    expect(outXml).toContain('cell');
+  });
+
+  it('removes w:trPrChange and preserves remaining row properties', async () => {
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeTrackedChangeDocXml(
+        '<w:tbl><w:tblPr/><w:tr>' +
+        '<w:trPr>' +
+        '<w:trHeight w:val="400"/>' +
+        '<w:trPrChange w:id="7" w:author="User" w:date="2024-01-01T00:00:00Z">' +
+        '<w:trPr><w:trHeight w:val="300"/></w:trPr>' +
+        '</w:trPrChange>' +
+        '</w:trPr>' +
+        '<w:tc><w:p><w:r><w:t>row cell</w:t></w:r></w:p></w:tc>' +
+        '</w:tr></w:tbl>'
+      )
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [ACCEPT_CHANGES]);
+    expect(outXml).not.toContain('trPrChange');
+    // Current row height (400) must remain; old height (300) is inside the removed element
+    expect(outXml).toContain('w:val="400"');
+    expect(outXml).not.toContain('w:val="300"');
+    expect(outXml).toContain('row cell');
+  });
+
   // ── No-op: clean document ─────────────────────────────────────────────────
 
   it('leaves a clean document unchanged when targetField is absent', async () => {
@@ -1649,6 +1729,51 @@ describe('buildDocx — LINK-006 link text fix: hyperlink attribute preservation
     const externalHl = hyperlinks.find(el => el.getAttributeNS(R_NS, 'id') === 'rId99');
     expect(externalHl).toBeDefined();
     expect(externalHl!.getAttributeNS(R_NS, 'id')).toBe('rId99');
+  });
+
+  // ── ::originalLinkText scoping ────────────────────────────────────────────
+
+  it('scopes patch to the exact hyperlink whose original text matches the :: suffix', async () => {
+    // Two hyperlinks share the same anchor ("Section_2") but have different text.
+    // Accepting the fix for "Click here" must update only that link; "See section 2"
+    // must remain unchanged.
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS}" xmlns:r="${R_NS}">` +
+      `<w:body>` +
+      `<w:p><w:hyperlink w:anchor="Section_2"><w:r><w:t>Click here</w:t></w:r></w:hyperlink></w:p>` +
+      `<w:p><w:hyperlink w:anchor="Section_2"><w:r><w:t>See section 2</w:t></w:r></w:hyperlink></w:p>` +
+      `<w:sectPr/></w:body></w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', xml);
+
+    const fix: AcceptedFix = {
+      issueId: 'LINK-006-ltext-0',
+      ruleId: 'LINK-006',
+      targetField: 'link.text.Section_2::Click here',
+      value: 'Go to Section 2 (see Section 2)',
+    };
+
+    const outXml = await getOutputDocXml(zip, [fix]);
+
+    // The targeted hyperlink must have the new text
+    expect(outXml).toContain('Go to Section 2 (see Section 2)');
+    // The other hyperlink with the same anchor must be untouched
+    expect(outXml).toContain('See section 2');
+    // Original text must be gone (replaced)
+    expect(outXml).not.toContain('>Click here<');
+    // Both links must still point to Section_2
+    expect(outXml.match(/w:anchor="Section_2"/g)?.length).toBe(2);
+  });
+
+  it('leaves original content untouched when the issue is dismissed (no AcceptedFix)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeHyperlinkDocXml({ anchor: 'Section_2', linkText: 'Original text' }));
+
+    // Dismiss = no fix submitted; buildDocx is called with empty acceptedFixes
+    const outXml = await getOutputDocXml(zip, []);
+    expect(outXml).toContain('Original text');
+    expect(outXml).not.toContain('Go to Section 2');
   });
 });
 
@@ -2910,6 +3035,30 @@ describe('buildDocx — applyHeadingStyleToNormal (HEAD-005)', () => {
     expect(paras[0]).toMatchObject({ style: 'Heading1' });
     expect(paras[1]).toMatchObject({ style: 'Heading3' });
   });
+
+  it('applies fix when fix.originalText uses regular space but OOXML heading has NBSP (HEAD-005 NBSP guard)', async () => {
+    // Simulates the same mammoth normalisation case as HEAD-004: OOXML stores
+    // between words but mammoth renders it as a regular space in HTML, so the
+    // targetField :: suffix has a regular space while the OOXML text has NBSP.
+    const longText = 'This paragraph was accidentally styled as a heading and should be converted to normal text';
+    const mammothText = 'This paragraph was accidentally styled as a heading and should be converted to normal text';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocXmlFromParas([
+      headingPara(3, longText),  // OOXML has NBSP at position 71
+    ]));
+
+    const fix: AcceptedFix = {
+      issueId: 'HEAD-005-0',
+      ruleId: 'HEAD-005',
+      targetField: `heading.style.H3.0::${mammothText}`,  // originalText has regular space
+      value: 'apply',
+    };
+
+    const xml = await getOutputDocXml(zip, [fix]);
+    const paras = extractAllParaStyles(xml);
+    // Despite the NBSP mismatch, the text guard should normalise both sides and match
+    expect(paras[0]).toMatchObject({ style: 'Normal' });
+  });
 });
 
 // ─── LINK-006 auto-applied bookmark retargets ─────────────────────────────────
@@ -3361,6 +3510,119 @@ describe('buildDocx — CLEAN-007: CDC preamble removal', () => {
 
     const outXml = await getOutputDocXml(zip, [], []);
     expect(outXml).toContain('Should survive');
+  });
+});
+
+// ─── applyRemoveBeforeYouBeginHeading (CLEAN-006) ────────────────────────────
+
+const W_NS_BYB = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function makeBybDocXml(parts: { beforeBybParas?: string[]; afterBybParas?: string[]; bybLevel?: number }): string {
+  const { beforeBybParas = [], afterBybParas = [], bybLevel = 2 } = parts;
+  const before = beforeBybParas
+    .map(t => `<w:p><w:r><w:t>${t}</w:t></w:r></w:p>`)
+    .join('');
+  const bybHeading =
+    `<w:p>` +
+    `<w:pPr><w:pStyle w:val="Heading${bybLevel}"/></w:pPr>` +
+    `<w:r><w:t>Before You Begin</w:t></w:r>` +
+    `</w:p>`;
+  const after = afterBybParas
+    .map(t => `<w:p><w:r><w:t>${t}</w:t></w:r></w:p>`)
+    .join('');
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_BYB}"><w:body>` +
+    before + bybHeading + after +
+    `<w:sectPr/></w:body></w:document>`
+  );
+}
+
+const BYB_REMOVAL_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-006',
+  description: 'Before You Begin heading removed — content preserved.',
+  targetField: 'struct.byb.removeheading',
+};
+
+describe('buildDocx — CLEAN-006: Before You Begin heading removal', () => {
+  it('removes the Before You Begin heading paragraph', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeBybDocXml({
+      beforeBybParas: ['Intro paragraph'],
+      afterBybParas: ['Content after BYB'],
+    }));
+
+    const outXml = await getOutputDocXml(zip, [], [BYB_REMOVAL_CHANGE]);
+    expect(outXml).not.toContain('Before You Begin');
+    expect(outXml).toContain('Intro paragraph');
+    expect(outXml).toContain('Content after BYB');
+  });
+
+  it('removes the heading regardless of level (H2 or H3)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeBybDocXml({ bybLevel: 3, afterBybParas: ['body'] }));
+
+    const outXml = await getOutputDocXml(zip, [], [BYB_REMOVAL_CHANGE]);
+    expect(outXml).not.toContain('Before You Begin');
+    expect(outXml).toContain('body');
+  });
+
+  it('removal is case-insensitive', async () => {
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_BYB}"><w:body>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>BEFORE YOU BEGIN</w:t></w:r></w:p>` +
+      `<w:p><w:r><w:t>body content</w:t></w:r></w:p>` +
+      `<w:sectPr/></w:body></w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', xml);
+
+    const outXml = await getOutputDocXml(zip, [], [BYB_REMOVAL_CHANGE]);
+    expect(outXml).not.toContain('BEFORE YOU BEGIN');
+    expect(outXml).toContain('body content');
+  });
+
+  it('leaves content after the heading intact — no orphaned paragraphs', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeBybDocXml({
+      afterBybParas: ['First body para', 'Second body para'],
+    }));
+
+    const outXml = await getOutputDocXml(zip, [], [BYB_REMOVAL_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+    const texts = Array.from(xmlDoc.getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '')
+      .filter(Boolean);
+    expect(texts).toContain('First body para');
+    expect(texts).toContain('Second body para');
+    // No Before You Begin text present at all
+    expect(texts.join(' ')).not.toMatch(/before you begin/i);
+  });
+
+  it('does not remove a body paragraph that happens to read "Before You Begin"', async () => {
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_BYB}"><w:body>` +
+      // Normal paragraph (no pStyle) — must NOT be removed
+      `<w:p><w:r><w:t>Before You Begin</w:t></w:r></w:p>` +
+      `<w:p><w:r><w:t>body</w:t></w:r></w:p>` +
+      `<w:sectPr/></w:body></w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', xml);
+
+    const outXml = await getOutputDocXml(zip, [], [BYB_REMOVAL_CHANGE]);
+    expect(outXml).toContain('Before You Begin');
+    expect(outXml).toContain('body');
+  });
+
+  it('leaves the document unchanged when targetField is absent', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeBybDocXml({ afterBybParas: ['body'] }));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    expect(outXml).toContain('Before You Begin');
+    expect(outXml).toContain('body');
   });
 });
 
