@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.8.1](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.8.0...v1.8.1) (2026-05-10)
+
+
+### Bug Fixes
+
+* add pull_request trigger to build workflow ([89bb3e4](https://github.com/agilesix/nofo-design-prep-checker/commit/89bb3e474dfb0e4a6ea62015238541eb91ab6bdb))
+* align HEAD-004/HEAD-005 detection to OOXML and scope LINK-006 patch by instance ([db44f5a](https://github.com/agilesix/nofo-design-prep-checker/commit/db44f5a2a2aa1e5cabb1d619d4db6c5671e14c93))
+* correct four audit findings across CLEAN-009, CLEAN-016, and buildDocx ([86368b7](https://github.com/agilesix/nofo-design-prep-checker/commit/86368b7c1fe8b47fb7363127fa2180d6c0f8ae02))
+* normalize NBSP in heading text guards and update LINK-006 test assertions ([46aa015](https://github.com/agilesix/nofo-design-prep-checker/commit/46aa015918bd64377908821401ed35983369818c))
+* replace literal NBSP bytes with \u00A0 escape in heading text guards ([5197339](https://github.com/agilesix/nofo-design-prep-checker/commit/5197339e9349c777ed42c38370700bd23507319e))
+
 ## [1.8.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.7.0...v1.8.0) (2026-05-06)
 
 
