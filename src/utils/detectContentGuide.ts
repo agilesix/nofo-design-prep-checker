@@ -84,6 +84,16 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
     }
   }
 
+  // Check for SAMHSA — primary signal is the full agency name.
+  // The absence of a "Before You Begin" metadata block is expected for SAMHSA NOFOs.
+  if (/substance abuse and mental health services administration/i.test(rawText)) {
+    return {
+      detectedId: 'samhsa',
+      confidence: 'high',
+      signals: ['Substance Abuse and Mental Health Services Administration detected'],
+    };
+  }
+
   // Check for CDC Research (more specific than CDC standard).
   // Require ≥2 of the 3 research-specific signals plus a CDC identifier.
   const researchSignals = [
@@ -119,6 +129,8 @@ export function detectContentGuide(rawText: string): ContentGuideDetectionResult
     // against every CDC document if included here, inflating CDC scores and causing
     // incorrect low-confidence results for standard CDC NOFOs.
     if (guide.id === 'cdc-dghp') continue;
+    // samhsa is detected exclusively via the fast-path above (full agency name).
+    if (guide.id === 'samhsa') continue;
 
     const guideSignals: string[] = [];
     let score = 0;

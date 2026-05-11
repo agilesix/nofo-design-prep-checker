@@ -378,3 +378,41 @@ describe('CDC DGHP detection', () => {
     expect(result.detectedId).not.toBe('cdc');
   });
 });
+
+// ─── SAMHSA detection ─────────────────────────────────────────────────────────
+
+describe('SAMHSA detection', () => {
+  it('detects samhsa with high confidence when full agency name is present', () => {
+    const text = makeText(
+      'Substance Abuse and Mental Health Services Administration',
+      'SAMHSA Notice of Funding Opportunity',
+    );
+    const result = detectContentGuide(text);
+    expect(result.detectedId).toBe('samhsa');
+    expect(result.confidence).toBe('high');
+  });
+
+  it('detects samhsa case-insensitively', () => {
+    const text = 'substance abuse and mental health services administration funding opportunity TI-26-001';
+    const result = detectContentGuide(text);
+    expect(result.detectedId).toBe('samhsa');
+    expect(result.confidence).toBe('high');
+  });
+
+  it('does not detect samhsa when full name is absent', () => {
+    const text = 'SAMHSA grant opportunity for behavioral health';
+    const result = detectContentGuide(text);
+    expect(result.detectedId).not.toBe('samhsa');
+  });
+
+  it('does not confuse a CDC document as samhsa', () => {
+    const text = makeText(
+      'Centers for Disease Control and Prevention',
+      'CDC Office of Grants Services',
+      'CDC funding announcement',
+    );
+    const result = detectContentGuide(text);
+    expect(result.detectedId).not.toBe('samhsa');
+    expect(result.detectedId).toBe('cdc');
+  });
+});

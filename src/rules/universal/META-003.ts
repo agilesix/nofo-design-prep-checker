@@ -16,9 +16,15 @@ const KEYWORDS_FIELD_PATTERN = new RegExp(
   'i',
 );
 
+export function shouldSkipMETA003ForContentGuide(contentGuideId?: string | null): boolean {
+  return contentGuideId === 'samhsa';
+}
+
 const META_003: Rule = {
   id: 'META-003',
   check(doc: ParsedDocument, options: RuleRunnerOptions): Issue[] {
+    if (shouldSkipMETA003ForContentGuide(options.contentGuideId)) return [];
+
     const value = extractMetadataBodyValue(doc.html, KEYWORDS_FIELD_PATTERN);
 
     // No matching paragraph in the document body — nothing to flag.

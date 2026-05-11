@@ -15,7 +15,8 @@ export type ContentGuideId =
   | 'hrsa-bphc'
   | 'hrsa-construction'
   | 'hrsa-mchb'
-  | 'hrsa-rr';
+  | 'hrsa-rr'
+  | 'samhsa';
 
 export interface ContentGuideEntry {
   id: ContentGuideId;

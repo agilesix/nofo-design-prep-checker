@@ -19,6 +19,8 @@ const AUTHOR_FIELD_PATTERN = buildMetadataFieldPattern(AUTHOR_METADATA_FIELD_LAB
 const META_001: Rule = {
   id: 'META-001',
   check(doc: ParsedDocument, options: RuleRunnerOptions): Issue[] {
+    if (options.contentGuideId === 'samhsa') return [];
+
     const value = extractMetadataBodyValue(doc.html, AUTHOR_FIELD_PATTERN);
 
     // No matching paragraph in the document body — nothing to flag.

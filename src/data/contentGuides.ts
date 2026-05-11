@@ -182,6 +182,18 @@ export const contentGuides: ContentGuideEntry[] = [
       uniqueSections: ['Before You Begin', 'Trainee eligibility'],
     },
   },
+  {
+    id: 'samhsa',
+    displayName: 'SAMHSA Content Guide',
+    opDiv: 'SAMHSA',
+    version: 'FY26',
+    updatedAt: '2026-01-01',
+    detectionSignals: {
+      names: ['Substance Abuse and Mental Health Services Administration'],
+      abbreviations: ['SAMHSA'],
+      uniqueSections: [],
+    },
+  },
 ];
 
 export function getContentGuideById(id: string): ContentGuideEntry | undefined {
