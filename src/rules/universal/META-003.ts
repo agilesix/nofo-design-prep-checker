@@ -16,7 +16,7 @@ const KEYWORDS_FIELD_PATTERN = new RegExp(
   'i',
 );
 
-export function shouldSkipMETA003ForContentGuide(contentGuideId?: string): boolean {
+export function shouldSkipMETA003ForContentGuide(contentGuideId?: string | null): boolean {
   return contentGuideId === 'samhsa';
 }
 
