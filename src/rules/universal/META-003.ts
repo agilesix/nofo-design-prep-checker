@@ -19,6 +19,8 @@ const KEYWORDS_FIELD_PATTERN = new RegExp(
 const META_003: Rule = {
   id: 'META-003',
   check(doc: ParsedDocument, options: RuleRunnerOptions): Issue[] {
+    if (options.contentGuideId === 'samhsa') return [];
+
     const value = extractMetadataBodyValue(doc.html, KEYWORDS_FIELD_PATTERN);
 
     // No matching paragraph in the document body — nothing to flag.

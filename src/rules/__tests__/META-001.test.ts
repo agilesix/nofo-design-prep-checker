@@ -106,3 +106,13 @@ describe('META-001: issue shape', () => {
     expect(issue.inputRequired?.targetField).toBe('metadata.author');
   });
 });
+
+// ─── SAMHSA exemption ─────────────────────────────────────────────────────────
+
+describe('META-001: SAMHSA exemption', () => {
+  it('returns no issues for SAMHSA even when author placeholder is present', () => {
+    const doc = makeDoc('<p>Metadata author: Leave blank. Coach will insert.</p>');
+    const issues = META_001.check(doc, { contentGuideId: 'samhsa' });
+    expect(issues).toHaveLength(0);
+  });
+});
