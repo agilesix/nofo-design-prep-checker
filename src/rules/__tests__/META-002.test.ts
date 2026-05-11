@@ -105,3 +105,13 @@ describe('META-002: issue shape', () => {
     expect(issue.inputRequired?.targetField).toBe('metadata.subject');
   });
 });
+
+// ─── SAMHSA exemption ─────────────────────────────────────────────────────────
+
+describe('META-002: SAMHSA exemption', () => {
+  it('returns no issues for SAMHSA even when a placeholder subject paragraph is present', () => {
+    const doc = makeDoc('<p>Metadata subject: Leave blank. Coach will insert.</p>');
+    const issues = META_002.check(doc, { contentGuideId: 'samhsa' });
+    expect(issues).toHaveLength(0);
+  });
+});
