@@ -87,7 +87,7 @@ function isSkippable(word: string): boolean {
 /**
  * Indices of "sentence start" words within the word array.
  * Index 0 is always a sentence start.  Any word immediately following a word
- * that ends with a colon or em dash (—) is also a sentence start
+ * that ends with a colon or em dash (—) is also a sentence start.
  * (e.g. "Background: Why this", "Cooperative agreement — Description").
  *
  * Additionally, if the heading starts with non-alphabetic tokens (numbers,
