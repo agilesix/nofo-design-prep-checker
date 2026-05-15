@@ -30,7 +30,7 @@ import { DESIGNATOR_RE, isComponentLabel } from '../../constants';
  *     check — these reference the agency name by convention. The "Form" capitalization
  *     check still applies.
  *   • First word of the heading (always capitalised in both styles).
- *   • First word after a colon within the heading (sentence restart).
+ *   • First word after a colon or em dash (—) within the heading (sentence restart).
  *   • Minor words: articles (a/an/the), short prepositions, conjunctions.
  *   • ALL-CAPS words and words without lowercase letters: acronyms (CDC, HRSA),
  *     form names (SF-424), and other all-cap tokens are skipped entirely.
@@ -49,7 +49,7 @@ import { DESIGNATOR_RE, isComponentLabel } from '../../constants';
  *
  * H2 auto-fix title case rules (applied when sentence case is detected):
  *   • Capitalize the first word always.
- *   • Capitalize the first word after a colon.
+ *   • Capitalize the first word after a colon or em dash (—).
  *   • Capitalize all other words EXCEPT minor words (MINOR_WORDS set).
  *   • Leave ALL-CAPS words unchanged (acronyms like HRSA, CDC).
  *   • Leave already-capitalized words unchanged (likely proper nouns).
@@ -87,7 +87,8 @@ function isSkippable(word: string): boolean {
 /**
  * Indices of "sentence start" words within the word array.
  * Index 0 is always a sentence start.  Any word immediately following a word
- * that ends with a colon is also a sentence start (e.g. "Background: Why this").
+ * that ends with a colon or em dash (—) is also a sentence start
+ * (e.g. "Background: Why this", "Cooperative agreement — Description").
  *
  * Additionally, if the heading starts with non-alphabetic tokens (numbers,
  * parenthetical references such as "(c)(3)", etc.), the first token that begins
@@ -104,7 +105,8 @@ function sentenceStartIndices(words: string[]): Set<number> {
   if (firstAlpha > 0) starts.add(firstAlpha);
 
   for (let i = 0; i < words.length - 1; i++) {
-    if ((words[i] ?? '').trimEnd().endsWith(':')) starts.add(i + 1);
+    const w = (words[i] ?? '').trimEnd();
+    if (w.endsWith(':') || w.endsWith('—')) starts.add(i + 1);
   }
   return starts;
 }
