@@ -5,8 +5,8 @@ export const contentGuides: ContentGuideEntry[] = [
     id: 'acf',
     displayName: 'ACF Content Guide',
     opDiv: 'ACF',
-    version: 'FY26 Interim, December 2, 2025',
-    updatedAt: '2025-12-02',
+    version: 'FY26 Interim, May 7, 2026',
+    updatedAt: '2026-05-07',
     detectionSignals: {
       names: ['Administration for Children and Families'],
       abbreviations: ['ACF'],
