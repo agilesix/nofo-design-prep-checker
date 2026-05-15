@@ -252,6 +252,43 @@ describe('HEAD-001: word after colon treated as sentence start', () => {
   });
 });
 
+// ─── Em dash restart ──────────────────────────────────────────────────────────
+
+describe('HEAD-001: word after em dash treated as sentence start', () => {
+  it('does not flag an H3 where the only capitalised word follows a standalone em dash', () => {
+    // "—" is a standalone token; "Description" immediately follows and is the
+    // first word of a new clause — exempt, just like a word after ":".
+    const doc = makeDoc('<h3>Cooperative agreement — Description of ACF involvement</h3>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does not flag an H3 where the only capitalised word follows an em dash attached to the preceding word', () => {
+    // "agreement—" ends with em dash; "Description" is the first word of the
+    // new clause and should be treated as a sentence start.
+    const doc = makeDoc('<h3>Cooperative agreement— Description of ACF involvement</h3>');
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('capitalizes the first word after a standalone em dash when auto-fixing an H2', () => {
+    const doc = makeDoc('<h2>step one — apply now</h2>');
+    const results = HEAD_001.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    const change = results[0] as AutoAppliedChange;
+    const pairs = JSON.parse(change.value!) as { old: string; new: string }[];
+    expect(pairs[0]!.new).toBe('Step One — Apply Now');
+  });
+
+  it('still flags an H3 with a capitalised word that does NOT immediately follow an em dash', () => {
+    // "Description" follows the em dash (exempt), but "Involvement" is an
+    // ordinary mid-clause capitalised word and must still be flagged.
+    const doc = makeDoc('<h3>Cooperative agreement — Description of ACF Involvement</h3>');
+    const results = HEAD_001.check(doc, OPTIONS).filter(
+      r => (r as Issue).title?.includes('sentence case')
+    );
+    expect(results).toHaveLength(1);
+  });
+});
+
 // ─── Federal law exceptions ───────────────────────────────────────────────────
 
 describe('HEAD-001: federal law and directive exceptions', () => {
