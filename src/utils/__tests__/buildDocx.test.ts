@@ -5903,3 +5903,295 @@ describe('buildDocx — CLEAN-019: bold colon run removal', () => {
     expect(rPr?.getElementsByTagName('w:b').length ?? 0).toBe(1);
   });
 });
+
+// ─── CLEAN-020: Remove SAMHSA H1 divider lines ───────────────────────────────
+
+const W_NS_SAMHSA = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+/** Build a heading paragraph element string for use in SAMHSA tests. */
+function makeSamhsaH1(text: string): string {
+  return (
+    `<w:p>` +
+    `<w:pPr><w:pStyle w:val="Heading1"/></w:pPr>` +
+    `<w:r><w:t>${text}</w:t></w:r>` +
+    `</w:p>`
+  );
+}
+
+/** Build a plain body paragraph for use in SAMHSA tests. */
+function makeSamhsaBodyPara(text: string): string {
+  return `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`;
+}
+
+/** Build a minimal document.xml wrapping the given inner body content. */
+function makeSamhsaDocXml(innerBody: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_SAMHSA}">` +
+    `<w:body>${innerBody}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+const H1_DIVIDERS_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-020',
+  description: 'SAMHSA H1 divider lines removed.',
+  targetField: 'samhsa.h1.dividers.remove',
+};
+
+describe('buildDocx — CLEAN-020: SAMHSA H1 divider removal', () => {
+  it('removes an underscore-only H1 that appears after the "Step 1:" anchor', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaH1('Step 1: Review the Opportunity') +
+      makeSamhsaBodyPara('Body text.') +
+      makeSamhsaH1('___________________________')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [H1_DIVIDERS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('Step 1: Review the Opportunity');
+    expect(texts).toContain('Body text.');
+    expect(texts.some(t => /^[_\s]+$/.test(t) && t.includes('_'))).toBe(false);
+  });
+
+  it('removes multiple underscore H1 paragraphs after the anchor', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaH1('Step 1: Review the Opportunity') +
+      makeSamhsaH1('___________') +
+      makeSamhsaH1('Step 2: Review Eligibility') +
+      makeSamhsaH1('___________')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [H1_DIVIDERS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('Step 1: Review the Opportunity');
+    expect(texts).toContain('Step 2: Review Eligibility');
+    expect(texts.filter(t => /^[_\s]+$/.test(t) && t.includes('_'))).toHaveLength(0);
+  });
+
+  it('preserves regular H1 headings after the anchor', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaH1('Step 1: Review the Opportunity') +
+      makeSamhsaH1('___________') +
+      makeSamhsaH1('Step 2: Review Eligibility') +
+      makeSamhsaBodyPara('Eligible applicants...')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [H1_DIVIDERS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('Step 2: Review Eligibility');
+    expect(texts).toContain('Eligible applicants...');
+  });
+
+  it('does NOT remove underscore H1s that appear before the "Step 1:" anchor', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaH1('___________') +
+      makeSamhsaH1('Step 1: Review the Opportunity') +
+      makeSamhsaBodyPara('Body text.')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [H1_DIVIDERS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    // The pre-anchor divider must survive
+    expect(texts.some(t => /^[_\s]+$/.test(t) && t.includes('_'))).toBe(true);
+  });
+
+  it('does nothing when no "Step 1:" H1 exists in the document', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaH1('Introduction') +
+      makeSamhsaH1('___________')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [H1_DIVIDERS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    // Without the anchor, even a divider-shaped H1 must survive
+    expect(texts.some(t => /^[_\s]+$/.test(t) && t.includes('_'))).toBe(true);
+  });
+
+  it('does not apply when the targetField is absent from autoAppliedChanges', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaH1('Step 1: Review the Opportunity') +
+      makeSamhsaH1('___________')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    const texts = extractParagraphTexts(outXml);
+    // Divider must be untouched when the change is not flagged
+    expect(texts.some(t => /^[_\s]+$/.test(t) && t.includes('_'))).toBe(true);
+  });
+});
+
+// ─── CLEAN-021: Fix "SAMSHA" misspelling ─────────────────────────────────────
+
+const SAMSHA_FIX_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-021',
+  description: '"SAMSHA" corrected to "SAMHSA".',
+  targetField: 'samhsa.misspelling.samsha',
+};
+
+describe('buildDocx — CLEAN-021: SAMSHA misspelling fix', () => {
+  it('replaces "SAMSHA" with "SAMHSA" in a plain body paragraph', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaBodyPara('Contact SAMSHA for more information.')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [SAMSHA_FIX_CHANGE]);
+    expect(outXml).toContain('SAMHSA');
+    expect(outXml).not.toContain('>Contact SAMSHA');
+  });
+
+  it('replaces all occurrences of "SAMSHA" within a single paragraph', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaBodyPara('SAMSHA is the funder. Contact SAMSHA directly.')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [SAMSHA_FIX_CHANGE]);
+    expect(outXml).not.toContain('SAMSHA');
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('SAMHSA is the funder. Contact SAMHSA directly.');
+  });
+
+  it('does NOT replace "SAMSHA" in a Heading1 paragraph', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaH1('SAMSHA Grant Announcement')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [SAMSHA_FIX_CHANGE]);
+    // Heading text must remain unchanged
+    expect(outXml).toContain('SAMSHA Grant Announcement');
+  });
+
+  it('leaves "SAMHSA" (correct spelling) unchanged', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaBodyPara('Funded by SAMHSA.')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [SAMSHA_FIX_CHANGE]);
+    expect(outXml).toContain('Funded by SAMHSA.');
+  });
+
+  it('does not apply when the targetField is absent from autoAppliedChanges', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaBodyPara('Contact SAMSHA for more information.')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    expect(outXml).toContain('SAMSHA');
+    expect(outXml).not.toContain('SAMHSA');
+  });
+
+  it('does not replace text inside hyperlink URL targets (relationship attributes)', async () => {
+    // URL targets live in relationship XML, not in w:t elements — the fix
+    // must never touch them. This test verifies the w:t-only replacement
+    // leaves the relationship href attribute untouched.
+    const relsXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">` +
+      `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink"` +
+      ` Target="https://www.SAMSHA.gov/grants" TargetMode="External"/>` +
+      `</Relationships>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      `<w:p><w:hyperlink r:id="rId1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+      `<w:r><w:t>Visit the SAMSHA website</w:t></w:r></w:hyperlink></w:p>`
+    ));
+    zip.file('word/_rels/document.xml.rels', relsXml);
+
+    const outXml = await getOutputDocXml(zip, [], [SAMSHA_FIX_CHANGE]);
+    // The display text in the w:t run is fixed...
+    expect(outXml).toContain('>Visit the SAMHSA website</w:t>');
+    // ...but the relationship file is untouched (the URL is not in document.xml w:t)
+    const outZip = await JSZip.loadAsync(
+      await buildDocx(zip, [], [SAMSHA_FIX_CHANGE])
+    );
+    const relsFile = outZip.file('word/_rels/document.xml.rels');
+    const relsOut = relsFile ? await relsFile.async('string') : '';
+    expect(relsOut).toContain('SAMSHA.gov');
+  });
+});
+
+// ─── CLEAN-022: Normalize "NOTE:" to "Note:" ─────────────────────────────────
+
+const NOTE_NORMALIZE_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-022',
+  description: '"NOTE:" normalized to "Note:".',
+  targetField: 'samhsa.note.capitalize',
+};
+
+describe('buildDocx — CLEAN-022: NOTE: normalization', () => {
+  it('replaces "NOTE:" with "Note:" in a plain body paragraph', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaBodyPara('NOTE: Applicants must submit by the deadline.')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [NOTE_NORMALIZE_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Note: Applicants must submit by the deadline.');
+  });
+
+  it('replaces all occurrences of "NOTE:" within a single paragraph', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaBodyPara('NOTE: First note. NOTE: Second note.')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [NOTE_NORMALIZE_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Note: First note. Note: Second note.');
+    expect(outXml).not.toContain('NOTE:');
+  });
+
+  it('does NOT replace "NOTE:" in a Heading1 paragraph', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaH1('NOTE: Important Requirement')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [NOTE_NORMALIZE_CHANGE]);
+    expect(outXml).toContain('NOTE: Important Requirement');
+  });
+
+  it('leaves "Note:" (sentence case) unchanged', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaBodyPara('Note: Please read the instructions.')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [NOTE_NORMALIZE_CHANGE]);
+    expect(outXml).toContain('Note: Please read the instructions.');
+  });
+
+  it('leaves "note:" (all lowercase) unchanged', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaBodyPara('See the note: this is important.')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [NOTE_NORMALIZE_CHANGE]);
+    expect(outXml).toContain('note:');
+    expect(outXml).not.toContain('Note:');
+  });
+
+  it('does not apply when the targetField is absent from autoAppliedChanges', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSamhsaDocXml(
+      makeSamhsaBodyPara('NOTE: This should not be changed.')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    expect(outXml).toContain('NOTE:');
+    expect(outXml).not.toContain('Note:');
+  });
+});
