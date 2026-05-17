@@ -120,6 +120,15 @@ export async function buildDocx(
   const hasAttachmentsFileNameSentenceCase = autoAppliedChanges.some(
     c => c.targetField === 'struct.attachments.filename.sentencecase'
   );
+  const hasSamhsaH1DividerRemoval = autoAppliedChanges.some(
+    c => c.targetField === 'samhsa.h1.dividers.remove'
+  );
+  const hasSamhsaMisspellingFix = autoAppliedChanges.some(
+    c => c.targetField === 'samhsa.misspelling.samsha'
+  );
+  const hasSamhsaNoteNormalization = autoAppliedChanges.some(
+    c => c.targetField === 'samhsa.note.capitalize'
+  );
   const h2TitleCaseChanges = autoAppliedChanges.filter(
     c => c.targetField === 'heading.h2.titlecase' && c.value
   );
@@ -297,6 +306,21 @@ export async function buildDocx(
   // Remove bold from sole-colon runs immediately preceded by non-bold text
   if (hasBoldColonFix) {
     await applyBoldColonFix(zip);
+  }
+
+  // Remove SAMHSA H1 divider lines (all-underscore H1 paragraphs after "Step 1:")
+  if (hasSamhsaH1DividerRemoval) {
+    await applyRemoveSamhsaH1Dividers(zip);
+  }
+
+  // Fix "SAMSHA" misspelling in SAMHSA NOFO body text
+  if (hasSamhsaMisspellingFix) {
+    await applyFixSamshaMisspelling(zip);
+  }
+
+  // Normalize "NOTE:" to "Note:" in SAMHSA NOFO body text
+  if (hasSamhsaNoteNormalization) {
+    await applyNormalizeSamhsaNote(zip);
   }
 
   // Strip content controls — unconditional, silent (documented on the Download
@@ -3805,4 +3829,120 @@ function stripContentControlsFromXmlDoc(xmlDoc: Document): boolean {
   }
 
   return true;
+}
+
+// ─── CLEAN-020: Remove SAMHSA H1 divider lines ───────────────────────────────
+
+/**
+ * Remove H1 paragraphs whose text content (trimmed) consists entirely of
+ * underscore characters and/or whitespace, starting from the first H1 whose
+ * text begins with "Step 1:" (case-insensitive). All other paragraphs —
+ * including their text, style, bookmarks, and anchor links — are preserved.
+ */
+async function applyRemoveSamhsaH1Dividers(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  const bodyChildren = Array.from(body.childNodes).filter(
+    n => n.nodeType === Node.ELEMENT_NODE
+  ) as Element[];
+
+  const step1Index = bodyChildren.findIndex(el => {
+    if (el.localName !== 'p') return false;
+    if (getHeadingLevel(el) !== 1) return false;
+    return getParaText(el).trim().toLowerCase().startsWith('step 1:');
+  });
+
+  if (step1Index === -1) return;
+
+  const toRemove: Element[] = [];
+  for (const el of bodyChildren.slice(step1Index)) {
+    if (el.localName !== 'p') continue;
+    if (getHeadingLevel(el) !== 1) continue;
+    const trimmed = getParaText(el).trim();
+    if (/^[_\s]+$/.test(trimmed) && trimmed.includes('_')) {
+      toRemove.push(el);
+    }
+  }
+
+  if (toRemove.length === 0) return;
+
+  for (const el of toRemove) {
+    body.removeChild(el);
+  }
+
+  zip.file('word/document.xml', serializeXml(xmlDoc));
+}
+
+// ─── CLEAN-021: Fix "SAMSHA" misspelling ─────────────────────────────────────
+
+/**
+ * Replace "SAMSHA" with "SAMHSA" in all w:t text runs of non-heading
+ * paragraphs in word/document.xml. Hyperlink URL targets (relationship
+ * attributes) are not affected because they are not w:t content.
+ */
+async function applyFixSamshaMisspelling(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  if (!xmlStr.includes('SAMSHA')) return;
+
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  let changed = false;
+  for (const wP of Array.from(xmlDoc.getElementsByTagName('w:p'))) {
+    if (getHeadingLevel(wP) > 0) continue;
+    for (const wT of Array.from(wP.getElementsByTagName('w:t'))) {
+      const original = wT.textContent ?? '';
+      if (!original.includes('SAMSHA')) continue;
+      wT.textContent = original.split('SAMSHA').join('SAMHSA');
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    zip.file('word/document.xml', serializeXml(xmlDoc));
+  }
+}
+
+// ─── CLEAN-022: Normalize "NOTE:" to "Note:" ─────────────────────────────────
+
+/**
+ * Replace the exact string "NOTE:" with "Note:" in all w:t text runs of
+ * non-heading paragraphs in word/document.xml. Only the all-caps form is
+ * matched; "Note:" and "note:" are left unchanged.
+ */
+async function applyNormalizeSamhsaNote(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  if (!xmlStr.includes('NOTE:')) return;
+
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  let changed = false;
+  for (const wP of Array.from(xmlDoc.getElementsByTagName('w:p'))) {
+    if (getHeadingLevel(wP) > 0) continue;
+    for (const wT of Array.from(wP.getElementsByTagName('w:t'))) {
+      const original = wT.textContent ?? '';
+      if (!original.includes('NOTE:')) continue;
+      wT.textContent = original.split('NOTE:').join('Note:');
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    zip.file('word/document.xml', serializeXml(xmlDoc));
+  }
 }
