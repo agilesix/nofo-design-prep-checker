@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.1](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.9.0...v1.9.1) (2026-05-18)
+
+
+### Bug Fixes
+
+* **ci:** dispatch CI from release-please instead of using PAT ([8afda57](https://github.com/agilesix/nofo-design-prep-checker/commit/8afda57ddb00de11e058fc29293f064d760439ff))
+
 ## [1.9.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.8.1...v1.9.0) (2026-05-18)
 
 
