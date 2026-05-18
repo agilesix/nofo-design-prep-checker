@@ -26,9 +26,12 @@ jobs:
         with:
           script: |
             const pr = JSON.parse(process.env.PR_JSON);
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'ci.yml',
-              ref: pr.headBranchName
-            });
+            const ref = pr.headBranchName;
+            for (const workflow_id of ['ci.yml', 'build.yml']) {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id,
+                ref
+              });
+            }
