@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.9.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.8.1...v1.9.0) (2026-05-18)
+
+
+### Features
+
+* add SAMHSA as a supported OpDiv ([5bc77b6](https://github.com/agilesix/nofo-design-prep-checker/commit/5bc77b603c31f0eb7856f3b9b700139a026dd68e))
+* add SAMHSA as a supported OpDiv ([ad215dc](https://github.com/agilesix/nofo-design-prep-checker/commit/ad215dc266bb031a15c8c0725a54b513672b04ba))
+* **SAMHSA:** add three silent auto-fix rules scoped to SAMHSA opdiv ([f6a716a](https://github.com/agilesix/nofo-design-prep-checker/commit/f6a716a291ed7a1d77b0979a6516d184ec63a82e))
+
+
+### Bug Fixes
+
+* **ci:** remove release-please skip condition so CI runs on all PRs ([516f7a5](https://github.com/agilesix/nofo-design-prep-checker/commit/516f7a52c375bcb68ff8e7cc9e525eecf3f99529))
+* **ci:** remove release-please skip condition so CI runs on all PRs ([54accda](https://github.com/agilesix/nofo-design-prep-checker/commit/54accda6171c0c4932433f17f65b33ba17d7af74))
+* **ci:** trigger CI on push to release-please branches ([702e5dd](https://github.com/agilesix/nofo-design-prep-checker/commit/702e5dd14a992c511992926f0bf9837ff7523b97))
+* **HEAD-001:** exempt first word after em dash from sentence case check ([9459eb6](https://github.com/agilesix/nofo-design-prep-checker/commit/9459eb62d284c3e2a1f6aea5b4a8c481d7783240))
+* **HEAD-001:** exempt first word after em dash from sentence case check ([6faa2af](https://github.com/agilesix/nofo-design-prep-checker/commit/6faa2af113f404ba4ee8d6692189d3576179925d))
+* **META-003:** widen shouldSkipMETA003ForContentGuide param to accept null ([58d8ef9](https://github.com/agilesix/nofo-design-prep-checker/commit/58d8ef9023b396827dbe131e69111b97d2846730))
+
 ## [1.8.1](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.8.0...v1.8.1) (2026-05-10)
 
 
