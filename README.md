@@ -28,7 +28,7 @@ This tool automates that process. The same comprehensive review now takes about 
 - **Lists** — flags consecutive paragraphs that use manual bullet characters or numbering instead of proper Word list styles, which may not convert correctly to accessible HTML. Also flags list items in majority-period lists that are missing a terminal period for consistency.
 - **Date formatting** — auto-corrects dates that do not follow the SimplerNOFOs style guide format of Month D, YYYY. Corrects numeric formats (MM/DD/YYYY, YYYY-MM-DD), ordinal suffixes (April 16th, 2024), abbreviated month names (Apr. 2, 2024, Sept. 2, 2024), missing commas (April 16 2026), and leading-zero days (April 02, 2024). HRSA NOFOs are excepted.
 - **Document cleanliness** — applies a set of automatic fixes before download: accepts tracked changes, removes comments, collapses double spaces, relocates misplaced tagline paragraphs, removes leading spaces from heading text, normalizes application checklist checkboxes to the correct glyph and paragraph style, and removes editorial scaffolding specific to certain content guide templates.
-- **Required sections** (when a content guide is selected) — flags missing sections based on the selected OpDiv content guide (ACF, ACL, CDC standard and research, CDC/DGHT, CMS, IHS, and HRSA variants).
+- **Required sections** (when a content guide is selected) — flags missing sections based on the selected OpDiv content guide (ACF, ACL, CDC standard and research, CDC/DGHT, CMS, IHS, HRSA variants, and SAMHSA — partial support in progress).
 
 ## Your document stays private
 
@@ -61,6 +61,7 @@ All processing happens entirely in your browser. No file contents are sent to an
 | CDC | CDC/DGHT Competitive Content Guide |
 | CMS | CMS Content Guide |
 | IHS | IHS Content Guide |
+| SAMHSA | SAMHSA Content Guide (in progress) |
 | HRSA | HRSA BHW R&R Content Guide |
 | HRSA | HRSA BPHC Content Guide |
 | HRSA | HRSA Construction Content Guide |
