@@ -42,14 +42,26 @@ function makeTimeExprRegex(): RegExp {
 }
 
 /**
- * Scan text for non-standard time expressions and return the number of matches.
- * Each time expression with at least one issue counts as one instance:
+ * Scan text for non-standard time expressions and return a count of issues.
+ * Counting runs in two passes so ranges and individual tokens are handled separately:
+ *
+ *  Pass 1 — individual time tokens (one count per token with at least one issue):
  *  - AM/PM is not in "a.m." / "p.m." form
- *  - Minutes are :00 (eligible for removal)
+ *  - Minutes are :00 (eligible for removal or noon/midnight substitution)
  *  - A non-standard timezone abbreviation follows the time expression
+ *
+ *  Pass 2 — range-style issues (one count per matching range):
+ *  - A time range uses a dash/en-dash separator between two correct a.m./p.m. times
+ *    (the dash needs to be replaced with "to")
+ *  - A "to" range where both times share the same meridiem (the first is redundant)
+ *
+ * Note: a range like "8 AM to 5 PM ET" contributes two counts from Pass 1 (one
+ * per non-standard token), not one count for the whole range expression.
  */
 function countNonStandardTimes(text: string): number {
   let count = 0;
+
+  // ── Individual non-standard time tokens ──────────────────────────────────
   for (const match of text.matchAll(makeTimeExprRegex())) {
     const [, time, ampm, tz] = match;
     const isAmPmNonStandard = ampm !== 'a.m.' && ampm !== 'p.m.';
@@ -57,6 +69,29 @@ function countNonStandardTimes(text: string): number {
     const hasTz = !!tz;
     if (isAmPmNonStandard || hasZeroMinutes || hasTz) count++;
   }
+
+  // ── Range-style issues not caught by individual token detection ───────────
+
+  // Dash/en-dash ranges where both times are already in correct a.m./p.m. form.
+  // When at least one time is non-standard, the individual pass above counts it.
+  const correctMerid = String.raw`a\.m\.|p\.m\.`;
+  const dashRangeRe = new RegExp(
+    String.raw`\b\d{1,2}(?::\d{2})?\s*(?:` + correctMerid + String.raw`)(?!\w)\s*[-–—]\s*\d{1,2}(?::\d{2})?\s*(?:` + correctMerid + String.raw`)(?!\w)`,
+    'gi'
+  );
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  for (const _match of text.matchAll(dashRangeRe)) count++;
+
+  // "to" ranges where both times are in correct a.m./p.m. form and share the
+  // same meridiem — the first meridiem is redundant and should be removed.
+  const toSameMeridRe = new RegExp(
+    String.raw`\b\d{1,2}(?::\d{2})?\s+(a\.m\.|p\.m\.)(?!\w)\s+to\s+\d{1,2}(?::\d{2})?\s+(a\.m\.|p\.m\.)(?!\w)`,
+    'gi'
+  );
+  for (const m of text.matchAll(toSameMeridRe)) {
+    if ((m[1] as string).toLowerCase() === (m[2] as string).toLowerCase()) count++;
+  }
+
   return count;
 }
 

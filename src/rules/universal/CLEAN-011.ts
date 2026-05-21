@@ -29,7 +29,8 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
  *
  * Issue 2 — Bulleted-list paragraph style
  *   If the paragraph style of a first-column cell's first paragraph contains
- *   "List" or "Bullet" (e.g. "ListParagraph", "List Bullet"), it is changed to
+ *   "List", "Bullet", or "Paragraph" — and is not "Normal" or a "Table…" style
+ *   (e.g. "ListParagraph", "List Bullet", "List Paragraph") — it is changed to
  *   "Normal". This prevents NOFO Builder from overwriting the glyph on import.
  *
  * Issue 3 — Missing glyph
@@ -52,7 +53,17 @@ import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from 
 const TARGET_GLYPH = '◻';
 
 /** Glyphs that are unambiguously incorrect checkbox substitutes — always replaced. */
-const ALWAYS_REPLACE = new Set(['☐', '☑', '☒', '□', '•']);
+const ALWAYS_REPLACE = new Set([
+  '☐', // U+2610 BALLOT BOX
+  '☑', // U+2611 BALLOT BOX WITH CHECK
+  '☒', // U+2612 BALLOT BOX WITH X
+  '□', // U+25A1 WHITE SQUARE
+  '•', // U+2022 BULLET
+  '▪', // U+25AA BLACK SMALL SQUARE
+  '◼', // U+25FC BLACK MEDIUM SQUARE
+  '■', // U+25A0 BLACK SQUARE
+  '▫', // U+25AB WHITE SMALL SQUARE
+]);
 
 /**
  * Glyphs that are replaced only when immediately followed by a space, to
@@ -102,6 +113,28 @@ function needsMissingGlyphInsert(text: string): boolean {
   return first !== TARGET_GLYPH && /[a-zA-Z0-9]/.test(first);
 }
 
+/**
+ * Returns true when the first non-empty w:t in a first-column paragraph
+ * starts with ◻ and that w:t lives inside a w:hyperlink child of the para.
+ * In that case the glyph is already correct but must be extracted into a
+ * plain run before the hyperlink so the checkbox character is not clickable.
+ */
+function glyphIsInsideHyperlink(para: Element): boolean {
+  const wTs = Array.from(para.getElementsByTagName('w:t'));
+  for (const wT of wTs) {
+    const trimmed = (wT.textContent ?? '').trimStart();
+    if (!trimmed) continue;
+    if (trimmed[0] !== TARGET_GLYPH) break;
+    let node: Element | null = wT.parentElement;
+    while (node && node !== para) {
+      if (node.localName === 'hyperlink') return true;
+      node = node.parentElement;
+    }
+    break;
+  }
+  return false;
+}
+
 function isSingleCellTable(table: Element): boolean {
   let cellCount = 0;
   for (const row of Array.from(table.children).filter(c => c.localName === 'tr')) {
@@ -112,7 +145,10 @@ function isSingleCellTable(table: Element): boolean {
 }
 
 function isListStyle(styleVal: string): boolean {
-  return /list|bullet/i.test(styleVal);
+  if (!styleVal) return false;
+  // "Normal" and any style containing "Table" are not list-based paragraph styles.
+  if (/^normal$/i.test(styleVal) || /table/i.test(styleVal)) return false;
+  return /list|bullet|paragraph/i.test(styleVal);
 }
 
 function getPStyle(para: Element): string {
@@ -233,7 +269,7 @@ function countCellsNeedingFix(xmlDoc: Document): number {
       const cellText = getParaText(firstPara);
       const styleVal = getPStyle(firstPara);
 
-      if (needsGlyphFix(cellText) || needsMissingGlyphInsert(cellText) || isListStyle(styleVal)) {
+      if (needsGlyphFix(cellText) || needsMissingGlyphInsert(cellText) || isListStyle(styleVal) || glyphIsInsideHyperlink(firstPara)) {
         count++;
       }
     }

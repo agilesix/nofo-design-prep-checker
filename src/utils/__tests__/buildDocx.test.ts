@@ -1459,6 +1459,82 @@ function extractChecklistFirstColInfo(
   return results;
 }
 
+/**
+ * Build a minimal document.xml where the first checklist table cell starts with
+ * a single <w:hyperlink> whose text is `linkText` (may begin with a glyph).
+ */
+function makeChecklistHyperlinkCellDocXml(linkText: string): string {
+  const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_CHECKLIST}" xmlns:r="${R}">` +
+    `<w:body>` +
+    `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+    `<w:r><w:t>Application checklist</w:t></w:r></w:p>` +
+    `<w:tbl><w:tr>` +
+    `<w:tc><w:p>` +
+    `<w:hyperlink r:id="rId1" w:history="1">` +
+    `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr>` +
+    `<w:t xml:space="preserve">${linkText}</w:t>` +
+    `</w:r></w:hyperlink>` +
+    `</w:p></w:tc>` +
+    `<w:tc><w:p><w:r><w:t>Second column</w:t></w:r></w:p></w:tc>` +
+    `</w:tr></w:tbl>` +
+    `<w:sectPr/></w:body></w:document>`
+  );
+}
+
+/**
+ * Return the direct Element children of the first-column paragraph in the
+ * first row of the first checklist table. Used to assert glyph/hyperlink structure.
+ */
+function extractChecklistCellParaChildren(xml: string): Element[] {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'application/xml');
+  const body = doc.getElementsByTagName('w:body')[0];
+  if (!body) return [];
+
+  let inChecklist = false;
+  let checklistLevel = 0;
+
+  for (const child of Array.from(body.children)) {
+    if (child.localName === 'p') {
+      const pPr = Array.from(child.children).find(c => c.localName === 'pPr');
+      const styleEl = pPr && Array.from(pPr.children).find(c => c.localName === 'pStyle');
+      const styleVal = styleEl?.getAttribute('w:val') ?? '';
+      const m = styleVal.match(/^Heading(\d)/);
+      const level = m ? parseInt(m[1]!, 10) : null;
+      if (level !== null) {
+        if (inChecklist && level <= checklistLevel) inChecklist = false;
+        const text = Array.from(child.getElementsByTagName('w:t'))
+          .map(t => t.textContent ?? '')
+          .join('');
+        if ((level === 2 || level === 3) && /application\s+checklist/i.test(text)) {
+          inChecklist = true;
+          checklistLevel = level;
+        }
+      }
+    } else if (child.localName === 'tbl' && inChecklist) {
+      const firstRow = Array.from(child.children).find(c => c.localName === 'tr');
+      if (!firstRow) return [];
+      const firstCell = Array.from(firstRow.children).find(c => c.localName === 'tc');
+      if (!firstCell) return [];
+      const firstPara = Array.from(firstCell.children).find(c => c.localName === 'p');
+      if (!firstPara) return [];
+      return Array.from(firstPara.children);
+    }
+  }
+  return [];
+}
+
+/** Extract all w:t text from an element's descendants. */
+function getWtText(el: Element | undefined): string {
+  if (!el) return '';
+  return Array.from(el.getElementsByTagName('w:t'))
+    .map(t => t.textContent ?? '')
+    .join('');
+}
+
 const CHECKLIST_CHANGE: AutoAppliedChange = {
   ruleId: 'CLEAN-011',
   description: 'Application checklist checkboxes normalized — 1 cell corrected.',
@@ -1596,6 +1672,54 @@ describe('buildDocx — CLEAN-011: checklist checkbox normalization', () => {
     // Checklist table: wrong glyph must have been corrected
     expect(outXml).toContain('◻ Checklist item');
     expect(outXml).not.toContain('☐ Checklist item');
+  });
+
+  it('Fix 1: wrong glyph (☐) inside <w:hyperlink> is replaced and extracted into a run before the link', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeChecklistHyperlinkCellDocXml('☐ Item text'));
+
+    const outXml = await getOutputDocXml(zip, [], [CHECKLIST_CHANGE]);
+    const paraChildren = extractChecklistCellParaChildren(outXml);
+
+    // First direct child of the paragraph: a plain w:r containing ◻ (outside the hyperlink)
+    expect(paraChildren[0]?.localName).toBe('r');
+    expect(getWtText(paraChildren[0])).toBe('◻ ');
+
+    // Second direct child: the w:hyperlink, now without the glyph
+    expect(paraChildren[1]?.localName).toBe('hyperlink');
+    expect(getWtText(paraChildren[1])).toBe('Item text');
+  });
+
+  it('Fix 1b: correct ◻ inside <w:hyperlink> is extracted into a run before the link', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeChecklistHyperlinkCellDocXml('◻ Item text'));
+
+    const outXml = await getOutputDocXml(zip, [], [CHECKLIST_CHANGE]);
+    const paraChildren = extractChecklistCellParaChildren(outXml);
+
+    // First direct child: a plain w:r containing ◻ (outside the hyperlink)
+    expect(paraChildren[0]?.localName).toBe('r');
+    expect(getWtText(paraChildren[0])).toBe('◻ ');
+
+    // Second direct child: the w:hyperlink, now without the glyph
+    expect(paraChildren[1]?.localName).toBe('hyperlink');
+    expect(getWtText(paraChildren[1])).toBe('Item text');
+  });
+
+  it('Fix 3: ◻ is prepended as a plain run before a <w:hyperlink> when no glyph is present', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeChecklistHyperlinkCellDocXml('Item text'));
+
+    const outXml = await getOutputDocXml(zip, [], [CHECKLIST_CHANGE]);
+    const paraChildren = extractChecklistCellParaChildren(outXml);
+
+    // First direct child: a plain w:r containing ◻ (outside the hyperlink)
+    expect(paraChildren[0]?.localName).toBe('r');
+    expect(getWtText(paraChildren[0])).toBe('◻ ');
+
+    // Second direct child: the w:hyperlink with its original text unchanged
+    expect(paraChildren[1]?.localName).toBe('hyperlink');
+    expect(getWtText(paraChildren[1])).toBe('Item text');
   });
 });
 
@@ -6193,5 +6317,263 @@ describe('buildDocx — CLEAN-022: NOTE: normalization', () => {
     const outXml = await getOutputDocXml(zip, [], []);
     expect(outXml).toContain('NOTE:');
     expect(outXml).not.toContain('Note:');
+  });
+});
+
+// ─── ACL OOXML helpers ────────────────────────────────────────────────────────
+
+const W_NS_ACL = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function makeAclH2(text: string): string {
+  return (
+    `<w:p>` +
+    `<w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+    `<w:r><w:t>${text}</w:t></w:r>` +
+    `</w:p>`
+  );
+}
+
+function makeAclBodyPara(text: string): string {
+  return `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`;
+}
+
+function makeAclDocXml(innerBody: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_ACL}">` +
+    `<w:body>${innerBody}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+// ─── CLEAN-023: Add Telephone: prefix to bare phone numbers ──────────────────
+
+const TELEPHONE_PREFIX_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-023',
+  description: '1 bare phone number labeled.',
+  targetField: 'acl.telephone.prefix',
+  value: '1',
+};
+
+describe('buildDocx — CLEAN-023: ACL telephone prefix', () => {
+  it('prepends "Telephone: " to a bare NNN-NNN-NNNN number under Agency contacts', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Agency contacts') +
+      makeAclBodyPara('555-123-4567')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [TELEPHONE_PREFIX_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('Telephone: 555-123-4567');
+  });
+
+  it('sets xml:space="preserve" on the modified w:t element', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Agency contacts') +
+      makeAclBodyPara('555-123-4567')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [TELEPHONE_PREFIX_CHANGE]);
+    expect(outXml).toMatch(/xml:space="preserve"[^>]*>Telephone: 555-123-4567/);
+  });
+
+  it('does not modify a phone number already labeled "Telephone:"', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Agency contacts') +
+      makeAclBodyPara('Telephone: 555-123-4567')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [TELEPHONE_PREFIX_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('Telephone: 555-123-4567');
+    // Ensure it wasn't double-labeled
+    expect(texts.filter(t => t.includes('Telephone:')).length).toBe(1);
+    expect(outXml).not.toContain('Telephone: Telephone:');
+  });
+
+  it('does not modify a phone number outside the Agency contacts section', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Program description') +
+      makeAclBodyPara('555-123-4567') +
+      makeAclH2('Agency contacts') +
+      makeAclBodyPara('Jane Smith')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [TELEPHONE_PREFIX_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('555-123-4567');
+    expect(texts).not.toContain('Telephone: 555-123-4567');
+  });
+
+  it('stops modifying at the next same-level heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Agency contacts') +
+      makeAclBodyPara('555-123-4567') +
+      makeAclH2('Funding details') +
+      makeAclBodyPara('555-987-6543')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [TELEPHONE_PREFIX_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    // Phone inside Agency contacts is labeled
+    expect(texts).toContain('Telephone: 555-123-4567');
+    // Phone after the next heading is untouched
+    expect(texts).toContain('555-987-6543');
+    expect(texts).not.toContain('Telephone: 555-987-6543');
+  });
+
+  it('does not apply when the targetField is absent from autoAppliedChanges', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Agency contacts') +
+      makeAclBodyPara('555-123-4567')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    expect(outXml).toContain('555-123-4567');
+    expect(outXml).not.toContain('Telephone:');
+  });
+});
+
+// ─── CLEAN-024: Add OpDiv/Agency labels in Basic information ─────────────────
+
+const BASIC_INFO_LABELS_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-024',
+  description: 'OpDiv: and Agency: labels added.',
+  targetField: 'acl.basic.info.labels',
+  value: '2',
+};
+
+describe('buildDocx — CLEAN-024: ACL Basic information labels', () => {
+  it('prepends "OpDiv: " to a bare ACL full name', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Basic information') +
+      makeAclBodyPara('Administration for Community Living')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [BASIC_INFO_LABELS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('OpDiv: Administration for Community Living');
+  });
+
+  it('sets xml:space="preserve" on the OpDiv: w:t element', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Basic information') +
+      makeAclBodyPara('Administration for Community Living')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [BASIC_INFO_LABELS_CHANGE]);
+    expect(outXml).toMatch(/xml:space="preserve"[^>]*>OpDiv: Administration for Community Living/);
+  });
+
+  it('prepends "Agency: " to the unlabeled paragraph following the ACL name', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Basic information') +
+      makeAclBodyPara('Administration for Community Living') +
+      makeAclBodyPara('ACL Regional Office')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [BASIC_INFO_LABELS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('OpDiv: Administration for Community Living');
+    expect(texts).toContain('Agency: ACL Regional Office');
+  });
+
+  it('sets xml:space="preserve" on the Agency: w:t element', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Basic information') +
+      makeAclBodyPara('Administration for Community Living') +
+      makeAclBodyPara('ACL Regional Office')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [BASIC_INFO_LABELS_CHANGE]);
+    expect(outXml).toMatch(/xml:space="preserve"[^>]*>Agency: ACL Regional Office/);
+  });
+
+  it('prepends only "Agency: " when OpDiv: is already labeled', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Basic information') +
+      makeAclBodyPara('OpDiv: Administration for Community Living') +
+      makeAclBodyPara('ACL Regional Office')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [BASIC_INFO_LABELS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('OpDiv: Administration for Community Living');
+    expect(texts).toContain('Agency: ACL Regional Office');
+    // OpDiv: must not be doubled
+    expect(outXml).not.toContain('OpDiv: OpDiv:');
+  });
+
+  it('does nothing when both OpDiv: and Agency: are already present', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Basic information') +
+      makeAclBodyPara('OpDiv: Administration for Community Living') +
+      makeAclBodyPara('Agency: ACL Regional Office')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [BASIC_INFO_LABELS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('OpDiv: Administration for Community Living');
+    expect(texts).toContain('Agency: ACL Regional Office');
+    expect(outXml).not.toContain('OpDiv: OpDiv:');
+    expect(outXml).not.toContain('Agency: Agency:');
+  });
+
+  it('does not modify content outside the Basic information section', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Program description') +
+      makeAclBodyPara('Administration for Community Living') +
+      makeAclH2('Basic information') +
+      makeAclBodyPara('Opportunity name: Sample NOFO')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [BASIC_INFO_LABELS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    // ACL name outside Basic information must not be labeled
+    expect(texts).toContain('Administration for Community Living');
+    expect(texts).not.toContain('OpDiv: Administration for Community Living');
+  });
+
+  it('stops at the next same-level heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Basic information') +
+      makeAclBodyPara('Opportunity name: Sample NOFO') +
+      makeAclH2('Funding details') +
+      makeAclBodyPara('Administration for Community Living')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [BASIC_INFO_LABELS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    // ACL name after the next heading must not be labeled
+    expect(texts).toContain('Administration for Community Living');
+    expect(texts).not.toContain('OpDiv: Administration for Community Living');
+  });
+
+  it('does not apply when the targetField is absent from autoAppliedChanges', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Basic information') +
+      makeAclBodyPara('Administration for Community Living') +
+      makeAclBodyPara('ACL Regional Office')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    expect(outXml).toContain('Administration for Community Living');
+    expect(outXml).not.toContain('OpDiv:');
+    expect(outXml).not.toContain('Agency:');
   });
 });

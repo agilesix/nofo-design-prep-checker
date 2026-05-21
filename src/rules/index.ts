@@ -65,6 +65,8 @@ import CLEAN_007 from './opdiv/CLEAN-007';
 import CLEAN_020 from './opdiv/CLEAN-020';
 import CLEAN_021 from './opdiv/CLEAN-021';
 import CLEAN_022 from './opdiv/CLEAN-022';
+import CLEAN_023 from './opdiv/CLEAN-023';
+import CLEAN_024 from './opdiv/CLEAN-024';
 
 /**
  * All rules in execution order.
@@ -80,6 +82,8 @@ export const allRules: Rule[] = [
   CLEAN_020,
   CLEAN_021,
   CLEAN_022,
+  CLEAN_023,
+  CLEAN_024,
   CLEAN_008,
   CLEAN_009,
   CLEAN_010,
@@ -169,5 +173,5 @@ export {
   STRUCT_001, STRUCT_002, STRUCT_003, STRUCT_004, STRUCT_005, STRUCT_006,
   STRUCT_007, STRUCT_008, STRUCT_009, STRUCT_010,
   STRUCT_020, STRUCT_021, STRUCT_022, STRUCT_023, STRUCT_024, STRUCT_025, STRUCT_026,
-  CLEAN_020, CLEAN_021, CLEAN_022,
+  CLEAN_020, CLEAN_021, CLEAN_022, CLEAN_023, CLEAN_024,
 };

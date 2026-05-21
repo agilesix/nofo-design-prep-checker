@@ -235,6 +235,44 @@ describe('FORMAT-003: does not flag correct or absent times', () => {
   });
 });
 
+// ─── Detection: time ranges ──────────────────────────────────────────────────
+
+describe('FORMAT-003: detects time ranges requiring correction', () => {
+  it('detects non-standard "to" range: "8:00 AM to 5:30 PM ET"', () => {
+    const doc = makeDoc('<p>Hours: 8:00 AM to 5:30 PM ET.</p>');
+    const results = FORMAT_003.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    // Two individual non-standard tokens
+    expect((results[0] as AutoAppliedChange).value).toBe('2');
+  });
+
+  it('detects non-standard "to" range same meridiem: "9AM to 11AM ET"', () => {
+    const doc = makeDoc('<p>9AM to 11AM ET.</p>');
+    const results = FORMAT_003.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as AutoAppliedChange).value).toBe('2');
+  });
+
+  it('detects en-dash range with already-correct forms: "8:30 a.m.–9:30 a.m. ET"', () => {
+    const doc = makeDoc('<p>8:30 a.m.–9:30 a.m. ET.</p>');
+    const results = FORMAT_003.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as AutoAppliedChange).value).toBe('1');
+  });
+
+  it('detects "to" range with redundant first meridiem: "9 a.m. to 11 a.m. ET"', () => {
+    const doc = makeDoc('<p>9 a.m. to 11 a.m. ET.</p>');
+    const results = FORMAT_003.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as AutoAppliedChange).value).toBe('1');
+  });
+
+  it('does not flag already-correct range with different meridiem', () => {
+    const doc = makeDoc('<p>8 a.m. to 5:30 p.m. ET.</p>');
+    expect(FORMAT_003.check(doc, OPTIONS)).toHaveLength(0);
+  });
+});
+
 // ─── Description field ───────────────────────────────────────────────────────
 
 describe('FORMAT-003: AutoAppliedChange shape', () => {

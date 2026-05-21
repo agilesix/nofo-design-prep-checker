@@ -3,6 +3,7 @@ import type { AcceptedFix, AutoAppliedChange } from '../types';
 import { DGHT_STEP1_ANCHOR } from '../rules/opdiv/CLEAN-007-constants';
 import { groupListParagraphs } from './listHelpers';
 import { slugifyHeading } from './anchorUtils';
+import { applyTimeFormatsToText } from './timeFormat';
 
 // XMLSerializer.serializeToString() drops the XML declaration. Word for iOS
 // (and strict XML consumers) require it — desktop Word auto-repairs missing
@@ -128,6 +129,12 @@ export async function buildDocx(
   );
   const hasSamhsaNoteNormalization = autoAppliedChanges.some(
     c => c.targetField === 'samhsa.note.capitalize'
+  );
+  const hasAclTelephonePrefix = autoAppliedChanges.some(
+    c => c.targetField === 'acl.telephone.prefix'
+  );
+  const hasAclBasicInfoLabels = autoAppliedChanges.some(
+    c => c.targetField === 'acl.basic.info.labels'
   );
   const h2TitleCaseChanges = autoAppliedChanges.filter(
     c => c.targetField === 'heading.h2.titlecase' && c.value
@@ -321,6 +328,16 @@ export async function buildDocx(
   // Normalize "NOTE:" to "Note:" in SAMHSA NOFO body text
   if (hasSamhsaNoteNormalization) {
     await applyNormalizeSamhsaNote(zip);
+  }
+
+  // Add "Telephone:" label before bare phone numbers in ACL Agency contacts
+  if (hasAclTelephonePrefix) {
+    await applyAclTelephonePrefix(zip);
+  }
+
+  // Add OpDiv/Agency labels in ACL Basic information section
+  if (hasAclBasicInfoLabels) {
+    await applyAclBasicInfoLabels(zip);
   }
 
   // Strip content controls — unconditional, silent (documented on the Download
@@ -2201,56 +2218,7 @@ async function applyListPeriodFix(zip: JSZip): Promise<void> {
 }
 
 // ─── FORMAT-003: Time format corrections ─────────────────────────────────────
-
-const TIME_TZ_MAP: Record<string, string> = {
-  est: 'ET', edt: 'ET', cst: 'CT', cdt: 'CT',
-  mst: 'MT', mdt: 'MT', pst: 'PT', pdt: 'PT',
-};
-
-/**
- * Reformat non-standard time expressions within a single text string.
- * Returns the corrected string (unchanged if no non-standard times found).
- *
- * Steps applied in order:
- *  1. Normalize AM/PM variants → a.m. / p.m.
- *     Handles: AM, PM, A.M., P.M., A.M, P.M, am, pm (with or without space)
- *  2. Remove :00 from exact hours (e.g., 11:00 a.m. → 11 a.m.)
- *     Only fires when minutes are exactly 00; 3:30 p.m. is left unchanged.
- *  3. Normalize timezone abbreviations after time expressions:
- *     EST/EDT → ET, CST/CDT → CT, MST/MDT → MT, PST/PDT → PT
- *
- * Uses (?!\w) instead of trailing \b so that forms ending in "." (e.g., "A.M.")
- * are correctly bounded without requiring a word character at the boundary.
- */
-function applyTimeFormatsToText(text: string): string {
-  let result = text;
-
-  // Step 1: Normalize non-standard AM/PM forms → a.m. / p.m.
-  // Deliberately excludes already-correct a.m./p.m. to avoid re-processing.
-  result = result.replace(
-    /\b(\d{1,2}(?::\d{2})?)\s*(A\.M\.|P\.M\.|A\.M|P\.M|AM|PM|am|pm)(?!\w)/g,
-    (_match, time, ampm) => {
-      const normalized = /^[Aa]/.test(ampm) ? 'a.m.' : 'p.m.';
-      return `${time} ${normalized}`;
-    }
-  );
-
-  // Step 2: Remove :00 from exact hours, applied after Step 1 ensures
-  // a.m./p.m. are in the correct lowercase form.
-  result = result.replace(
-    /\b(\d{1,2}):00\s+(a\.m\.|p\.m\.)(?!\w)/g,
-    (_match, hour, ampm) => `${hour} ${ampm}`
-  );
-
-  // Step 3: Normalize timezone abbreviations that immediately follow a time
-  // expression. Only fires after Step 1 normalizes the preceding AM/PM form.
-  result = result.replace(
-    /\b(a\.m\.|p\.m\.)\s+(EST|EDT|CST|CDT|MST|MDT|PST|PDT)\b/gi,
-    (_match, ampm, tz) => `${ampm} ${TIME_TZ_MAP[tz.toLowerCase()]!}`
-  );
-
-  return result;
-}
+// Correction logic lives in src/utils/timeFormat.ts (imported above).
 
 /**
  * Scan all <w:t> elements and reformat any non-standard time expressions.
@@ -2823,7 +2791,17 @@ async function applyAsteriskedBoldFix(zip: JSZip): Promise<void> {
 // ─── CLEAN-011: Application checklist checkbox normalization ──────────────────
 
 const CHECKLIST_TARGET_GLYPH = '◻'; // U+25FB WHITE MEDIUM SQUARE
-const CHECKLIST_ALWAYS_REPLACE = new Set(['☐', '☑', '☒', '□', '•']);
+const CHECKLIST_ALWAYS_REPLACE = new Set([
+  '☐', // U+2610 BALLOT BOX
+  '☑', // U+2611 BALLOT BOX WITH CHECK
+  '☒', // U+2612 BALLOT BOX WITH X
+  '□', // U+25A1 WHITE SQUARE
+  '•', // U+2022 BULLET
+  '▪', // U+25AA BLACK SMALL SQUARE
+  '◼', // U+25FC BLACK MEDIUM SQUARE
+  '■', // U+25A0 BLACK SQUARE
+  '▫', // U+25AB WHITE SMALL SQUARE
+]);
 const CHECKLIST_REPLACE_IF_SPACE = new Set(['o', 'O']);
 const CHECKLIST_STEP3_H4_NAMES = /^(narratives|attachments|other\s+required\s+forms)$/i;
 
@@ -2850,7 +2828,9 @@ function checklistIsSingleCellTable(table: Element): boolean {
 }
 
 function checklistIsListStyle(styleVal: string): boolean {
-  return /list|bullet/i.test(styleVal);
+  if (!styleVal) return false;
+  if (/^normal$/i.test(styleVal) || /table/i.test(styleVal)) return false;
+  return /list|bullet|paragraph/i.test(styleVal);
 }
 
 function checklistIsHeaderRow(row: Element): boolean {
@@ -2970,6 +2950,19 @@ function checklistFindStep3Tables(xmlDoc: Document): Element[] {
 }
 
 /**
+ * Walk up from wT toward para and return the first w:hyperlink ancestor, or
+ * null if wT is not inside a hyperlink within that paragraph.
+ */
+function checklistFindHyperlinkAncestor(wT: Element, para: Element): Element | null {
+  let node: Element | null = wT.parentElement;
+  while (node && node !== para) {
+    if (node.localName === 'hyperlink') return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+
+/**
  * Normalize application checklist checkbox glyphs and remove list paragraph
  * styles from first-column cells of tables within the Application checklist
  * section and qualifying Step 3 H4 sections.
@@ -2999,7 +2992,9 @@ async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
       const firstPara = Array.from(firstCell.children).find(c => c.localName === 'p');
       if (!firstPara) continue;
 
-      // Fix 1: Glyph correction — replace the first non-whitespace character
+      // Fix 1: Glyph correction — replace the first non-whitespace character.
+      // When the glyph is inside a <w:hyperlink>, extract it into a plain run
+      // before the hyperlink so the checkbox character is not part of the link.
       const cellText = checklistGetParaText(firstPara);
       if (checklistNeedsGlyphFix(cellText)) {
         const wTs = Array.from(firstPara.getElementsByTagName('w:t'));
@@ -3008,8 +3003,50 @@ async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
           const trimmed = text.trimStart();
           if (!trimmed) continue;
           const leadingWs = text.length - trimmed.length;
-          wT.textContent = text.slice(0, leadingWs) + CHECKLIST_TARGET_GLYPH + trimmed.slice(1);
+
+          // Check whether this w:t lives inside a w:hyperlink child of the para.
+          const hyperlink = checklistFindHyperlinkAncestor(wT, firstPara);
+          if (hyperlink) {
+            // Move glyph (+ space if present) out of the hyperlink into a new run.
+            const charsToRemove = trimmed.length >= 2 && trimmed[1] === ' ' ? 2 : 1;
+            wT.textContent = text.slice(0, leadingWs) + trimmed.slice(charsToRemove);
+            const newRun = firstPara.ownerDocument!.createElementNS(W, 'w:r');
+            const newWt = firstPara.ownerDocument!.createElementNS(W, 'w:t');
+            newWt.textContent = CHECKLIST_TARGET_GLYPH + ' ';
+            newWt.setAttribute('xml:space', 'preserve');
+            newRun.appendChild(newWt);
+            firstPara.insertBefore(newRun, hyperlink);
+          } else {
+            wT.textContent = text.slice(0, leadingWs) + CHECKLIST_TARGET_GLYPH + trimmed.slice(1);
+          }
           changed = true;
+          break;
+        }
+      }
+
+      // Fix 1b: If ◻ is already the correct glyph but lives inside a
+      // <w:hyperlink>, extract it into a plain run before the hyperlink.
+      // (Fix 1 above handles the same extraction for wrong glyphs.)
+      if (!checklistNeedsGlyphFix(cellText)) {
+        const wTs = Array.from(firstPara.getElementsByTagName('w:t'));
+        for (const wT of wTs) {
+          const text = wT.textContent ?? '';
+          const trimmed = text.trimStart();
+          if (!trimmed) continue;
+          if (trimmed[0] !== CHECKLIST_TARGET_GLYPH) break;
+          const hyperlink = checklistFindHyperlinkAncestor(wT, firstPara);
+          if (hyperlink) {
+            const charsToRemove = trimmed.length >= 2 && trimmed[1] === ' ' ? 2 : 1;
+            const leadingWs = text.length - trimmed.length;
+            wT.textContent = text.slice(0, leadingWs) + trimmed.slice(charsToRemove);
+            const newRun = firstPara.ownerDocument!.createElementNS(W, 'w:r');
+            const newWt = firstPara.ownerDocument!.createElementNS(W, 'w:t');
+            newWt.textContent = CHECKLIST_TARGET_GLYPH + ' ';
+            newWt.setAttribute('xml:space', 'preserve');
+            newRun.appendChild(newWt);
+            firstPara.insertBefore(newRun, hyperlink);
+            changed = true;
+          }
           break;
         }
       }
@@ -3027,12 +3064,24 @@ async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
         }
       }
 
-      // Fix 3: Missing glyph — prepend ◻ + space when no glyph was present
+      // Fix 3: Missing glyph — prepend ◻ + space when no glyph was present.
+      // When the first w:t is inside a <w:hyperlink>, insert a plain run before
+      // the hyperlink rather than placing the glyph inside the link.
       if (checklistNeedsMissingGlyphInsert(cellText)) {
         const firstWt = firstPara.getElementsByTagName('w:t')[0];
         if (firstWt) {
-          firstWt.textContent = CHECKLIST_TARGET_GLYPH + ' ' + (firstWt.textContent ?? '');
-          firstWt.setAttribute('xml:space', 'preserve');
+          const hyperlink = checklistFindHyperlinkAncestor(firstWt, firstPara);
+          if (hyperlink) {
+            const newRun = firstPara.ownerDocument!.createElementNS(W, 'w:r');
+            const newWt = firstPara.ownerDocument!.createElementNS(W, 'w:t');
+            newWt.textContent = CHECKLIST_TARGET_GLYPH + ' ';
+            newWt.setAttribute('xml:space', 'preserve');
+            newRun.appendChild(newWt);
+            firstPara.insertBefore(newRun, hyperlink);
+          } else {
+            firstWt.textContent = CHECKLIST_TARGET_GLYPH + ' ' + (firstWt.textContent ?? '');
+            firstWt.setAttribute('xml:space', 'preserve');
+          }
           changed = true;
         }
       }
@@ -3939,6 +3988,177 @@ async function applyNormalizeSamhsaNote(zip: JSZip): Promise<void> {
       if (!original.includes('NOTE:')) continue;
       wT.textContent = original.split('NOTE:').join('Note:');
       changed = true;
+    }
+  }
+
+  if (changed) {
+    zip.file('word/document.xml', serializeXml(xmlDoc));
+  }
+}
+
+// ─── CLEAN-023: Add "Telephone:" label before bare phone numbers ──────────────
+
+const ACL_PHONE_LABEL_PATTERN = '(?:telephone|phone|tel|tty)';
+const ACL_PHONE_EXTENSION_PATTERN = '(?:\\s+(?:x|ext\\.?)\\s*\\d{1,5})?';
+const ACL_BARE_PHONE_PATTERN =
+  '(?:\\(\\d{3}\\)\\s*\\d{3}[-]\\d{4}|\\d{3}[-]\\d{3}[-]\\d{4}|\\d{3}[.]\\d{3}[.]\\d{4})';
+
+const ACL_LABELED_RE = new RegExp(`^${ACL_PHONE_LABEL_PATTERN}\\s*:`, 'i');
+const ACL_PHONE_RE = new RegExp(
+  `^(?!1[-.])\\s*${ACL_BARE_PHONE_PATTERN}${ACL_PHONE_EXTENSION_PATTERN}\\s*$`,
+  'i',
+);
+
+/**
+ * Prepend "Telephone: " to bare phone number paragraphs under the
+ * "Agency contacts" heading in word/document.xml.
+ */
+async function applyAclTelephonePrefix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  const children = Array.from(body.children);
+  let agencyContactsIdx = -1;
+  let agencyContactsLevel = 0;
+
+  for (let i = 0; i < children.length; i++) {
+    const el = children[i]!;
+    if (el.localName !== 'p') continue;
+    const level = getHeadingLevel(el);
+    if (level >= 2 && level <= 3 && /agency\s+contacts/i.test(getParaText(el))) {
+      agencyContactsIdx = i;
+      agencyContactsLevel = level;
+      break;
+    }
+  }
+
+  if (agencyContactsIdx === -1) return;
+
+  let changed = false;
+  for (let i = agencyContactsIdx + 1; i < children.length; i++) {
+    const el = children[i]!;
+    if (el.localName !== 'p') continue;
+    const level = getHeadingLevel(el);
+    if (level > 0 && level <= agencyContactsLevel) break;
+
+    const text = getParaText(el).trim();
+    if (!text || ACL_LABELED_RE.test(text) || !ACL_PHONE_RE.test(text)) continue;
+
+    const firstWt = el.getElementsByTagName('w:t')[0];
+    if (!firstWt) continue;
+    firstWt.textContent = 'Telephone: ' + (firstWt.textContent ?? '');
+    firstWt.setAttribute('xml:space', 'preserve');
+    changed = true;
+  }
+
+  if (changed) {
+    zip.file('word/document.xml', serializeXml(xmlDoc));
+  }
+}
+
+// ─── CLEAN-024: Add OpDiv / Agency labels in ACL Basic information ────────────
+
+const ACL_KNOWN_LABEL_RE =
+  /^(?:OpDiv|Agency|Subagency|Opportunity\s+(?:name|number)|NOFO\s+number|CFDA|Program\s+name|Due\s+date)\s*:/i;
+const ACL_FULL_NAME = 'Administration for Community Living';
+
+/**
+ * Prepend "OpDiv: " and/or "Agency: " to the appropriate unlabeled paragraphs
+ * inside the "Basic information" section of word/document.xml.
+ */
+async function applyAclBasicInfoLabels(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  const children = Array.from(body.children);
+  let sectionIdx = -1;
+  let sectionLevel = 0;
+
+  for (let i = 0; i < children.length; i++) {
+    const el = children[i]!;
+    if (el.localName !== 'p') continue;
+    const level = getHeadingLevel(el);
+    if (level >= 2 && level <= 3 && /basic\s+information/i.test(getParaText(el))) {
+      sectionIdx = i;
+      sectionLevel = level;
+      break;
+    }
+  }
+
+  if (sectionIdx === -1) return;
+
+  let changed = false;
+
+  for (let i = sectionIdx + 1; i < children.length; i++) {
+    const el = children[i]!;
+    if (el.localName !== 'p') continue;
+    const level = getHeadingLevel(el);
+    if (level > 0 && level <= sectionLevel) break;
+
+    const text = getParaText(el).replace(/\u00a0/g, ' ').trim();
+    if (!text) continue;
+
+    // Already labeled with OpDiv: containing ACL — check the next paragraph only
+    if (/^OpDiv\s*:/i.test(text) && text.includes(ACL_FULL_NAME)) {
+      for (let j = i + 1; j < children.length; j++) {
+        const next = children[j]!;
+        if (next.localName !== 'p') continue;
+        if (getHeadingLevel(next) > 0) break;
+        const nextText = getParaText(next).replace(/\u00a0/g, ' ').trim();
+        if (!nextText) continue;
+        if (!ACL_KNOWN_LABEL_RE.test(nextText)) {
+          const wt = next.getElementsByTagName('w:t')[0];
+          if (wt) {
+            wt.textContent = 'Agency: ' + (wt.textContent ?? '');
+            wt.setAttribute('xml:space', 'preserve');
+            changed = true;
+          }
+        }
+        break;
+      }
+      break;
+    }
+
+    // Bare ACL full name — prepend OpDiv: then check next paragraph for Agency:
+    if (text === ACL_FULL_NAME) {
+      const wt = el.getElementsByTagName('w:t')[0];
+      if (wt) {
+        wt.textContent = 'OpDiv: ' + (wt.textContent ?? '');
+        wt.setAttribute('xml:space', 'preserve');
+        changed = true;
+      }
+
+      for (let j = i + 1; j < children.length; j++) {
+        const next = children[j]!;
+        if (next.localName !== 'p') continue;
+        if (getHeadingLevel(next) > 0) break;
+        const nextText = getParaText(next).replace(/\u00a0/g, ' ').trim();
+        if (!nextText) continue;
+        if (!ACL_KNOWN_LABEL_RE.test(nextText)) {
+          const nextWt = next.getElementsByTagName('w:t')[0];
+          if (nextWt) {
+            nextWt.textContent = 'Agency: ' + (nextWt.textContent ?? '');
+            nextWt.setAttribute('xml:space', 'preserve');
+            changed = true;
+          }
+        }
+        break;
+      }
+      break;
     }
   }
 
