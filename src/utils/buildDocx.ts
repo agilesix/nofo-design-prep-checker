@@ -3,6 +3,7 @@ import type { AcceptedFix, AutoAppliedChange } from '../types';
 import { DGHT_STEP1_ANCHOR } from '../rules/opdiv/CLEAN-007-constants';
 import { groupListParagraphs } from './listHelpers';
 import { slugifyHeading } from './anchorUtils';
+import { applyTimeFormatsToText } from './timeFormat';
 
 // XMLSerializer.serializeToString() drops the XML declaration. Word for iOS
 // (and strict XML consumers) require it — desktop Word auto-repairs missing
@@ -2201,56 +2202,7 @@ async function applyListPeriodFix(zip: JSZip): Promise<void> {
 }
 
 // ─── FORMAT-003: Time format corrections ─────────────────────────────────────
-
-const TIME_TZ_MAP: Record<string, string> = {
-  est: 'ET', edt: 'ET', cst: 'CT', cdt: 'CT',
-  mst: 'MT', mdt: 'MT', pst: 'PT', pdt: 'PT',
-};
-
-/**
- * Reformat non-standard time expressions within a single text string.
- * Returns the corrected string (unchanged if no non-standard times found).
- *
- * Steps applied in order:
- *  1. Normalize AM/PM variants → a.m. / p.m.
- *     Handles: AM, PM, A.M., P.M., A.M, P.M, am, pm (with or without space)
- *  2. Remove :00 from exact hours (e.g., 11:00 a.m. → 11 a.m.)
- *     Only fires when minutes are exactly 00; 3:30 p.m. is left unchanged.
- *  3. Normalize timezone abbreviations after time expressions:
- *     EST/EDT → ET, CST/CDT → CT, MST/MDT → MT, PST/PDT → PT
- *
- * Uses (?!\w) instead of trailing \b so that forms ending in "." (e.g., "A.M.")
- * are correctly bounded without requiring a word character at the boundary.
- */
-function applyTimeFormatsToText(text: string): string {
-  let result = text;
-
-  // Step 1: Normalize non-standard AM/PM forms → a.m. / p.m.
-  // Deliberately excludes already-correct a.m./p.m. to avoid re-processing.
-  result = result.replace(
-    /\b(\d{1,2}(?::\d{2})?)\s*(A\.M\.|P\.M\.|A\.M|P\.M|AM|PM|am|pm)(?!\w)/g,
-    (_match, time, ampm) => {
-      const normalized = /^[Aa]/.test(ampm) ? 'a.m.' : 'p.m.';
-      return `${time} ${normalized}`;
-    }
-  );
-
-  // Step 2: Remove :00 from exact hours, applied after Step 1 ensures
-  // a.m./p.m. are in the correct lowercase form.
-  result = result.replace(
-    /\b(\d{1,2}):00\s+(a\.m\.|p\.m\.)(?!\w)/g,
-    (_match, hour, ampm) => `${hour} ${ampm}`
-  );
-
-  // Step 3: Normalize timezone abbreviations that immediately follow a time
-  // expression. Only fires after Step 1 normalizes the preceding AM/PM form.
-  result = result.replace(
-    /\b(a\.m\.|p\.m\.)\s+(EST|EDT|CST|CDT|MST|MDT|PST|PDT)\b/gi,
-    (_match, ampm, tz) => `${ampm} ${TIME_TZ_MAP[tz.toLowerCase()]!}`
-  );
-
-  return result;
-}
+// Correction logic lives in src/utils/timeFormat.ts (imported above).
 
 /**
  * Scan all <w:t> elements and reformat any non-standard time expressions.
