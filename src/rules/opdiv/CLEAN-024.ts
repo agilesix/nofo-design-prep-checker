@@ -73,7 +73,7 @@ function detectLabelFixes(htmlDoc: Document): LabelFixes {
     if (level > 0 && level <= sectionLevel) break;
 
     if (el.tagName.toLowerCase() !== 'p') continue;
-    const text = (el.textContent ?? '').trim();
+    const text = (el.textContent ?? '').replace(/\u00a0/g, ' ').trim();
     if (!text) continue;
 
     if (text === ACL_FULL_NAME) {
@@ -87,7 +87,7 @@ function detectLabelFixes(htmlDoc: Document): LabelFixes {
         const nextLevel = headingLevel(next);
         if (nextLevel > 0) break;
         if (next.tagName.toLowerCase() !== 'p') continue;
-        const nextText = (next.textContent ?? '').trim();
+        const nextText = (next.textContent ?? '').replace(/\u00a0/g, ' ').trim();
         if (!nextText) continue;
         if (!KNOWN_LABEL_RE.test(nextText)) needsAgency = true;
         break;
@@ -105,7 +105,7 @@ function detectLabelFixes(htmlDoc: Document): LabelFixes {
         const nextLevel = headingLevel(next);
         if (nextLevel > 0) break;
         if (next.tagName.toLowerCase() !== 'p') continue;
-        const nextText = (next.textContent ?? '').trim();
+        const nextText = (next.textContent ?? '').replace(/\u00a0/g, ' ').trim();
         if (!nextText) continue;
         if (!KNOWN_LABEL_RE.test(nextText)) needsAgency = true;
         break;

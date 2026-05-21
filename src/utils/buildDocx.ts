@@ -3064,12 +3064,24 @@ async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
         }
       }
 
-      // Fix 3: Missing glyph — prepend ◻ + space when no glyph was present
+      // Fix 3: Missing glyph — prepend ◻ + space when no glyph was present.
+      // When the first w:t is inside a <w:hyperlink>, insert a plain run before
+      // the hyperlink rather than placing the glyph inside the link.
       if (checklistNeedsMissingGlyphInsert(cellText)) {
         const firstWt = firstPara.getElementsByTagName('w:t')[0];
         if (firstWt) {
-          firstWt.textContent = CHECKLIST_TARGET_GLYPH + ' ' + (firstWt.textContent ?? '');
-          firstWt.setAttribute('xml:space', 'preserve');
+          const hyperlink = checklistFindHyperlinkAncestor(firstWt, firstPara);
+          if (hyperlink) {
+            const newRun = firstPara.ownerDocument!.createElementNS(W, 'w:r');
+            const newWt = firstPara.ownerDocument!.createElementNS(W, 'w:t');
+            newWt.textContent = CHECKLIST_TARGET_GLYPH + ' ';
+            newWt.setAttribute('xml:space', 'preserve');
+            newRun.appendChild(newWt);
+            firstPara.insertBefore(newRun, hyperlink);
+          } else {
+            firstWt.textContent = CHECKLIST_TARGET_GLYPH + ' ' + (firstWt.textContent ?? '');
+            firstWt.setAttribute('xml:space', 'preserve');
+          }
           changed = true;
         }
       }
@@ -4090,7 +4102,7 @@ async function applyAclBasicInfoLabels(zip: JSZip): Promise<void> {
     const level = getHeadingLevel(el);
     if (level > 0 && level <= sectionLevel) break;
 
-    const text = getParaText(el).trim();
+    const text = getParaText(el).replace(/\u00a0/g, ' ').trim();
     if (!text) continue;
 
     // Already labeled with OpDiv: containing ACL — check the next paragraph only
@@ -4099,7 +4111,7 @@ async function applyAclBasicInfoLabels(zip: JSZip): Promise<void> {
         const next = children[j]!;
         if (next.localName !== 'p') continue;
         if (getHeadingLevel(next) > 0) break;
-        const nextText = getParaText(next).trim();
+        const nextText = getParaText(next).replace(/\u00a0/g, ' ').trim();
         if (!nextText) continue;
         if (!ACL_KNOWN_LABEL_RE.test(nextText)) {
           const wt = next.getElementsByTagName('w:t')[0];
@@ -4127,7 +4139,7 @@ async function applyAclBasicInfoLabels(zip: JSZip): Promise<void> {
         const next = children[j]!;
         if (next.localName !== 'p') continue;
         if (getHeadingLevel(next) > 0) break;
-        const nextText = getParaText(next).trim();
+        const nextText = getParaText(next).replace(/\u00a0/g, ' ').trim();
         if (!nextText) continue;
         if (!ACL_KNOWN_LABEL_RE.test(nextText)) {
           const nextWt = next.getElementsByTagName('w:t')[0];

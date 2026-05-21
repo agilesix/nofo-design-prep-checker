@@ -1459,6 +1459,82 @@ function extractChecklistFirstColInfo(
   return results;
 }
 
+/**
+ * Build a minimal document.xml where the first checklist table cell starts with
+ * a single <w:hyperlink> whose text is `linkText` (may begin with a glyph).
+ */
+function makeChecklistHyperlinkCellDocXml(linkText: string): string {
+  const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_CHECKLIST}" xmlns:r="${R}">` +
+    `<w:body>` +
+    `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+    `<w:r><w:t>Application checklist</w:t></w:r></w:p>` +
+    `<w:tbl><w:tr>` +
+    `<w:tc><w:p>` +
+    `<w:hyperlink r:id="rId1" w:history="1">` +
+    `<w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr>` +
+    `<w:t xml:space="preserve">${linkText}</w:t>` +
+    `</w:r></w:hyperlink>` +
+    `</w:p></w:tc>` +
+    `<w:tc><w:p><w:r><w:t>Second column</w:t></w:r></w:p></w:tc>` +
+    `</w:tr></w:tbl>` +
+    `<w:sectPr/></w:body></w:document>`
+  );
+}
+
+/**
+ * Return the direct Element children of the first-column paragraph in the
+ * first row of the first checklist table. Used to assert glyph/hyperlink structure.
+ */
+function extractChecklistCellParaChildren(xml: string): Element[] {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'application/xml');
+  const body = doc.getElementsByTagName('w:body')[0];
+  if (!body) return [];
+
+  let inChecklist = false;
+  let checklistLevel = 0;
+
+  for (const child of Array.from(body.children)) {
+    if (child.localName === 'p') {
+      const pPr = Array.from(child.children).find(c => c.localName === 'pPr');
+      const styleEl = pPr && Array.from(pPr.children).find(c => c.localName === 'pStyle');
+      const styleVal = styleEl?.getAttribute('w:val') ?? '';
+      const m = styleVal.match(/^Heading(\d)/);
+      const level = m ? parseInt(m[1]!, 10) : null;
+      if (level !== null) {
+        if (inChecklist && level <= checklistLevel) inChecklist = false;
+        const text = Array.from(child.getElementsByTagName('w:t'))
+          .map(t => t.textContent ?? '')
+          .join('');
+        if ((level === 2 || level === 3) && /application\s+checklist/i.test(text)) {
+          inChecklist = true;
+          checklistLevel = level;
+        }
+      }
+    } else if (child.localName === 'tbl' && inChecklist) {
+      const firstRow = Array.from(child.children).find(c => c.localName === 'tr');
+      if (!firstRow) return [];
+      const firstCell = Array.from(firstRow.children).find(c => c.localName === 'tc');
+      if (!firstCell) return [];
+      const firstPara = Array.from(firstCell.children).find(c => c.localName === 'p');
+      if (!firstPara) return [];
+      return Array.from(firstPara.children);
+    }
+  }
+  return [];
+}
+
+/** Extract all w:t text from an element's descendants. */
+function getWtText(el: Element | undefined): string {
+  if (!el) return '';
+  return Array.from(el.getElementsByTagName('w:t'))
+    .map(t => t.textContent ?? '')
+    .join('');
+}
+
 const CHECKLIST_CHANGE: AutoAppliedChange = {
   ruleId: 'CLEAN-011',
   description: 'Application checklist checkboxes normalized — 1 cell corrected.',
@@ -1596,6 +1672,54 @@ describe('buildDocx — CLEAN-011: checklist checkbox normalization', () => {
     // Checklist table: wrong glyph must have been corrected
     expect(outXml).toContain('◻ Checklist item');
     expect(outXml).not.toContain('☐ Checklist item');
+  });
+
+  it('Fix 1: wrong glyph (☐) inside <w:hyperlink> is replaced and extracted into a run before the link', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeChecklistHyperlinkCellDocXml('☐ Item text'));
+
+    const outXml = await getOutputDocXml(zip, [], [CHECKLIST_CHANGE]);
+    const paraChildren = extractChecklistCellParaChildren(outXml);
+
+    // First direct child of the paragraph: a plain w:r containing ◻ (outside the hyperlink)
+    expect(paraChildren[0]?.localName).toBe('r');
+    expect(getWtText(paraChildren[0])).toBe('◻ ');
+
+    // Second direct child: the w:hyperlink, now without the glyph
+    expect(paraChildren[1]?.localName).toBe('hyperlink');
+    expect(getWtText(paraChildren[1])).toBe('Item text');
+  });
+
+  it('Fix 1b: correct ◻ inside <w:hyperlink> is extracted into a run before the link', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeChecklistHyperlinkCellDocXml('◻ Item text'));
+
+    const outXml = await getOutputDocXml(zip, [], [CHECKLIST_CHANGE]);
+    const paraChildren = extractChecklistCellParaChildren(outXml);
+
+    // First direct child: a plain w:r containing ◻ (outside the hyperlink)
+    expect(paraChildren[0]?.localName).toBe('r');
+    expect(getWtText(paraChildren[0])).toBe('◻ ');
+
+    // Second direct child: the w:hyperlink, now without the glyph
+    expect(paraChildren[1]?.localName).toBe('hyperlink');
+    expect(getWtText(paraChildren[1])).toBe('Item text');
+  });
+
+  it('Fix 3: ◻ is prepended as a plain run before a <w:hyperlink> when no glyph is present', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeChecklistHyperlinkCellDocXml('Item text'));
+
+    const outXml = await getOutputDocXml(zip, [], [CHECKLIST_CHANGE]);
+    const paraChildren = extractChecklistCellParaChildren(outXml);
+
+    // First direct child: a plain w:r containing ◻ (outside the hyperlink)
+    expect(paraChildren[0]?.localName).toBe('r');
+    expect(getWtText(paraChildren[0])).toBe('◻ ');
+
+    // Second direct child: the w:hyperlink with its original text unchanged
+    expect(paraChildren[1]?.localName).toBe('hyperlink');
+    expect(getWtText(paraChildren[1])).toBe('Item text');
   });
 });
 
