@@ -6195,3 +6195,261 @@ describe('buildDocx — CLEAN-022: NOTE: normalization', () => {
     expect(outXml).not.toContain('Note:');
   });
 });
+
+// ─── ACL OOXML helpers ────────────────────────────────────────────────────────
+
+const W_NS_ACL = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function makeAclH2(text: string): string {
+  return (
+    `<w:p>` +
+    `<w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+    `<w:r><w:t>${text}</w:t></w:r>` +
+    `</w:p>`
+  );
+}
+
+function makeAclBodyPara(text: string): string {
+  return `<w:p><w:r><w:t>${text}</w:t></w:r></w:p>`;
+}
+
+function makeAclDocXml(innerBody: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_ACL}">` +
+    `<w:body>${innerBody}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+// ─── CLEAN-023: Add Telephone: prefix to bare phone numbers ──────────────────
+
+const TELEPHONE_PREFIX_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-023',
+  description: '1 bare phone number labeled.',
+  targetField: 'acl.telephone.prefix',
+  value: '1',
+};
+
+describe('buildDocx — CLEAN-023: ACL telephone prefix', () => {
+  it('prepends "Telephone: " to a bare NNN-NNN-NNNN number under Agency contacts', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Agency contacts') +
+      makeAclBodyPara('555-123-4567')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [TELEPHONE_PREFIX_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('Telephone: 555-123-4567');
+  });
+
+  it('sets xml:space="preserve" on the modified w:t element', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Agency contacts') +
+      makeAclBodyPara('555-123-4567')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [TELEPHONE_PREFIX_CHANGE]);
+    expect(outXml).toMatch(/xml:space="preserve"[^>]*>Telephone: 555-123-4567/);
+  });
+
+  it('does not modify a phone number already labeled "Telephone:"', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Agency contacts') +
+      makeAclBodyPara('Telephone: 555-123-4567')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [TELEPHONE_PREFIX_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('Telephone: 555-123-4567');
+    // Ensure it wasn't double-labeled
+    expect(texts.filter(t => t.includes('Telephone:')).length).toBe(1);
+    expect(outXml).not.toContain('Telephone: Telephone:');
+  });
+
+  it('does not modify a phone number outside the Agency contacts section', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Program description') +
+      makeAclBodyPara('555-123-4567') +
+      makeAclH2('Agency contacts') +
+      makeAclBodyPara('Jane Smith')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [TELEPHONE_PREFIX_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('555-123-4567');
+    expect(texts).not.toContain('Telephone: 555-123-4567');
+  });
+
+  it('stops modifying at the next same-level heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Agency contacts') +
+      makeAclBodyPara('555-123-4567') +
+      makeAclH2('Funding details') +
+      makeAclBodyPara('555-987-6543')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [TELEPHONE_PREFIX_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    // Phone inside Agency contacts is labeled
+    expect(texts).toContain('Telephone: 555-123-4567');
+    // Phone after the next heading is untouched
+    expect(texts).toContain('555-987-6543');
+    expect(texts).not.toContain('Telephone: 555-987-6543');
+  });
+
+  it('does not apply when the targetField is absent from autoAppliedChanges', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Agency contacts') +
+      makeAclBodyPara('555-123-4567')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    expect(outXml).toContain('555-123-4567');
+    expect(outXml).not.toContain('Telephone:');
+  });
+});
+
+// ─── CLEAN-024: Add OpDiv/Agency labels in Basic information ─────────────────
+
+const BASIC_INFO_LABELS_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-024',
+  description: 'OpDiv: and Agency: labels added.',
+  targetField: 'acl.basic.info.labels',
+  value: '2',
+};
+
+describe('buildDocx — CLEAN-024: ACL Basic information labels', () => {
+  it('prepends "OpDiv: " to a bare ACL full name', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Basic information') +
+      makeAclBodyPara('Administration for Community Living')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [BASIC_INFO_LABELS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('OpDiv: Administration for Community Living');
+  });
+
+  it('sets xml:space="preserve" on the OpDiv: w:t element', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Basic information') +
+      makeAclBodyPara('Administration for Community Living')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [BASIC_INFO_LABELS_CHANGE]);
+    expect(outXml).toMatch(/xml:space="preserve"[^>]*>OpDiv: Administration for Community Living/);
+  });
+
+  it('prepends "Agency: " to the unlabeled paragraph following the ACL name', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Basic information') +
+      makeAclBodyPara('Administration for Community Living') +
+      makeAclBodyPara('ACL Regional Office')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [BASIC_INFO_LABELS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('OpDiv: Administration for Community Living');
+    expect(texts).toContain('Agency: ACL Regional Office');
+  });
+
+  it('sets xml:space="preserve" on the Agency: w:t element', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Basic information') +
+      makeAclBodyPara('Administration for Community Living') +
+      makeAclBodyPara('ACL Regional Office')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [BASIC_INFO_LABELS_CHANGE]);
+    expect(outXml).toMatch(/xml:space="preserve"[^>]*>Agency: ACL Regional Office/);
+  });
+
+  it('prepends only "Agency: " when OpDiv: is already labeled', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Basic information') +
+      makeAclBodyPara('OpDiv: Administration for Community Living') +
+      makeAclBodyPara('ACL Regional Office')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [BASIC_INFO_LABELS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('OpDiv: Administration for Community Living');
+    expect(texts).toContain('Agency: ACL Regional Office');
+    // OpDiv: must not be doubled
+    expect(outXml).not.toContain('OpDiv: OpDiv:');
+  });
+
+  it('does nothing when both OpDiv: and Agency: are already present', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Basic information') +
+      makeAclBodyPara('OpDiv: Administration for Community Living') +
+      makeAclBodyPara('Agency: ACL Regional Office')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [BASIC_INFO_LABELS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts).toContain('OpDiv: Administration for Community Living');
+    expect(texts).toContain('Agency: ACL Regional Office');
+    expect(outXml).not.toContain('OpDiv: OpDiv:');
+    expect(outXml).not.toContain('Agency: Agency:');
+  });
+
+  it('does not modify content outside the Basic information section', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Program description') +
+      makeAclBodyPara('Administration for Community Living') +
+      makeAclH2('Basic information') +
+      makeAclBodyPara('Opportunity name: Sample NOFO')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [BASIC_INFO_LABELS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    // ACL name outside Basic information must not be labeled
+    expect(texts).toContain('Administration for Community Living');
+    expect(texts).not.toContain('OpDiv: Administration for Community Living');
+  });
+
+  it('stops at the next same-level heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Basic information') +
+      makeAclBodyPara('Opportunity name: Sample NOFO') +
+      makeAclH2('Funding details') +
+      makeAclBodyPara('Administration for Community Living')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], [BASIC_INFO_LABELS_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    // ACL name after the next heading must not be labeled
+    expect(texts).toContain('Administration for Community Living');
+    expect(texts).not.toContain('OpDiv: Administration for Community Living');
+  });
+
+  it('does not apply when the targetField is absent from autoAppliedChanges', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAclDocXml(
+      makeAclH2('Basic information') +
+      makeAclBodyPara('Administration for Community Living') +
+      makeAclBodyPara('ACL Regional Office')
+    ));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    expect(outXml).toContain('Administration for Community Living');
+    expect(outXml).not.toContain('OpDiv:');
+    expect(outXml).not.toContain('Agency:');
+  });
+});

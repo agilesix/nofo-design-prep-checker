@@ -35,12 +35,14 @@ function normalizeTz(tz: string): string {
 /**
  * Normalize a single time token (digits + meridiem).
  * - Strips :00 from exact hours.
- * - Substitutes "noon" for 12:xx PM and "midnight" for 12:xx AM.
+ * - Substitutes "noon" for 12:00 PM and "midnight" for 12:00 AM.
+ *   Only the :00 form triggers substitution; bare "12 a.m." / "12 p.m."
+ *   (no minutes) is normalized to "12 a.m." / "12 p.m." and left as-is.
  */
 function normalizeTimeToken(hhmm: string, ampm: string): TimeToken {
   const meridiem = normalizeMeridiem(ampm);
 
-  if (hhmm === '12:00' || hhmm === '12') {
+  if (hhmm === '12:00') {
     return { display: meridiem === 'p.m.' ? 'noon' : 'midnight', meridiem: null };
   }
 

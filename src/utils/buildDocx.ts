@@ -3024,6 +3024,33 @@ async function applyChecklistCheckboxFix(zip: JSZip): Promise<void> {
         }
       }
 
+      // Fix 1b: If ◻ is already the correct glyph but lives inside a
+      // <w:hyperlink>, extract it into a plain run before the hyperlink.
+      // (Fix 1 above handles the same extraction for wrong glyphs.)
+      if (!checklistNeedsGlyphFix(cellText)) {
+        const wTs = Array.from(firstPara.getElementsByTagName('w:t'));
+        for (const wT of wTs) {
+          const text = wT.textContent ?? '';
+          const trimmed = text.trimStart();
+          if (!trimmed) continue;
+          if (trimmed[0] !== CHECKLIST_TARGET_GLYPH) break;
+          const hyperlink = checklistFindHyperlinkAncestor(wT, firstPara);
+          if (hyperlink) {
+            const charsToRemove = trimmed.length >= 2 && trimmed[1] === ' ' ? 2 : 1;
+            const leadingWs = text.length - trimmed.length;
+            wT.textContent = text.slice(0, leadingWs) + trimmed.slice(charsToRemove);
+            const newRun = firstPara.ownerDocument!.createElementNS(W, 'w:r');
+            const newWt = firstPara.ownerDocument!.createElementNS(W, 'w:t');
+            newWt.textContent = CHECKLIST_TARGET_GLYPH + ' ';
+            newWt.setAttribute('xml:space', 'preserve');
+            newRun.appendChild(newWt);
+            firstPara.insertBefore(newRun, hyperlink);
+            changed = true;
+          }
+          break;
+        }
+      }
+
       // Fix 2: List style → Normal
       const styleVal = checklistGetPStyle(firstPara);
       if (checklistIsListStyle(styleVal)) {

@@ -113,6 +113,28 @@ function needsMissingGlyphInsert(text: string): boolean {
   return first !== TARGET_GLYPH && /[a-zA-Z0-9]/.test(first);
 }
 
+/**
+ * Returns true when the first non-empty w:t in a first-column paragraph
+ * starts with ◻ and that w:t lives inside a w:hyperlink child of the para.
+ * In that case the glyph is already correct but must be extracted into a
+ * plain run before the hyperlink so the checkbox character is not clickable.
+ */
+function glyphIsInsideHyperlink(para: Element): boolean {
+  const wTs = Array.from(para.getElementsByTagName('w:t'));
+  for (const wT of wTs) {
+    const trimmed = (wT.textContent ?? '').trimStart();
+    if (!trimmed) continue;
+    if (trimmed[0] !== TARGET_GLYPH) break;
+    let node: Element | null = wT.parentElement;
+    while (node && node !== para) {
+      if (node.localName === 'hyperlink') return true;
+      node = node.parentElement;
+    }
+    break;
+  }
+  return false;
+}
+
 function isSingleCellTable(table: Element): boolean {
   let cellCount = 0;
   for (const row of Array.from(table.children).filter(c => c.localName === 'tr')) {
@@ -247,7 +269,7 @@ function countCellsNeedingFix(xmlDoc: Document): number {
       const cellText = getParaText(firstPara);
       const styleVal = getPStyle(firstPara);
 
-      if (needsGlyphFix(cellText) || needsMissingGlyphInsert(cellText) || isListStyle(styleVal)) {
+      if (needsGlyphFix(cellText) || needsMissingGlyphInsert(cellText) || isListStyle(styleVal) || glyphIsInsideHyperlink(firstPara)) {
         count++;
       }
     }
