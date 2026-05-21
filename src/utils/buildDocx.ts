@@ -3998,9 +3998,16 @@ async function applyNormalizeSamhsaNote(zip: JSZip): Promise<void> {
 
 // ─── CLEAN-023: Add "Telephone:" label before bare phone numbers ──────────────
 
-const ACL_LABELED_RE = /^(?:telephone|phone|tel|tty)\s*:/i;
-const ACL_PHONE_RE =
-  /^(?!1[-.])\s*(?:\(\d{3}\)\s*\d{3}[-]\d{4}|\d{3}[-]\d{3}[-]\d{4}|\d{3}[.]\d{3}[.]\d{4})(?:\s+(?:x|ext\.?)\s*\d{1,5})?\s*$/i;
+const ACL_PHONE_LABEL_PATTERN = '(?:telephone|phone|tel|tty)';
+const ACL_PHONE_EXTENSION_PATTERN = '(?:\\s+(?:x|ext\\.?)\\s*\\d{1,5})?';
+const ACL_BARE_PHONE_PATTERN =
+  '(?:\\(\\d{3}\\)\\s*\\d{3}[-]\\d{4}|\\d{3}[-]\\d{3}[-]\\d{4}|\\d{3}[.]\\d{3}[.]\\d{4})';
+
+const ACL_LABELED_RE = new RegExp(`^${ACL_PHONE_LABEL_PATTERN}\\s*:`, 'i');
+const ACL_PHONE_RE = new RegExp(
+  `^(?!1[-.])\\s*${ACL_BARE_PHONE_PATTERN}${ACL_PHONE_EXTENSION_PATTERN}\\s*$`,
+  'i',
+);
 
 /**
  * Prepend "Telephone: " to bare phone number paragraphs under the
