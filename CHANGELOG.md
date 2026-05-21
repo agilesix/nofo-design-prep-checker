@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.10.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.9.1...v1.10.0) (2026-05-21)
+
+
+### Features
+
+* **acl:** add three ACL/checklist auto-fixes ([2dbb350](https://github.com/agilesix/nofo-design-prep-checker/commit/2dbb350895bdfb160a4d1856cbcabe1d9fd40d26))
+* add ACL-specific auto-fixes for checklist glyphs, OpDiv/Agency labels, and Basic information formatting ([0ac136b](https://github.com/agilesix/nofo-design-prep-checker/commit/0ac136b177cb901bdf63cea530d8ec6776d71fe4))
+
+
+### Bug Fixes
+
+* **#290:** address review comments — hyperlink glyph tests, NBSP normalization, FORMAT-003 docstring ([de4df63](https://github.com/agilesix/nofo-design-prep-checker/commit/de4df637903d89d04c83badab4e01b3b6f42222c))
+* **ci:** dispatch both ci.yml and build.yml for release-please PRs ([6db4321](https://github.com/agilesix/nofo-design-prep-checker/commit/6db43213856349a5864c8780d4a724417a10bb6d))
+* **FORMAT-003:** harden time format regex for ranges and noon/midnight ([26545da](https://github.com/agilesix/nofo-design-prep-checker/commit/26545dafa8b9ccd388f7f86231a11a4091974e80))
+
 ## [1.9.1](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.9.0...v1.9.1) (2026-05-18)
 
 
