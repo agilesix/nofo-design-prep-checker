@@ -1427,6 +1427,66 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
   }
 }
 
+// ─── Shared: sentence-case heading fix ───────────────────────────────────────
+
+/**
+ * Scan all heading paragraphs in xmlDoc whose level is in [minLevel, maxLevel]
+ * and whose full trimmed text (lowercased) equals matchTextLower, then rewrite
+ * each matching paragraph to replacementText by applying changes character-by-
+ * character across the existing <w:t> nodes. Because these sentence-case fixes
+ * only change letter case (never insert, remove, or reorder characters), the
+ * replacement string is always the same length as the original paragraph text,
+ * so positional alignment is guaranteed and run boundaries — along with all
+ * per-run formatting (w:rPr) — are preserved exactly.
+ *
+ * Returns true if at least one paragraph was modified.
+ */
+function applyHeadingSentenceCaseFix(
+  xmlDoc: Document,
+  minLevel: number,
+  maxLevel: number,
+  matchTextLower: string,
+  replacementText: string
+): boolean {
+  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  let changed = false;
+
+  for (const wP of paragraphs) {
+    const level = getHeadingLevel(wP);
+    if (level < minLevel || level > maxLevel) continue;
+
+    const text = getParaText(wP).trim();
+    if (text.toLowerCase() !== matchTextLower) continue;
+    if (text === replacementText) continue;
+
+    const allWTs = Array.from(wP.getElementsByTagName('w:t'));
+    if (allWTs.length === 0) continue;
+
+    // Walk each run and patch only the character positions that differ.
+    // This preserves run structure and per-run formatting (bold, italic, etc.).
+    let pos = 0;
+    for (const wT of allWTs) {
+      const runText = wT.textContent ?? '';
+      const chars = runText.split('');
+      let runModified = false;
+      for (let i = 0; i < chars.length; i++) {
+        const globalPos = pos + i;
+        if (globalPos < replacementText.length && chars[i] !== replacementText[globalPos]) {
+          chars[i] = replacementText[globalPos]!;
+          runModified = true;
+        }
+      }
+      if (runModified) {
+        wT.textContent = chars.join('');
+      }
+      pos += runText.length;
+    }
+    changed = true;
+  }
+
+  return changed;
+}
+
 // ─── HEAD-006: Agency Priorities → sentence case ─────────────────────────────
 
 /**
@@ -1444,29 +1504,7 @@ async function applyAgencyPrioritiesSentenceCaseFix(zip: JSZip): Promise<void> {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
 
-  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
-  let changed = false;
-
-  for (const wP of paragraphs) {
-    const level = getHeadingLevel(wP);
-    if (level < 1 || level > 3) continue;
-
-    const text = getParaText(wP).trim();
-    if (text.toLowerCase() !== 'agency priorities') continue;
-    if (text === 'Agency priorities') continue;
-
-    const allWTs = Array.from(wP.getElementsByTagName('w:t'));
-    if (allWTs.length === 0) continue;
-
-    allWTs[0]!.textContent = 'Agency priorities';
-    allWTs[0]!.removeAttribute('xml:space');
-    for (let i = 1; i < allWTs.length; i++) {
-      allWTs[i]!.textContent = '';
-    }
-    changed = true;
-  }
-
-  if (changed) {
+  if (applyHeadingSentenceCaseFix(xmlDoc, 1, 3, 'agency priorities', 'Agency priorities')) {
     zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
@@ -1488,29 +1526,7 @@ async function applyIntergovernmentalReviewSentenceCaseFix(zip: JSZip): Promise<
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
 
-  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
-  let changed = false;
-
-  for (const wP of paragraphs) {
-    const level = getHeadingLevel(wP);
-    if (level < 2 || level > 4) continue;
-
-    const text = getParaText(wP).trim();
-    if (text.toLowerCase() !== 'intergovernmental review') continue;
-    if (text === 'Intergovernmental review') continue;
-
-    const allWTs = Array.from(wP.getElementsByTagName('w:t'));
-    if (allWTs.length === 0) continue;
-
-    allWTs[0]!.textContent = 'Intergovernmental review';
-    allWTs[0]!.removeAttribute('xml:space');
-    for (let i = 1; i < allWTs.length; i++) {
-      allWTs[i]!.textContent = '';
-    }
-    changed = true;
-  }
-
-  if (changed) {
+  if (applyHeadingSentenceCaseFix(xmlDoc, 2, 4, 'intergovernmental review', 'Intergovernmental review')) {
     zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }

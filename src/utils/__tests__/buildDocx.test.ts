@@ -6678,4 +6678,40 @@ describe('buildDocx — HEAD-007: Intergovernmental Review → sentence case', (
     const texts = extractParagraphTexts(outXml);
     expect(texts[0]).toBe('Intergovernmental Review');
   });
+
+  it('preserves run boundaries when text is split across runs with different formatting', async () => {
+    // Simulate a heading where the two words are in separate runs with different
+    // w:rPr (e.g. first run bold). The fix must only change 'R'→'r' in the
+    // second run, leaving the first run's text and both runs' <w:rPr> intact.
+    const W = W_NS_IGR;
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading3"/></w:pPr>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Intergovernmental </w:t></w:r>` +
+      `<w:r><w:rPr><w:i/></w:rPr><w:t>Review</w:t></w:r>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body>` +
+      `</w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', xml);
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+
+    // Combined text is correct
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental review');
+
+    // The bold run still contains only the first word (not the whole replacement)
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(outXml, 'application/xml');
+    const runs = Array.from(doc.getElementsByTagName('w:r'));
+    const boldRun = runs.find(r => r.getElementsByTagName('w:b').length > 0);
+    const italicRun = runs.find(r => r.getElementsByTagName('w:i').length > 0);
+    expect(boldRun?.getElementsByTagName('w:t')[0]?.textContent).toBe('Intergovernmental ');
+    expect(italicRun?.getElementsByTagName('w:t')[0]?.textContent).toBe('review');
+  });
 });
