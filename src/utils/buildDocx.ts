@@ -136,6 +136,9 @@ export async function buildDocx(
   const hasAclBasicInfoLabels = autoAppliedChanges.some(
     c => c.targetField === 'acl.basic.info.labels'
   );
+  const hasAgencyPrioritiesSentenceCaseFix = autoAppliedChanges.some(
+    c => c.targetField === 'heading.agencypriorities.sentencecase'
+  );
   const h2TitleCaseChanges = autoAppliedChanges.filter(
     c => c.targetField === 'heading.h2.titlecase' && c.value
   );
@@ -338,6 +341,11 @@ export async function buildDocx(
   // Add OpDiv/Agency labels in ACL Basic information section
   if (hasAclBasicInfoLabels) {
     await applyAclBasicInfoLabels(zip);
+  }
+
+  // Correct "Agency Priorities" heading to sentence case
+  if (hasAgencyPrioritiesSentenceCaseFix) {
+    await applyAgencyPrioritiesSentenceCaseFix(zip);
   }
 
   // Strip content controls — unconditional, silent (documented on the Download
@@ -1404,6 +1412,50 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
         bm.setAttributeNS(W, 'w:name', anchorRemap.get(name)!);
       }
     }
+  }
+
+  if (changed) {
+    zip.file('word/document.xml', serializeXml(xmlDoc));
+  }
+}
+
+// ─── HEAD-006: Agency Priorities → sentence case ─────────────────────────────
+
+/**
+ * HEAD-006: Replace "Agency Priorities" (any capitalisation) with
+ * "Agency priorities" in H1–H3 heading paragraphs.
+ *
+ * Only matches paragraphs whose full trimmed text is exactly those two words.
+ * The heading style and all run formatting are preserved unchanged.
+ */
+async function applyAgencyPrioritiesSentenceCaseFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  let changed = false;
+
+  for (const wP of paragraphs) {
+    const level = getHeadingLevel(wP);
+    if (level < 1 || level > 3) continue;
+
+    const text = getParaText(wP).trim();
+    if (text.toLowerCase() !== 'agency priorities') continue;
+    if (text === 'Agency priorities') continue;
+
+    const allWTs = Array.from(wP.getElementsByTagName('w:t'));
+    if (allWTs.length === 0) continue;
+
+    allWTs[0]!.textContent = 'Agency priorities';
+    allWTs[0]!.removeAttribute('xml:space');
+    for (let i = 1; i < allWTs.length; i++) {
+      allWTs[i]!.textContent = '';
+    }
+    changed = true;
   }
 
   if (changed) {
