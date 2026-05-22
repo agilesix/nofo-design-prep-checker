@@ -1431,22 +1431,28 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
 
 /**
  * Scan all heading paragraphs in xmlDoc whose level is in [minLevel, maxLevel]
- * and whose full trimmed text (lowercased) equals matchTextLower, then rewrite
- * each matching paragraph to replacementText by applying changes character-by-
+ * and whose trimmed text (lowercased) equals matchTextLower, then rewrite each
+ * matching paragraph to replacementText by applying changes character-by-
  * character across the existing <w:t> nodes. Because these sentence-case fixes
  * only change letter case (never insert, remove, or reorder characters), the
- * replacement string is always the same length as the original paragraph text,
+ * replacement string is always the same length as the trimmed paragraph text,
  * so positional alignment is guaranteed and run boundaries — along with all
  * per-run formatting (w:rPr) — are preserved exactly.
+ *
+ * Matching uses paraText.trim() so headings whose OOXML text has leading or
+ * trailing whitespace (e.g. xml:space="preserve" runs) are still caught. The
+ * patch is applied only within the trimmed span — characters before trimStart
+ * and after the span are left untouched — so surrounding whitespace is
+ * preserved in place.
+ *
+ * A length guard ensures replacementText is exactly as long as the trimmed
+ * paragraph text. If they differ (e.g. a caller passes the wrong string) the
+ * paragraph is skipped rather than partially patched.
  *
  * Both <w:p> and <w:t> elements are collected using the NS+prefixed-tag merge
  * pattern (same as getParaText / applyHeadingLeadingSpaceFix) to handle all
  * DOM serialisation states that different browsers and XMLSerializer passes can
  * produce.
- *
- * Paragraphs whose raw text has leading or trailing whitespace are skipped:
- * trimming changes the effective character alignment and would cause the
- * positional patch to overwrite the wrong positions.
  *
  * Returns true if at least one paragraph was modified.
  */
@@ -1474,12 +1480,13 @@ function applyHeadingSentenceCaseFix(
     if (level < minLevel || level > maxLevel) continue;
 
     const paraText = getParaText(wP);
-    // Paragraphs with leading/trailing whitespace are skipped: trimming the
-    // text for the case-insensitive match but then patching against the
-    // untrimmed run content would misalign the positional offsets.
-    if (paraText !== paraText.trim()) continue;
-    if (paraText.toLowerCase() !== matchTextLower) continue;
-    if (paraText === replacementText) continue;
+    const trimmed = paraText.trim();
+    if (trimmed.toLowerCase() !== matchTextLower) continue;
+    if (trimmed === replacementText) continue;
+    // Length guard: if the trimmed text and replacementText have different
+    // lengths the positional patch would leave characters unmodified or
+    // overshoot — skip rather than produce a partially-patched heading.
+    if (trimmed.length !== replacementText.length) continue;
 
     const tByNS = Array.from(wP.getElementsByTagNameNS(W, 't'));
     const tByTag = Array.from(wP.getElementsByTagName('w:t'));
@@ -1490,7 +1497,13 @@ function applyHeadingSentenceCaseFix(
     }
     if (allWTs.length === 0) continue;
 
+    // Number of leading whitespace characters in the full paragraph text.
+    // The patch is applied only within [trimStart, trimStart + replacementText.length).
+    const trimStart = paraText.length - paraText.trimStart().length;
+
     // Walk each run and patch only the character positions that differ.
+    // replacementPos maps a global character offset back into replacementText,
+    // so characters outside the trimmed span are left untouched.
     // This preserves run structure and per-run formatting (bold, italic, etc.).
     let pos = 0;
     for (const wT of allWTs) {
@@ -1498,9 +1511,13 @@ function applyHeadingSentenceCaseFix(
       const chars = runText.split('');
       let runModified = false;
       for (let i = 0; i < chars.length; i++) {
-        const globalPos = pos + i;
-        if (globalPos < replacementText.length && chars[i] !== replacementText[globalPos]) {
-          chars[i] = replacementText[globalPos]!;
+        const replacementPos = (pos + i) - trimStart;
+        if (
+          replacementPos >= 0 &&
+          replacementPos < replacementText.length &&
+          chars[i] !== replacementText[replacementPos]
+        ) {
+          chars[i] = replacementText[replacementPos]!;
           runModified = true;
         }
       }

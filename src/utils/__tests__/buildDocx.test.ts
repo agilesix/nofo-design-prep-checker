@@ -6679,6 +6679,50 @@ describe('buildDocx — HEAD-007: Intergovernmental Review → sentence case', (
     expect(texts[0]).toBe('Intergovernmental Review');
   });
 
+  it('corrects a heading whose single run has a leading space (xml:space="preserve")', async () => {
+    const W = W_NS_IGR;
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading3"/></w:pPr>` +
+      `<w:r><w:t xml:space="preserve"> Intergovernmental Review</w:t></w:r>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body>` +
+      `</w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', xml);
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    // The leading space is preserved; only 'R'→'r' is changed
+    expect(texts[0]).toBe(' Intergovernmental review');
+  });
+
+  it('corrects a heading whose single run has a trailing space (xml:space="preserve")', async () => {
+    const W = W_NS_IGR;
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:r><w:t xml:space="preserve">Intergovernmental Review </w:t></w:r>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body>` +
+      `</w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', xml);
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    // The trailing space is preserved; only 'R'→'r' is changed
+    expect(texts[0]).toBe('Intergovernmental review ');
+  });
+
   it('preserves run boundaries when text is split across runs with different formatting', async () => {
     // Simulate a heading where the two words are in separate runs with different
     // w:rPr (e.g. first run bold). The fix must only change 'R'→'r' in the
