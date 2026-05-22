@@ -1439,6 +1439,15 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
  * so positional alignment is guaranteed and run boundaries — along with all
  * per-run formatting (w:rPr) — are preserved exactly.
  *
+ * Both <w:p> and <w:t> elements are collected using the NS+prefixed-tag merge
+ * pattern (same as getParaText / applyHeadingLeadingSpaceFix) to handle all
+ * DOM serialisation states that different browsers and XMLSerializer passes can
+ * produce.
+ *
+ * Paragraphs whose raw text has leading or trailing whitespace are skipped:
+ * trimming changes the effective character alignment and would cause the
+ * positional patch to overwrite the wrong positions.
+ *
  * Returns true if at least one paragraph was modified.
  */
 function applyHeadingSentenceCaseFix(
@@ -1448,18 +1457,37 @@ function applyHeadingSentenceCaseFix(
   matchTextLower: string,
   replacementText: string
 ): boolean {
-  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+  const pByNS = Array.from(xmlDoc.getElementsByTagNameNS(W, 'p'));
+  const pByTag = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  const seenP = new Set<Element>();
+  const paragraphs: Element[] = [];
+  for (const el of [...pByNS, ...pByTag]) {
+    if (!seenP.has(el)) { seenP.add(el); paragraphs.push(el); }
+  }
+
   let changed = false;
 
   for (const wP of paragraphs) {
     const level = getHeadingLevel(wP);
     if (level < minLevel || level > maxLevel) continue;
 
-    const text = getParaText(wP).trim();
-    if (text.toLowerCase() !== matchTextLower) continue;
-    if (text === replacementText) continue;
+    const paraText = getParaText(wP);
+    // Paragraphs with leading/trailing whitespace are skipped: trimming the
+    // text for the case-insensitive match but then patching against the
+    // untrimmed run content would misalign the positional offsets.
+    if (paraText !== paraText.trim()) continue;
+    if (paraText.toLowerCase() !== matchTextLower) continue;
+    if (paraText === replacementText) continue;
 
-    const allWTs = Array.from(wP.getElementsByTagName('w:t'));
+    const tByNS = Array.from(wP.getElementsByTagNameNS(W, 't'));
+    const tByTag = Array.from(wP.getElementsByTagName('w:t'));
+    const seenT = new Set<Element>();
+    const allWTs: Element[] = [];
+    for (const el of [...tByNS, ...tByTag]) {
+      if (!seenT.has(el)) { seenT.add(el); allWTs.push(el); }
+    }
     if (allWTs.length === 0) continue;
 
     // Walk each run and patch only the character positions that differ.

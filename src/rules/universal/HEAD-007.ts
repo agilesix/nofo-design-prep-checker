@@ -1,9 +1,9 @@
-import type { Rule, AutoAppliedChange, ParsedDocument } from '../../types';
+import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from '../../types';
 
 const HEAD_007: Rule = {
   id: 'HEAD-007',
   autoApply: true,
-  check(doc: ParsedDocument): AutoAppliedChange[] {
+  check(doc: ParsedDocument, _options: RuleRunnerOptions): AutoAppliedChange[] {
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
     const headings = Array.from(htmlDoc.querySelectorAll('h2, h3, h4'));
