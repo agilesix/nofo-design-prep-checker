@@ -41,6 +41,7 @@ import HEAD_002 from './universal/HEAD-002';
 import HEAD_003 from './universal/HEAD-003';
 import HEAD_004 from './universal/HEAD-004';
 import HEAD_005 from './universal/HEAD-005';
+import HEAD_006 from './universal/HEAD-006';
 
 // OpDiv-specific rules
 import STRUCT_001 from './opdiv/STRUCT-001';
@@ -109,6 +110,7 @@ export const allRules: Rule[] = [
   HEAD_003,
   HEAD_004,
   HEAD_005,
+  HEAD_006,
 
   // Metadata rules
   META_001,
@@ -160,7 +162,7 @@ export const allRules: Rule[] = [
 ];
 
 export {
-  HEAD_001, HEAD_002, HEAD_003, HEAD_004, HEAD_005,
+  HEAD_001, HEAD_002, HEAD_003, HEAD_004, HEAD_005, HEAD_006,
   META_001, META_002, META_003,
   LINK_001, LINK_002, LINK_004, LINK_006, LINK_007, LINK_008, LINK_009,
   TABLE_002, TABLE_003, TABLE_004,
