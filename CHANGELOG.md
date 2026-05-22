@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Bug Fixes
+
+* **HEAD-001:** skip all capitalization checks for step-structured documents — when any H1 heading starts with "Step N:" or "Contacts" (case-insensitive), HEAD-001 exits immediately with no results, preventing incorrect H2 title-case auto-fixes and false-positive H3–H6 sentence-case suggestions in CDC/DGHT-style documents
+
 ## [1.9.1](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.9.0...v1.9.1) (2026-05-18)
 
 
