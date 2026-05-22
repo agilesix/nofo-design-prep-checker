@@ -10,7 +10,7 @@ const HEAD_007: Rule = {
 
     const matches = headings.filter(h => {
       const text = (h.textContent ?? '').trim();
-      return text.toLowerCase() === 'intergovernmental review';
+      return text.toLowerCase() === 'intergovernmental review' && text !== 'Intergovernmental review';
     });
 
     if (matches.length === 0) return [];

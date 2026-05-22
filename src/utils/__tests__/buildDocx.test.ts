@@ -6577,3 +6577,105 @@ describe('buildDocx — CLEAN-024: ACL Basic information labels', () => {
     expect(outXml).not.toContain('Agency:');
   });
 });
+
+// ─── applyIntergovernmentalReviewSentenceCaseFix (HEAD-007) ──────────────────
+
+const W_NS_IGR = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function makeIgrDocXml(headingLevel: number, runs: string[]): string {
+  const wRuns = runs
+    .map(text => `<w:r><w:t>${text}</w:t></w:r>`)
+    .join('');
+  const heading =
+    `<w:p>` +
+    `<w:pPr><w:pStyle w:val="Heading${headingLevel}"/></w:pPr>` +
+    wRuns +
+    `</w:p>`;
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_IGR}">` +
+    `<w:body>${heading}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+const IGR_CHANGE: AutoAppliedChange = {
+  ruleId: 'HEAD-007',
+  description: '"Intergovernmental Review" heading corrected to sentence case.',
+  targetField: 'heading.intergovernmentalreview.sentencecase',
+  value: '1',
+};
+
+describe('buildDocx — HEAD-007: Intergovernmental Review → sentence case', () => {
+  it('corrects "Intergovernmental Review" in an H2 single-run heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeIgrDocXml(2, ['Intergovernmental Review']));
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental review');
+  });
+
+  it('corrects "Intergovernmental Review" in an H3 single-run heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeIgrDocXml(3, ['Intergovernmental Review']));
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental review');
+  });
+
+  it('corrects "Intergovernmental Review" in an H4 single-run heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeIgrDocXml(4, ['Intergovernmental Review']));
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental review');
+  });
+
+  it('corrects a multi-run heading (text split across two w:t nodes)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeIgrDocXml(3, ['Intergovernmental ', 'Review']));
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental review');
+  });
+
+  it('corrects any capitalisation variant (all-uppercase)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeIgrDocXml(2, ['INTERGOVERNMENTAL REVIEW']));
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental review');
+  });
+
+  it('leaves an already-correct heading unchanged', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeIgrDocXml(3, ['Intergovernmental review']));
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental review');
+  });
+
+  it('does not apply when autoAppliedChanges does not include the targetField', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeIgrDocXml(2, ['Intergovernmental Review']));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental Review');
+  });
+
+  it('does not modify headings outside H2–H4 (e.g. H1)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeIgrDocXml(1, ['Intergovernmental Review']));
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental Review');
+  });
+});
