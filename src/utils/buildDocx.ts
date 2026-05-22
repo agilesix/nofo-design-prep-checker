@@ -139,6 +139,9 @@ export async function buildDocx(
   const hasAgencyPrioritiesSentenceCaseFix = autoAppliedChanges.some(
     c => c.targetField === 'heading.agencypriorities.sentencecase'
   );
+  const hasIntergovernmentalReviewSentenceCaseFix = autoAppliedChanges.some(
+    c => c.targetField === 'heading.intergovernmentalreview.sentencecase'
+  );
   const h2TitleCaseChanges = autoAppliedChanges.filter(
     c => c.targetField === 'heading.h2.titlecase' && c.value
   );
@@ -346,6 +349,11 @@ export async function buildDocx(
   // Correct "Agency Priorities" heading to sentence case
   if (hasAgencyPrioritiesSentenceCaseFix) {
     await applyAgencyPrioritiesSentenceCaseFix(zip);
+  }
+
+  // Correct "Intergovernmental Review" heading to sentence case
+  if (hasIntergovernmentalReviewSentenceCaseFix) {
+    await applyIntergovernmentalReviewSentenceCaseFix(zip);
   }
 
   // Strip content controls — unconditional, silent (documented on the Download
@@ -1419,6 +1427,111 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
   }
 }
 
+// ─── Shared: sentence-case heading fix ───────────────────────────────────────
+
+/**
+ * Scan all heading paragraphs in xmlDoc whose level is in [minLevel, maxLevel]
+ * and whose trimmed text (lowercased) equals matchTextLower, then rewrite each
+ * matching paragraph to replacementText by applying changes character-by-
+ * character across the existing <w:t> nodes. Because these sentence-case fixes
+ * only change letter case (never insert, remove, or reorder characters), the
+ * replacement string is always the same length as the trimmed paragraph text,
+ * so positional alignment is guaranteed and run boundaries — along with all
+ * per-run formatting (w:rPr) — are preserved exactly.
+ *
+ * Matching uses paraText.trim() so headings whose OOXML text has leading or
+ * trailing whitespace (e.g. xml:space="preserve" runs) are still caught. The
+ * patch is applied only within the trimmed span — characters before trimStart
+ * and after the span are left untouched — so surrounding whitespace is
+ * preserved in place.
+ *
+ * A length guard ensures replacementText is exactly as long as the trimmed
+ * paragraph text. If they differ (e.g. a caller passes the wrong string) the
+ * paragraph is skipped rather than partially patched.
+ *
+ * Both <w:p> and <w:t> elements are collected using the NS+prefixed-tag merge
+ * pattern (same as getParaText / applyHeadingLeadingSpaceFix) to handle all
+ * DOM serialisation states that different browsers and XMLSerializer passes can
+ * produce.
+ *
+ * Returns true if at least one paragraph was modified.
+ */
+function applyHeadingSentenceCaseFix(
+  xmlDoc: Document,
+  minLevel: number,
+  maxLevel: number,
+  matchTextLower: string,
+  replacementText: string
+): boolean {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+  const pByNS = Array.from(xmlDoc.getElementsByTagNameNS(W, 'p'));
+  const pByTag = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  const seenP = new Set<Element>();
+  const paragraphs: Element[] = [];
+  for (const el of [...pByNS, ...pByTag]) {
+    if (!seenP.has(el)) { seenP.add(el); paragraphs.push(el); }
+  }
+
+  let changed = false;
+
+  for (const wP of paragraphs) {
+    const level = getHeadingLevel(wP);
+    if (level < minLevel || level > maxLevel) continue;
+
+    const paraText = getParaText(wP);
+    const trimmed = paraText.trim();
+    if (trimmed.toLowerCase() !== matchTextLower) continue;
+    if (trimmed === replacementText) continue;
+    // Length guard: if the trimmed text and replacementText have different
+    // lengths the positional patch would leave characters unmodified or
+    // overshoot — skip rather than produce a partially-patched heading.
+    if (trimmed.length !== replacementText.length) continue;
+
+    const tByNS = Array.from(wP.getElementsByTagNameNS(W, 't'));
+    const tByTag = Array.from(wP.getElementsByTagName('w:t'));
+    const seenT = new Set<Element>();
+    const allWTs: Element[] = [];
+    for (const el of [...tByNS, ...tByTag]) {
+      if (!seenT.has(el)) { seenT.add(el); allWTs.push(el); }
+    }
+    if (allWTs.length === 0) continue;
+
+    // Number of leading whitespace characters in the full paragraph text.
+    // The patch is applied only within [trimStart, trimStart + replacementText.length).
+    const trimStart = paraText.length - paraText.trimStart().length;
+
+    // Walk each run and patch only the character positions that differ.
+    // replacementPos maps a global character offset back into replacementText,
+    // so characters outside the trimmed span are left untouched.
+    // This preserves run structure and per-run formatting (bold, italic, etc.).
+    let pos = 0;
+    for (const wT of allWTs) {
+      const runText = wT.textContent ?? '';
+      const chars = runText.split('');
+      let runModified = false;
+      for (let i = 0; i < chars.length; i++) {
+        const replacementPos = (pos + i) - trimStart;
+        if (
+          replacementPos >= 0 &&
+          replacementPos < replacementText.length &&
+          chars[i] !== replacementText[replacementPos]
+        ) {
+          chars[i] = replacementText[replacementPos]!;
+          runModified = true;
+        }
+      }
+      if (runModified) {
+        wT.textContent = chars.join('');
+      }
+      pos += runText.length;
+    }
+    changed = true;
+  }
+
+  return changed;
+}
+
 // ─── HEAD-006: Agency Priorities → sentence case ─────────────────────────────
 
 /**
@@ -1436,29 +1549,29 @@ async function applyAgencyPrioritiesSentenceCaseFix(zip: JSZip): Promise<void> {
   const parser = new DOMParser();
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
 
-  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
-  let changed = false;
-
-  for (const wP of paragraphs) {
-    const level = getHeadingLevel(wP);
-    if (level < 1 || level > 3) continue;
-
-    const text = getParaText(wP).trim();
-    if (text.toLowerCase() !== 'agency priorities') continue;
-    if (text === 'Agency priorities') continue;
-
-    const allWTs = Array.from(wP.getElementsByTagName('w:t'));
-    if (allWTs.length === 0) continue;
-
-    allWTs[0]!.textContent = 'Agency priorities';
-    allWTs[0]!.removeAttribute('xml:space');
-    for (let i = 1; i < allWTs.length; i++) {
-      allWTs[i]!.textContent = '';
-    }
-    changed = true;
+  if (applyHeadingSentenceCaseFix(xmlDoc, 1, 3, 'agency priorities', 'Agency priorities')) {
+    zip.file('word/document.xml', serializeXml(xmlDoc));
   }
+}
 
-  if (changed) {
+// ─── HEAD-007: Intergovernmental Review → sentence case ──────────────────────
+
+/**
+ * HEAD-007: Replace "Intergovernmental Review" (any capitalisation) with
+ * "Intergovernmental review" in H2–H4 heading paragraphs.
+ *
+ * Only matches paragraphs whose full trimmed text is exactly those two words.
+ * The heading style and all run formatting are preserved unchanged.
+ */
+async function applyIntergovernmentalReviewSentenceCaseFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  if (applyHeadingSentenceCaseFix(xmlDoc, 2, 4, 'intergovernmental review', 'Intergovernmental review')) {
     zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }

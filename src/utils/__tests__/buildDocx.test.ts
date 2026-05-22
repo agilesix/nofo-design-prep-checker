@@ -6577,3 +6577,307 @@ describe('buildDocx — CLEAN-024: ACL Basic information labels', () => {
     expect(outXml).not.toContain('Agency:');
   });
 });
+
+// ─── applyIntergovernmentalReviewSentenceCaseFix (HEAD-007) ──────────────────
+
+const W_NS_IGR = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function makeIgrDocXml(headingLevel: number, runs: string[]): string {
+  const wRuns = runs
+    .map(text => `<w:r><w:t>${text}</w:t></w:r>`)
+    .join('');
+  const heading =
+    `<w:p>` +
+    `<w:pPr><w:pStyle w:val="Heading${headingLevel}"/></w:pPr>` +
+    wRuns +
+    `</w:p>`;
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_IGR}">` +
+    `<w:body>${heading}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+const IGR_CHANGE: AutoAppliedChange = {
+  ruleId: 'HEAD-007',
+  description: '"Intergovernmental Review" heading corrected to sentence case.',
+  targetField: 'heading.intergovernmentalreview.sentencecase',
+  value: '1',
+};
+
+describe('buildDocx — HEAD-007: Intergovernmental Review → sentence case', () => {
+  it('corrects "Intergovernmental Review" in an H2 single-run heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeIgrDocXml(2, ['Intergovernmental Review']));
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental review');
+  });
+
+  it('corrects "Intergovernmental Review" in an H3 single-run heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeIgrDocXml(3, ['Intergovernmental Review']));
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental review');
+  });
+
+  it('corrects "Intergovernmental Review" in an H4 single-run heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeIgrDocXml(4, ['Intergovernmental Review']));
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental review');
+  });
+
+  it('corrects a multi-run heading (text split across two w:t nodes)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeIgrDocXml(3, ['Intergovernmental ', 'Review']));
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental review');
+  });
+
+  it('corrects any capitalisation variant (all-uppercase)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeIgrDocXml(2, ['INTERGOVERNMENTAL REVIEW']));
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental review');
+  });
+
+  it('leaves an already-correct heading unchanged', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeIgrDocXml(3, ['Intergovernmental review']));
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental review');
+  });
+
+  it('does not apply when autoAppliedChanges does not include the targetField', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeIgrDocXml(2, ['Intergovernmental Review']));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental Review');
+  });
+
+  it('does not modify headings outside H2–H4 (e.g. H1)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeIgrDocXml(1, ['Intergovernmental Review']));
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental Review');
+  });
+
+  it('corrects a heading whose single run has a leading space (xml:space="preserve")', async () => {
+    const W = W_NS_IGR;
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading3"/></w:pPr>` +
+      `<w:r><w:t xml:space="preserve"> Intergovernmental Review</w:t></w:r>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body>` +
+      `</w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', xml);
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    // The leading space is preserved; only 'R'→'r' is changed
+    expect(texts[0]).toBe(' Intergovernmental review');
+  });
+
+  it('corrects a heading whose single run has a trailing space (xml:space="preserve")', async () => {
+    const W = W_NS_IGR;
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:r><w:t xml:space="preserve">Intergovernmental Review </w:t></w:r>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body>` +
+      `</w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', xml);
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    // The trailing space is preserved; only 'R'→'r' is changed
+    expect(texts[0]).toBe('Intergovernmental review ');
+  });
+
+  it('preserves run boundaries when text is split across runs with different formatting', async () => {
+    // Simulate a heading where the two words are in separate runs with different
+    // w:rPr (e.g. first run bold). The fix must only change 'R'→'r' in the
+    // second run, leaving the first run's text and both runs' <w:rPr> intact.
+    const W = W_NS_IGR;
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading3"/></w:pPr>` +
+      `<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Intergovernmental </w:t></w:r>` +
+      `<w:r><w:rPr><w:i/></w:rPr><w:t>Review</w:t></w:r>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body>` +
+      `</w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', xml);
+
+    const outXml = await getOutputDocXml(zip, [], [IGR_CHANGE]);
+
+    // Combined text is correct
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Intergovernmental review');
+
+    // The bold run still contains only the first word (not the whole replacement)
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(outXml, 'application/xml');
+    const runs = Array.from(doc.getElementsByTagName('w:r'));
+    const boldRun = runs.find(r => r.getElementsByTagName('w:b').length > 0);
+    const italicRun = runs.find(r => r.getElementsByTagName('w:i').length > 0);
+    expect(boldRun?.getElementsByTagName('w:t')[0]?.textContent).toBe('Intergovernmental ');
+    expect(italicRun?.getElementsByTagName('w:t')[0]?.textContent).toBe('review');
+  });
+});
+
+// ─── applyAgencyPrioritiesSentenceCaseFix (HEAD-006) ─────────────────────────
+
+function makeAgencyPrioritiesDocXml(headingLevel: number, runs: string[]): string {
+  const wRuns = runs.map(text => `<w:r><w:t>${text}</w:t></w:r>`).join('');
+  const heading =
+    `<w:p>` +
+    `<w:pPr><w:pStyle w:val="Heading${headingLevel}"/></w:pPr>` +
+    wRuns +
+    `</w:p>`;
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_IGR}">` +
+    `<w:body>${heading}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+const AGENCY_PRIORITIES_CHANGE: AutoAppliedChange = {
+  ruleId: 'HEAD-006',
+  description: '"Agency Priorities" heading corrected to sentence case.',
+  targetField: 'heading.agencypriorities.sentencecase',
+  value: '1',
+};
+
+describe('buildDocx — HEAD-006: Agency Priorities → sentence case', () => {
+  it('corrects "Agency Priorities" in an H1 single-run heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAgencyPrioritiesDocXml(1, ['Agency Priorities']));
+
+    const outXml = await getOutputDocXml(zip, [], [AGENCY_PRIORITIES_CHANGE]);
+    expect(extractParagraphTexts(outXml)[0]).toBe('Agency priorities');
+  });
+
+  it('corrects "Agency Priorities" in an H2 single-run heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAgencyPrioritiesDocXml(2, ['Agency Priorities']));
+
+    const outXml = await getOutputDocXml(zip, [], [AGENCY_PRIORITIES_CHANGE]);
+    expect(extractParagraphTexts(outXml)[0]).toBe('Agency priorities');
+  });
+
+  it('corrects "Agency Priorities" in an H3 single-run heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAgencyPrioritiesDocXml(3, ['Agency Priorities']));
+
+    const outXml = await getOutputDocXml(zip, [], [AGENCY_PRIORITIES_CHANGE]);
+    expect(extractParagraphTexts(outXml)[0]).toBe('Agency priorities');
+  });
+
+  it('corrects a multi-run heading (text split across two w:t nodes)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAgencyPrioritiesDocXml(2, ['Agency ', 'Priorities']));
+
+    const outXml = await getOutputDocXml(zip, [], [AGENCY_PRIORITIES_CHANGE]);
+    expect(extractParagraphTexts(outXml)[0]).toBe('Agency priorities');
+  });
+
+  it('corrects a heading with a leading space (xml:space="preserve")', async () => {
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_IGR}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:r><w:t xml:space="preserve"> Agency Priorities</w:t></w:r>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body>` +
+      `</w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', xml);
+
+    const outXml = await getOutputDocXml(zip, [], [AGENCY_PRIORITIES_CHANGE]);
+    // Leading space preserved; only 'P'→'p' changed
+    expect(extractParagraphTexts(outXml)[0]).toBe(' Agency priorities');
+  });
+
+  it('corrects a heading with a trailing space (xml:space="preserve")', async () => {
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_IGR}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading3"/></w:pPr>` +
+      `<w:r><w:t xml:space="preserve">Agency Priorities </w:t></w:r>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body>` +
+      `</w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', xml);
+
+    const outXml = await getOutputDocXml(zip, [], [AGENCY_PRIORITIES_CHANGE]);
+    // Trailing space preserved; only 'P'→'p' changed
+    expect(extractParagraphTexts(outXml)[0]).toBe('Agency priorities ');
+  });
+
+  it('leaves an already-correct heading unchanged', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAgencyPrioritiesDocXml(2, ['Agency priorities']));
+
+    const outXml = await getOutputDocXml(zip, [], [AGENCY_PRIORITIES_CHANGE]);
+    expect(extractParagraphTexts(outXml)[0]).toBe('Agency priorities');
+  });
+
+  it('does not apply when autoAppliedChanges does not include the targetField', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAgencyPrioritiesDocXml(2, ['Agency Priorities']));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    expect(extractParagraphTexts(outXml)[0]).toBe('Agency Priorities');
+  });
+
+  it('does not modify H4 headings (outside H1–H3 range)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAgencyPrioritiesDocXml(4, ['Agency Priorities']));
+
+    const outXml = await getOutputDocXml(zip, [], [AGENCY_PRIORITIES_CHANGE]);
+    expect(extractParagraphTexts(outXml)[0]).toBe('Agency Priorities');
+  });
+});
