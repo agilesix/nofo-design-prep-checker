@@ -459,6 +459,16 @@ const HEAD_001: Rule = {
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
     const headings = Array.from(htmlDoc.querySelectorAll('h1, h2, h3, h4, h5, h6'));
 
+    // Some NOFOs use H1s as step-level headings ("Step 1: …", "Contacts").
+    // In those layouts H2s are section headings in sentence case — auto-applying
+    // title case to them is incorrect, so skip the rule entirely.
+    const usesH1StepHeadings = headings.some(h => {
+      if (h.tagName !== 'H1') return false;
+      const t = (h.textContent ?? '').trim();
+      return /^Step \d+:/.test(t) || /^contacts/i.test(t);
+    });
+    if (usesH1StepHeadings) return [];
+
     // Collect H2 sentence-case corrections; a single AutoAppliedChange is
     // emitted after the loop so the count in the description is accurate.
     const h2Corrections: { old: string; new: string }[] = [];
