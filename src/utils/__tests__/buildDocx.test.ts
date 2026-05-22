@@ -6759,3 +6759,125 @@ describe('buildDocx — HEAD-007: Intergovernmental Review → sentence case', (
     expect(italicRun?.getElementsByTagName('w:t')[0]?.textContent).toBe('review');
   });
 });
+
+// ─── applyAgencyPrioritiesSentenceCaseFix (HEAD-006) ─────────────────────────
+
+function makeAgencyPrioritiesDocXml(headingLevel: number, runs: string[]): string {
+  const wRuns = runs.map(text => `<w:r><w:t>${text}</w:t></w:r>`).join('');
+  const heading =
+    `<w:p>` +
+    `<w:pPr><w:pStyle w:val="Heading${headingLevel}"/></w:pPr>` +
+    wRuns +
+    `</w:p>`;
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_IGR}">` +
+    `<w:body>${heading}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+const AGENCY_PRIORITIES_CHANGE: AutoAppliedChange = {
+  ruleId: 'HEAD-006',
+  description: '"Agency Priorities" heading corrected to sentence case.',
+  targetField: 'heading.agencypriorities.sentencecase',
+  value: '1',
+};
+
+describe('buildDocx — HEAD-006: Agency Priorities → sentence case', () => {
+  it('corrects "Agency Priorities" in an H1 single-run heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAgencyPrioritiesDocXml(1, ['Agency Priorities']));
+
+    const outXml = await getOutputDocXml(zip, [], [AGENCY_PRIORITIES_CHANGE]);
+    expect(extractParagraphTexts(outXml)[0]).toBe('Agency priorities');
+  });
+
+  it('corrects "Agency Priorities" in an H2 single-run heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAgencyPrioritiesDocXml(2, ['Agency Priorities']));
+
+    const outXml = await getOutputDocXml(zip, [], [AGENCY_PRIORITIES_CHANGE]);
+    expect(extractParagraphTexts(outXml)[0]).toBe('Agency priorities');
+  });
+
+  it('corrects "Agency Priorities" in an H3 single-run heading', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAgencyPrioritiesDocXml(3, ['Agency Priorities']));
+
+    const outXml = await getOutputDocXml(zip, [], [AGENCY_PRIORITIES_CHANGE]);
+    expect(extractParagraphTexts(outXml)[0]).toBe('Agency priorities');
+  });
+
+  it('corrects a multi-run heading (text split across two w:t nodes)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAgencyPrioritiesDocXml(2, ['Agency ', 'Priorities']));
+
+    const outXml = await getOutputDocXml(zip, [], [AGENCY_PRIORITIES_CHANGE]);
+    expect(extractParagraphTexts(outXml)[0]).toBe('Agency priorities');
+  });
+
+  it('corrects a heading with a leading space (xml:space="preserve")', async () => {
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_IGR}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:r><w:t xml:space="preserve"> Agency Priorities</w:t></w:r>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body>` +
+      `</w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', xml);
+
+    const outXml = await getOutputDocXml(zip, [], [AGENCY_PRIORITIES_CHANGE]);
+    // Leading space preserved; only 'P'→'p' changed
+    expect(extractParagraphTexts(outXml)[0]).toBe(' Agency priorities');
+  });
+
+  it('corrects a heading with a trailing space (xml:space="preserve")', async () => {
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_IGR}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading3"/></w:pPr>` +
+      `<w:r><w:t xml:space="preserve">Agency Priorities </w:t></w:r>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body>` +
+      `</w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', xml);
+
+    const outXml = await getOutputDocXml(zip, [], [AGENCY_PRIORITIES_CHANGE]);
+    // Trailing space preserved; only 'P'→'p' changed
+    expect(extractParagraphTexts(outXml)[0]).toBe('Agency priorities ');
+  });
+
+  it('leaves an already-correct heading unchanged', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAgencyPrioritiesDocXml(2, ['Agency priorities']));
+
+    const outXml = await getOutputDocXml(zip, [], [AGENCY_PRIORITIES_CHANGE]);
+    expect(extractParagraphTexts(outXml)[0]).toBe('Agency priorities');
+  });
+
+  it('does not apply when autoAppliedChanges does not include the targetField', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAgencyPrioritiesDocXml(2, ['Agency Priorities']));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+    expect(extractParagraphTexts(outXml)[0]).toBe('Agency Priorities');
+  });
+
+  it('does not modify H4 headings (outside H1–H3 range)', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeAgencyPrioritiesDocXml(4, ['Agency Priorities']));
+
+    const outXml = await getOutputDocXml(zip, [], [AGENCY_PRIORITIES_CHANGE]);
+    expect(extractParagraphTexts(outXml)[0]).toBe('Agency Priorities');
+  });
+});
