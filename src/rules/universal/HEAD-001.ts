@@ -29,6 +29,15 @@ import { DESIGNATOR_RE, isComponentLabel } from '../../constants';
  *     phrase "CDC-funded" (case-insensitive) are exempt from the general capitalization
  *     check — these reference the agency name by convention. The "Form" capitalization
  *     check still applies.
+ *   • Step-structured documents — if the document contains any H1 heading whose text
+ *     starts with "Step N:" (e.g. "Step 1: Review the Opportunity", where N is one or
+ *     more decimal digits and a colon is required) or starts with "contacts"
+ *     (case-insensitive, e.g. "Contacts and Support"), all HEAD-001 checks are skipped
+ *     entirely for the document: no H2 auto-fix, no H3–H6 sentence-case suggestions,
+ *     and no capitalized "Form" suggestion. These documents follow CDC/DGHT heading
+ *     conventions where H2s are intentionally sentence-cased section headings;
+ *     applying SimplerNOFOs title-case rules would produce incorrect auto-fixes.
+ *     See isStepStructuredDocument.
  *   • First word of the heading (always capitalised in both styles).
  *   • First word after a colon or em dash (—) within the heading (sentence restart).
  *   • Minor words: articles (a/an/the), short prepositions, conjunctions.
@@ -300,6 +309,31 @@ function isCdcException(text: string): boolean {
 }
 
 /**
+ * Returns true when the document appears to be a step-structured CDC/DGHT
+ * template. The heuristic: the document contains at least one H1 element
+ * whose text matches one of:
+ *   • /^Step \d+:/ — "Step N:" prefix (capital S, space, one-or-more digits,
+ *     colon). E.g. "Step 1: Review the Opportunity".
+ *   • /^contacts/i — starts with "contacts" (case-insensitive).
+ *     E.g. "Contacts and Support".
+ *
+ * When this returns true, HEAD-001's check() exits immediately with an empty
+ * result array. Step-structured documents use CDC/DGHT heading conventions
+ * where H2s are sentence-cased section headings; applying SimplerNOFOs
+ * title-case auto-fix would produce incorrect results.
+ *
+ * The step pattern is intentionally strict (capital S, literal digits, colon)
+ * to avoid false positives on normal H1 NOFO titles.
+ */
+function isStepStructuredDocument(headings: Element[]): boolean {
+  return headings.some(h => {
+    if (h.tagName !== 'H1') return false;
+    const t = (h.textContent ?? '').trim();
+    return /^Step \d+:/.test(t) || /^contacts/i.test(t);
+  });
+}
+
+/**
  * Returns the set of word-array indices covered by a recognized Native American
  * or Indigenous proper-noun term per IHS style guide and federal usage
  * conventions. looksLikeTitleCase skips these positions so their
@@ -458,6 +492,11 @@ const HEAD_001: Rule = {
     const parser = new DOMParser();
     const htmlDoc = parser.parseFromString(doc.html, 'text/html');
     const headings = Array.from(htmlDoc.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+
+    // Step-structured documents (CDC/DGHT) use H1s as step/contacts headings.
+    // H2s in those layouts are sentence-cased section headings, so applying
+    // SimplerNOFOs title-case rules would produce incorrect auto-fixes.
+    if (isStepStructuredDocument(headings)) return [];
 
     // Collect H2 sentence-case corrections; a single AutoAppliedChange is
     // emitted after the loop so the count in the description is accurate.

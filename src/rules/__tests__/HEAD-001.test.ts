@@ -882,3 +882,105 @@ describe('HEAD-001: proper noun phrases followed by a parenthetical acronym are 
     expect(issues).toHaveLength(1);
   });
 });
+
+// ─── Step-structured document early-exit ─────────────────────────────────────
+
+describe('HEAD-001: step-structured and contacts-H1 documents are skipped entirely', () => {
+  it('returns no results for a "Step N:" H1 document even when an H2 would normally be auto-fixed', () => {
+    // "Step 1: Review the Opportunity" triggers the early-exit; the H2 in
+    // sentence case would ordinarily produce an AutoAppliedChange but does not.
+    const doc = makeDoc(
+      '<h1>Step 1: Review the Opportunity</h1>' +
+      '<h2>program description information</h2>'
+    );
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('returns no results for a "Contacts…" H1 document even when an H2 would normally be auto-fixed', () => {
+    const doc = makeDoc(
+      '<h1>Contacts and Support</h1>' +
+      '<h2>program description information</h2>'
+    );
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('also suppresses the H3–H6 title-case suggestion when a step H1 is present', () => {
+    const doc = makeDoc(
+      '<h1>Step 2: Prepare the Application</h1>' +
+      '<h3>Contact and Support Information</h3>'
+    );
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('also suppresses the capitalized "Form" suggestion when a step H1 is present', () => {
+    // The Form check (applied inside the heading loop) is never reached because
+    // the early-exit fires before the loop begins.
+    const doc = makeDoc(
+      '<h1>Step 1: Review the Opportunity</h1>' +
+      '<h3>SF-424 Application Form instructions</h3>'
+    );
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('returns no results for a document with multiple step H1s', () => {
+    const doc = makeDoc(
+      '<h1>Step 1: Review the Opportunity</h1>' +
+      '<h1>Step 2: Prepare the Application</h1>' +
+      '<h1>Step 3: Submit the Application</h1>' +
+      '<h2>program description information</h2>' +
+      '<h3>Contact and Support Information</h3>'
+    );
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('matches the contacts pattern case-insensitively (e.g. "CONTACTS AND SUPPORT")', () => {
+    const doc = makeDoc(
+      '<h1>CONTACTS AND SUPPORT</h1>' +
+      '<h2>program description information</h2>'
+    );
+    expect(HEAD_001.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('does NOT suppress when the H1 uses a lowercase "step"', () => {
+    // The step pattern requires a capital "S"; "step 1: …" does not match and
+    // the early exit does not fire — the H2 is still auto-fixed normally.
+    const doc = makeDoc(
+      '<h1>step 1: review the opportunity</h1>' +
+      '<h2>program description information</h2>'
+    );
+    const results = HEAD_001.check(doc, OPTIONS);
+    expect(results.some(r => (r as AutoAppliedChange).targetField === 'heading.h2.titlecase')).toBe(true);
+  });
+
+  it('does NOT suppress when the step H1 has no colon after the digit', () => {
+    // "Step 1 Overview" is missing the colon required by /^Step \d+:/ and
+    // therefore does not trigger the early exit.
+    const doc = makeDoc(
+      '<h1>Step 1 Overview</h1>' +
+      '<h2>program description information</h2>'
+    );
+    const results = HEAD_001.check(doc, OPTIONS);
+    expect(results.some(r => (r as AutoAppliedChange).targetField === 'heading.h2.titlecase')).toBe(true);
+  });
+
+  it('does NOT suppress when only a singular "Contact" H1 is present', () => {
+    // The contacts pattern matches "contacts" (starts-with, plural).
+    // "Contact Information" begins with "Contact" not "Contacts" and does not trigger.
+    const doc = makeDoc(
+      '<h1>Contact Information</h1>' +
+      '<h2>program description information</h2>'
+    );
+    const results = HEAD_001.check(doc, OPTIONS);
+    expect(results.some(r => (r as AutoAppliedChange).targetField === 'heading.h2.titlecase')).toBe(true);
+  });
+
+  it('does NOT suppress for a normal NOFO-title H1 alongside an H2 that needs fixing', () => {
+    // A standard NOFO title as H1 does not match either pattern.
+    const doc = makeDoc(
+      '<h1>Funding Opportunity Announcement for Rural Health Programs</h1>' +
+      '<h2>program description information</h2>'
+    );
+    const results = HEAD_001.check(doc, OPTIONS);
+    expect(results.some(r => (r as AutoAppliedChange).targetField === 'heading.h2.titlecase')).toBe(true);
+  });
+});
