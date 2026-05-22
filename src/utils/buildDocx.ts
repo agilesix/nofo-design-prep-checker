@@ -139,6 +139,9 @@ export async function buildDocx(
   const hasAgencyPrioritiesSentenceCaseFix = autoAppliedChanges.some(
     c => c.targetField === 'heading.agencypriorities.sentencecase'
   );
+  const hasIntergovernmentalReviewSentenceCaseFix = autoAppliedChanges.some(
+    c => c.targetField === 'heading.intergovernmentalreview.sentencecase'
+  );
   const h2TitleCaseChanges = autoAppliedChanges.filter(
     c => c.targetField === 'heading.h2.titlecase' && c.value
   );
@@ -346,6 +349,11 @@ export async function buildDocx(
   // Correct "Agency Priorities" heading to sentence case
   if (hasAgencyPrioritiesSentenceCaseFix) {
     await applyAgencyPrioritiesSentenceCaseFix(zip);
+  }
+
+  // Correct "Intergovernmental Review" heading to sentence case
+  if (hasIntergovernmentalReviewSentenceCaseFix) {
+    await applyIntergovernmentalReviewSentenceCaseFix(zip);
   }
 
   // Strip content controls — unconditional, silent (documented on the Download
@@ -1451,6 +1459,50 @@ async function applyAgencyPrioritiesSentenceCaseFix(zip: JSZip): Promise<void> {
     if (allWTs.length === 0) continue;
 
     allWTs[0]!.textContent = 'Agency priorities';
+    allWTs[0]!.removeAttribute('xml:space');
+    for (let i = 1; i < allWTs.length; i++) {
+      allWTs[i]!.textContent = '';
+    }
+    changed = true;
+  }
+
+  if (changed) {
+    zip.file('word/document.xml', serializeXml(xmlDoc));
+  }
+}
+
+// ─── HEAD-007: Intergovernmental Review → sentence case ──────────────────────
+
+/**
+ * HEAD-007: Replace "Intergovernmental Review" (any capitalisation) with
+ * "Intergovernmental review" in H2–H4 heading paragraphs.
+ *
+ * Only matches paragraphs whose full trimmed text is exactly those two words.
+ * The heading style and all run formatting are preserved unchanged.
+ */
+async function applyIntergovernmentalReviewSentenceCaseFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  let changed = false;
+
+  for (const wP of paragraphs) {
+    const level = getHeadingLevel(wP);
+    if (level < 2 || level > 4) continue;
+
+    const text = getParaText(wP).trim();
+    if (text.toLowerCase() !== 'intergovernmental review') continue;
+    if (text === 'Intergovernmental review') continue;
+
+    const allWTs = Array.from(wP.getElementsByTagName('w:t'));
+    if (allWTs.length === 0) continue;
+
+    allWTs[0]!.textContent = 'Intergovernmental review';
     allWTs[0]!.removeAttribute('xml:space');
     for (let i = 1; i < allWTs.length; i++) {
       allWTs[i]!.textContent = '';
