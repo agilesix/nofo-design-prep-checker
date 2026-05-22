@@ -36,7 +36,6 @@ import CLEAN_018 from './universal/CLEAN-018';
 import CLEAN_019 from './universal/CLEAN-019';
 import ATTACH_001 from './universal/ATTACH-001';
 import ATTACH_002 from './universal/ATTACH-002';
-import HEAD_001 from './universal/HEAD-001';
 import HEAD_002 from './universal/HEAD-002';
 import HEAD_003 from './universal/HEAD-003';
 import HEAD_004 from './universal/HEAD-004';
@@ -105,7 +104,6 @@ export const allRules: Rule[] = [
   FORMAT_003,
 
   // Heading rules
-  HEAD_001,
   HEAD_002,
   HEAD_003,
   HEAD_004,
@@ -162,7 +160,7 @@ export const allRules: Rule[] = [
 ];
 
 export {
-  HEAD_001, HEAD_002, HEAD_003, HEAD_004, HEAD_005, HEAD_006,
+  HEAD_002, HEAD_003, HEAD_004, HEAD_005, HEAD_006,
   META_001, META_002, META_003,
   LINK_001, LINK_002, LINK_004, LINK_006, LINK_007, LINK_008, LINK_009,
   TABLE_002, TABLE_003, TABLE_004,

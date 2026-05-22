@@ -139,9 +139,6 @@ export async function buildDocx(
   const hasAgencyPrioritiesSentenceCaseFix = autoAppliedChanges.some(
     c => c.targetField === 'heading.agencypriorities.sentencecase'
   );
-  const h2TitleCaseChanges = autoAppliedChanges.filter(
-    c => c.targetField === 'heading.h2.titlecase' && c.value
-  );
   const headingLevelFixes = acceptedFixes.filter(
     f => f.targetField?.startsWith('heading.level.H') && !!f.value
   );
@@ -240,12 +237,6 @@ export async function buildDocx(
   // Apply heading leading-space removal
   if (hasHeadingLeadingSpaceFix) {
     await applyHeadingLeadingSpaceFix(zip);
-  }
-
-  // Apply H2 title-case corrections (runs after leading-space fix so OOXML
-  // text matches the HTML-derived keys stored in the change value)
-  if (h2TitleCaseChanges.length > 0) {
-    await applyH2TitleCaseFix(zip, h2TitleCaseChanges);
   }
 
   // Accept tracked changes and remove comments
@@ -1229,8 +1220,6 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
   }
 }
 
-// ─── HEAD-001: H2 title-case auto-fix ────────────────────────────────────────
-
 /**
  * Return the numeric heading level of a <w:p> element (1–6), or 0 if the
  * paragraph is not a heading or uses a level outside the 1–6 range (e.g.
@@ -1257,166 +1246,6 @@ function getHeadingLevel(wP: Element): number {
   if (!m) return 0;
   const level = parseInt(m[1]!, 10);
   return level >= 1 && level <= 6 ? level : 0;
-}
-
-/**
- * HEAD-001: Retarget H2 heading paragraphs that were detected as sentence case
- * to the corrected title-case text.
- *
- * Each AutoAppliedChange carries a JSON-encoded array of {old, new} pairs.
- * For each Heading 2 paragraph whose concatenated text matches an "old" value,
- * the correction is applied character-by-character across the paragraph's
- * <w:t> runs. Because title case only uppercases some letters (never inserts,
- * removes, or reorders characters), the character positions are preserved
- * exactly — a simple positional diff is sufficient.
- */
-async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Promise<void> {
-  const docFile = zip.file('word/document.xml');
-  if (!docFile) return;
-
-  const xmlStr = await docFile.async('string');
-  const parser = new DOMParser();
-  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
-  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-
-  // Build old → new lookup from all change entries
-  const fixMap = new Map<string, string>();
-  for (const change of changes) {
-    try {
-      const parsed = JSON.parse(change.value!);
-      if (!Array.isArray(parsed)) continue;
-      for (const pair of parsed) {
-        if (
-          pair !== null &&
-          typeof pair === 'object' &&
-          typeof pair.old === 'string' &&
-          typeof pair.new === 'string'
-        ) {
-          fixMap.set(pair.old, pair.new);
-        }
-      }
-    } catch {
-      // Malformed JSON — skip entry so the rest of the download still succeeds
-      continue;
-    }
-  }
-  if (fixMap.size === 0) return;
-
-  const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
-  let changed = false;
-  const anchorRemap = new Map<string, string>();
-
-  for (const wP of paragraphs) {
-    if (getHeadingLevel(wP) !== 2) continue;
-
-    const paraText = getParaText(wP);
-    const corrected = fixMap.get(paraText);
-    if (!corrected || corrected === paraText) continue;
-
-    const wTElements = Array.from(wP.getElementsByTagName('w:t'));
-    if (wTElements.length === 0) continue;
-
-    const newSlug = slugifyHeading(corrected);
-    for (const bm of Array.from(wP.getElementsByTagName('w:bookmarkStart'))) {
-      const nameAttr =
-        bm.hasAttribute('w:name')
-          ? 'w:name'
-          : bm.hasAttributeNS(W, 'name')
-            ? 'ns:name'
-            : bm.hasAttribute('name')
-              ? 'name'
-              : null;
-      const oldName =
-        bm.getAttribute('w:name') ??
-        bm.getAttributeNS(W, 'name') ??
-        bm.getAttribute('name');
-      if (!oldName || oldName === newSlug) continue;
-
-      anchorRemap.set(oldName, newSlug);
-      if (nameAttr === 'w:name') {
-        bm.setAttribute('w:name', newSlug);
-      } else if (nameAttr === 'ns:name') {
-        bm.setAttributeNS(W, 'w:name', newSlug);
-      } else if (nameAttr === 'name') {
-        bm.setAttribute('name', newSlug);
-      }
-    }
-
-    if (corrected.length !== paraText.length) {
-      // Fall back to a full-run replacement when the corrected text no longer
-      // aligns positionally with the original paragraph text. Preserve the
-      // existing run structure by filling each run with a sequential slice of
-      // the corrected text and placing any remainder in the last run.
-      let remaining = corrected;
-      for (let i = 0; i < wTElements.length; i++) {
-        const wT = wTElements[i];
-        if (!wT) continue;
-        const originalText = wT.textContent ?? '';
-        const isLastRun = i === wTElements.length - 1;
-        const nextText = isLastRun
-          ? remaining
-          : remaining.slice(0, originalText.length);
-        wT.textContent = nextText;
-        remaining = isLastRun ? '' : remaining.slice(originalText.length);
-      }
-      changed = true;
-      continue;
-    }
-
-    // Apply character-by-character case changes across <w:t> elements.
-    // Title case only changes some lowercase letters to uppercase, so every
-    // character position in corrected[] aligns with the same position in
-    // the original paraText. We walk each run and patch diverging positions.
-    let pos = 0;
-    for (const wT of wTElements) {
-      if (!wT) continue;
-      const text = wT.textContent ?? '';
-      const chars = text.split('');
-      let runModified = false;
-      for (let i = 0; i < chars.length; i++) {
-        const globalPos = pos + i;
-        if (globalPos < corrected.length && chars[i] !== corrected[globalPos]) {
-          chars[i] = corrected[globalPos]!;
-          runModified = true;
-        }
-      }
-      if (runModified) {
-        wT.textContent = chars.join('');
-      }
-      pos += text.length;
-    }
-    changed = true;
-  }
-
-  if (anchorRemap.size > 0) {
-    const allHyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
-    for (const link of allHyperlinks) {
-      const anchor =
-        link.getAttribute('w:anchor') ??
-        link.getAttributeNS(W, 'anchor') ??
-        link.getAttribute('anchor');
-      if (anchor && anchorRemap.has(anchor)) {
-        link.removeAttribute('anchor');
-        link.setAttributeNS(W, 'w:anchor', anchorRemap.get(anchor)!);
-      }
-    }
-
-    const allBookmarks = Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'));
-    for (const bm of allBookmarks) {
-      const name =
-        bm.getAttribute('w:name') ??
-        bm.getAttributeNS(W, 'name') ??
-        bm.getAttribute('name');
-      if (name && anchorRemap.has(name)) {
-        bm.removeAttribute('name');
-        bm.setAttributeNS(W, 'w:name', anchorRemap.get(name)!);
-      }
-    }
-  }
-
-  if (changed) {
-    zip.file('word/document.xml', serializeXml(xmlDoc));
-  }
 }
 
 // ─── HEAD-006: Agency Priorities → sentence case ─────────────────────────────

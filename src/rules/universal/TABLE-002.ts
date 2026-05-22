@@ -182,8 +182,7 @@ function looksLikeTitleOrAllCaps(text: string): boolean {
 
   // Words immediately following a ':'-terminated token are sentence restarts
   // (e.g. "Appendix A: Eligibility requirements" — "Eligibility" is exempt
-  // because "A:" triggers a restart). Mirrors the colon-restart logic in
-  // HEAD-001's sentenceStartIndices.
+  // because "A:" triggers a restart).
   const colonRestarts = new Set<number>();
   for (let k = 0; k < allWords.length - 1; k++) {
     if ((allWords[k] ?? '').endsWith(':')) colonRestarts.add(k + 1);

@@ -4,6 +4,16 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
+## 2026-05-22 — HEAD-001 removed: H2 heading capitalization rule deleted
+
+**Decision:** The HEAD-001 rule and its associated auto-fix (`applyH2TitleCaseFix` in `buildDocx.ts`) have been removed entirely from the codebase.
+
+**Reason:** HEAD-001 auto-applied title case to H2 headings whenever sentence case was detected. However, some NOFOs use multiple H1s as step-level headings — in those documents, H2s function as sub-headings within a step and should use sentence case, not title case. The rule was firing incorrectly more often than correctly in those documents, producing silently wrong output. NOFO Builder handles heading capitalization conversion for those documents, so the rule was redundant at best and harmful at worst. Removing it eliminates a class of silent incorrect auto-fixes.
+
+**Scope of removal:** `src/rules/universal/HEAD-001.ts`, `src/rules/__tests__/HEAD-001.test.ts`, the import and registration in `src/rules/index.ts`, the `applyH2TitleCaseFix` function and `h2TitleCaseChanges` filter in `src/utils/buildDocx.ts`, the associated buildDocx tests, the HEAD-001 row in `docs/rules.md`, and comment references in `src/constants.ts` and `src/rules/universal/TABLE-002.ts`. The `getHeadingLevel` helper in `buildDocx.ts` was retained as it is used by many other fix paths.
+
+---
+
 ## 2026-04-29 — HEAD-004 and HEAD-005: two separate heading-length rules with suppression
 
 **Decision:** Two separate rules handle heading length: HEAD-004 (heading may be too long, 10+ words or 80+ chars) and HEAD-005 (heading may be misformatted normal text, 20+ words or 150+ chars). HEAD-005 suppresses HEAD-004 on the same heading. Any heading exceeding HEAD-005's thresholds is excluded from HEAD-004 even if HEAD-005 does not fire (e.g. headings ending with a colon).

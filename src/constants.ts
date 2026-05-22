@@ -8,7 +8,7 @@ export const RULES_REFERENCE_URL =
  * is a proper label (e.g. "Component A", "Phase II", "Figure 10") whose
  * capitalization is intentional.
  *
- * Shared by HEAD-001 (sentence-case exemption) and TABLE-002 (caption title-case
+ * Shared by TABLE-002 (caption title-case
  * check) so the two rules cannot diverge.
  */
 export const COMPONENT_LABEL_WORDS = [
