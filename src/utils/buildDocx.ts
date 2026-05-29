@@ -649,29 +649,35 @@ async function updateRelsInternalAnchorTargets(
 ): Promise<void> {
   if (anchorRemap.size === 0) return;
 
-  const relsPath = 'word/_rels/document.xml.rels';
-  const relsFile = zip.file(relsPath);
-  if (!relsFile) return;
-
-  const relsStr = await relsFile.async('string');
-  const relsParser = new DOMParser();
-  const relsXmlDoc = relsParser.parseFromString(relsStr, 'application/xml');
   const RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+  const relsParser = new DOMParser();
 
-  let changed = false;
-  for (const rel of Array.from(relsXmlDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'))) {
-    const target = rel.getAttribute('Target') ?? '';
-    if (!target.startsWith('#')) continue;
-    const fragment = target.slice(1);
-    const newFragment = anchorRemap.get(fragment);
-    if (newFragment !== undefined) {
-      rel.setAttribute('Target', '#' + newFragment);
-      changed = true;
+  const relsPaths = Object.keys(zip.files).filter(
+    p => p.startsWith('word/_rels/') && p.endsWith('.rels')
+  );
+
+  for (const relsFilePath of relsPaths) {
+    const relsFile = zip.file(relsFilePath);
+    if (!relsFile) continue;
+
+    const relsStr = await relsFile.async('string');
+    const relsXmlDoc = relsParser.parseFromString(relsStr, 'application/xml');
+
+    let changed = false;
+    for (const rel of Array.from(relsXmlDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'))) {
+      const target = rel.getAttribute('Target') ?? '';
+      if (!target.startsWith('#')) continue;
+      const fragment = target.slice(1);
+      const newFragment = anchorRemap.get(fragment);
+      if (newFragment !== undefined && newFragment !== fragment) {
+        rel.setAttribute('Target', '#' + newFragment);
+        changed = true;
+      }
     }
-  }
 
-  if (changed) {
-    zip.file(relsPath, serializeXml(relsXmlDoc), { compression: 'STORE' });
+    if (changed) {
+      zip.file(relsFilePath, serializeXml(relsXmlDoc), { compression: 'STORE' });
+    }
   }
 }
 
