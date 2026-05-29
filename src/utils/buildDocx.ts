@@ -630,7 +630,7 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
 }
 
 /**
- * Update r:id-based internal hyperlink targets in word/_rels/document.xml.rels
+ * Update r:id-based internal hyperlink targets in `word/_rels/*.rels` (e.g. document.xml.rels, header/footer rels)
  * to reflect bookmark renames encoded in anchorRemap.
  *
  * For each <Relationship> whose Target starts with '#' and whose fragment
