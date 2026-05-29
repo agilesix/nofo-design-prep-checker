@@ -14,7 +14,7 @@ This file logs significant decisions made during the development of the NOFO Des
 
 **Reason — smoke test did not reproduce the bug:** The Vietnam JG-26-0114 NOFO has no headings with leading spaces (CLEAN-008 does not trigger) and no r:id-based internal hyperlinks (all 77 rels entries are external links or non-hyperlink parts). Neither condition for the bug was present. The two regression tests added to `buildDocx.test.ts` are the canonical proof.
 
-**Key principle:** Any future code that renames a bookmark must update all three locations in lock-step: `w:bookmarkStart w:name` (the bookmark definition), `w:hyperlink w:anchor` (inline-anchor hyperlinks), and `Target="#..."` entries in `word/_rels/document.xml.rels` (r:id-based hyperlinks). Missing any one of the three produces broken links in Word.
+**Key principle:** Any future code that renames a bookmark must update all three locations in lock-step: `w:bookmarkStart w:name` (the bookmark definition), `w:hyperlink w:anchor` (inline-anchor hyperlinks), and `Target="#..."` entries in the appropriate `word/_rels/<part>.rels` file(s) (r:id-based hyperlinks). Missing any one of the three produces broken links in Word.
 
 **Outcome:** Internal hyperlinks created via Word's Insert → Link → This Document dialog survive bookmark renames applied by any auto-fix in the download pipeline.
 
