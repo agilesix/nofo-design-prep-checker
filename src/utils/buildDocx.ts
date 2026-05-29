@@ -654,12 +654,12 @@ async function updateRelsInternalAnchorTargets(
   if (!relsFile) return;
 
   const relsStr = await relsFile.async('string');
-  const parser = new DOMParser();
-  const relsDoc = parser.parseFromString(relsStr, 'application/xml');
+  const relsParser = new DOMParser();
+  const relsXmlDoc = relsParser.parseFromString(relsStr, 'application/xml');
   const RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 
   let changed = false;
-  for (const rel of Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'))) {
+  for (const rel of Array.from(relsXmlDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'))) {
     const target = rel.getAttribute('Target') ?? '';
     if (!target.startsWith('#')) continue;
     const fragment = target.slice(1);
@@ -671,7 +671,7 @@ async function updateRelsInternalAnchorTargets(
   }
 
   if (changed) {
-    zip.file(relsPath, serializeXml(relsDoc), { compression: 'STORE' });
+    zip.file(relsPath, serializeXml(relsXmlDoc), { compression: 'STORE' });
   }
 }
 
