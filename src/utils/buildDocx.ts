@@ -657,21 +657,34 @@ async function updateRelsInternalAnchorTargets(
   const parser = new DOMParser();
   const relsDoc = parser.parseFromString(relsStr, 'application/xml');
   const RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+  const parser = new DOMParser();
 
-  let changed = false;
-  for (const rel of Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'))) {
-    const target = rel.getAttribute('Target') ?? '';
-    if (!target.startsWith('#')) continue;
-    const fragment = target.slice(1);
-    const newFragment = anchorRemap.get(fragment);
-    if (newFragment !== undefined) {
-      rel.setAttribute('Target', '#' + newFragment);
-      changed = true;
+  const relsPaths = Object.keys(zip.files).filter(
+    p => p.startsWith('word/_rels/') && p.endsWith('.rels')
+  );
+
+  for (const relsPath of relsPaths) {
+    const relsFile = zip.file(relsPath);
+    if (!relsFile) continue;
+
+    const relsStr = await relsFile.async('string');
+    const relsDoc = parser.parseFromString(relsStr, 'application/xml');
+
+    let changed = false;
+    for (const rel of Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'))) {
+      const target = rel.getAttribute('Target') ?? '';
+      if (!target.startsWith('#')) continue;
+      const fragment = target.slice(1);
+      const newFragment = anchorRemap.get(fragment);
+      if (newFragment !== undefined && newFragment !== fragment) {
+        rel.setAttribute('Target', '#' + newFragment);
+        changed = true;
+      }
     }
-  }
 
-  if (changed) {
-    zip.file(relsPath, serializeXml(relsDoc), { compression: 'STORE' });
+    if (changed) {
+      zip.file(relsPath, serializeXml(relsDoc), { compression: 'STORE' });
+    }
   }
 }
 
