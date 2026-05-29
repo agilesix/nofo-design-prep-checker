@@ -604,7 +604,10 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
       if (normalizedNewAnchor) {
         const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
         for (const el of hyperlinks) {
-          const elAnchor = el.getAttribute('w:anchor') ?? el.getAttributeNS(W, 'anchor');
+          const elAnchor =
+            el.getAttribute('w:anchor') ??
+            el.getAttributeNS(W, 'anchor') ??
+            el.getAttribute('anchor');
           if (elAnchor === oldAnchor) {
             el.removeAttributeNS(W, 'anchor');
             el.removeAttributeNS(null, 'anchor');

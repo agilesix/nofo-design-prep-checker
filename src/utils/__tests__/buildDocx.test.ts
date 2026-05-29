@@ -3332,6 +3332,43 @@ describe('buildDocx — LINK-006 auto-applied bookmark retargets', () => {
     expect(xml).not.toContain('w:anchor="Other"');
   });
 
+  it('retargets a hyperlink whose w: prefix was stripped to a bare anchor= attribute', async () => {
+    // After a prior XMLSerializer pass the attribute may appear as anchor="_Eligibility"
+    // (no namespace prefix) rather than w:anchor="...".  getAttribute('w:anchor') and
+    // getAttributeNS(W, 'anchor') both return null in that state, so the third fallback
+    // getAttribute('anchor') is needed to match and retarget the link.
+    const W_NS_L6 = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_L6}">` +
+      `<w:body>` +
+      `<w:p>` +
+      // Bare anchor= attribute — no namespace prefix
+      `<w:hyperlink anchor="_Eligibility" w:history="1">` +
+      `<w:r><w:t>See eligibility</w:t></w:r>` +
+      `</w:hyperlink>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body></w:document>`
+    );
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Retargeted internal link "#_Eligibility" → "#Eligibility"',
+      targetField: 'link.bookmark._Eligibility',
+      value: 'Eligibility',
+    };
+
+    const xml = await getOutputDocXml(zip, [], [change]);
+    // Retarget must succeed despite the missing namespace prefix
+    expect(xml).toContain('w:anchor="Eligibility"');
+    expect(xml).not.toContain('w:anchor="_Eligibility"');
+    // No stale bare anchor= attribute should remain
+    expect(xml).not.toMatch(/(?<![:\w])anchor="_Eligibility"/);
+  });
+
   it('does not modify w:bookmarkStart w:name when only the hyperlink anchor changes', async () => {
     const zip = new JSZip();
     zip.file(
