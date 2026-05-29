@@ -862,6 +862,89 @@ describe('buildDocx — CLEAN-008: heading leading-space removal', () => {
     // Heading must be clean.
     expect(extractParagraphTexts(outXml)[0]).toBe('Contacts and Support');
   });
+
+  it('updates Target="#old_name" in _rels/document.xml.rels for r:id-based internal links', async () => {
+    // Real Word documents often store internal hyperlinks as r:id relationships
+    // (Target="#bookmark_name") rather than w:anchor attributes.  When CLEAN-008
+    // renames a bookmark, the .rels Target must also be updated or those links
+    // silently break in the downloaded file.
+    const RELS_NS_CLEAN008 = 'http://schemas.openxmlformats.org/package/2006/relationships';
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_HEADING}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading1"/></w:pPr>` +
+      `<w:bookmarkStart w:id="0" w:name="_Contacts_and_Support"/>` +
+      `<w:r><w:t xml:space="preserve"> Contacts and Support</w:t></w:r>` +
+      `<w:bookmarkEnd w:id="0"/>` +
+      `</w:p>` +
+      // r:id-based hyperlink (no w:anchor attribute)
+      `<w:p><w:hyperlink r:id="rId5" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:r><w:t>link text</w:t></w:r></w:hyperlink></w:p>` +
+      `<w:sectPr/>` +
+      `</w:body></w:document>`
+    );
+    zip.file(
+      'word/_rels/document.xml.rels',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="${RELS_NS_CLEAN008}">` +
+      `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+      // Internal anchor relationship — target must be updated from _Contacts_and_Support → Contacts_and_Support
+      `<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="#_Contacts_and_Support"/>` +
+      `</Relationships>`
+    );
+
+    const blob = await buildDocx(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+    const outZip = await JSZip.loadAsync(blob);
+
+    // Verify .rels Target was updated
+    const relsFile = outZip.file('word/_rels/document.xml.rels');
+    expect(relsFile).not.toBeNull();
+    const relsXml = await relsFile!.async('string');
+    expect(relsXml).toContain('Target="#Contacts_and_Support"');
+    expect(relsXml).not.toContain('Target="#_Contacts_and_Support"');
+    // Unrelated relationship must be preserved
+    expect(relsXml).toContain('Target="styles.xml"');
+  });
+
+  it('does not modify .rels entries that do not match the renamed bookmark', async () => {
+    // Other .rels entries (external links, non-anchor targets) must be untouched.
+    const RELS_NS_CLEAN008 = 'http://schemas.openxmlformats.org/package/2006/relationships';
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_HEADING}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading1"/></w:pPr>` +
+      `<w:r><w:t xml:space="preserve"> Contacts and Support</w:t></w:r>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body></w:document>`
+    );
+    zip.file(
+      'word/_rels/document.xml.rels',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="${RELS_NS_CLEAN008}">` +
+      `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com" TargetMode="External"/>` +
+      `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="#Overview"/>` +
+      `</Relationships>`
+    );
+
+    const blob = await buildDocx(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+    const outZip = await JSZip.loadAsync(blob);
+
+    const relsFile = outZip.file('word/_rels/document.xml.rels');
+    expect(relsFile).not.toBeNull();
+    const relsXml = await relsFile!.async('string');
+    // External link is untouched
+    expect(relsXml).toContain('Target="https://example.com"');
+    // Unrelated internal link is also untouched
+    expect(relsXml).toContain('Target="#Overview"');
+  });
 });
 
 // ─── applyAcceptTrackedChangesAndRemoveComments (CLEAN-009) ──────────────────

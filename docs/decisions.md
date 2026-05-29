@@ -4,6 +4,22 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
+## 2026-05-29 — Bookmark renames must update w:anchor, w:bookmarkStart, and _rels Target in lock-step
+
+**Decision:** Added `updateRelsInternalAnchorTargets(zip, anchorRemap)` helper in `buildDocx.ts` and called it from every site that renames bookmarks: CLEAN-008 (`applyHeadingLeadingSpaceFix`), HEAD-001 (`applyH2TitleCaseFix`), HEAD-004 (`applyHeadingTextCorrections`), and the LINK-006 bookmark-retarget path (`applyDocumentBodyFixes`).
+
+**Reason — the bug:** All four sites already updated `w:bookmarkStart w:name` and `w:hyperlink w:anchor` attributes when a bookmark was renamed. However, none updated relationship entries in `word/_rels/document.xml.rels`. Word's "Insert → Link → This Document" dialog creates internal hyperlinks as `<w:hyperlink r:id="rIdN">` with a corresponding `<Relationship Target="#bookmark_name"/>` in the rels file rather than using an inline `w:anchor` attribute. When a bookmark is renamed (e.g. CLEAN-008 removes a leading space, changing `_Reporting` to `Reporting`), r:id-based links whose rels entry still says `Target="#_Reporting"` silently break — Word can no longer resolve the anchor fragment.
+
+**Reason — what the helper does:** `updateRelsInternalAnchorTargets` scans every `<Relationship>` element whose `Target` starts with `#`, extracts the fragment, and rewrites it if the fragment appears in `anchorRemap`. It is rewrite-only — it never inserts new entries — so it cannot introduce spurious relationships.
+
+**Reason — smoke test did not reproduce the bug:** The Vietnam JG-26-0114 NOFO has no headings with leading spaces (CLEAN-008 does not trigger) and no r:id-based internal hyperlinks (all 77 rels entries are external links or non-hyperlink parts). Neither condition for the bug was present. The two regression tests added to `buildDocx.test.ts` are the canonical proof.
+
+**Key principle:** Any future code that renames a bookmark must update all three locations in lock-step: `w:bookmarkStart w:name` (the bookmark definition), `w:hyperlink w:anchor` (inline-anchor hyperlinks), and `Target="#..."` entries in `word/_rels/document.xml.rels` (r:id-based hyperlinks). Missing any one of the three produces broken links in Word.
+
+**Outcome:** Internal hyperlinks created via Word's Insert → Link → This Document dialog survive bookmark renames applied by any auto-fix in the download pipeline.
+
+---
+
 ## 2026-04-29 — HEAD-004 and HEAD-005: two separate heading-length rules with suppression
 
 **Decision:** Two separate rules handle heading length: HEAD-004 (heading may be too long, 10+ words or 80+ chars) and HEAD-005 (heading may be misformatted normal text, 20+ words or 150+ chars). HEAD-005 suppresses HEAD-004 on the same heading. Any heading exceeding HEAD-005's thresholds is excluded from HEAD-004 even if HEAD-005 does not fire (e.g. headings ending with a colon).
