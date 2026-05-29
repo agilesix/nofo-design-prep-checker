@@ -862,6 +862,89 @@ describe('buildDocx — CLEAN-008: heading leading-space removal', () => {
     // Heading must be clean.
     expect(extractParagraphTexts(outXml)[0]).toBe('Contacts and Support');
   });
+
+  it('updates Target="#old_name" in _rels/document.xml.rels for r:id-based internal links', async () => {
+    // Real Word documents often store internal hyperlinks as r:id relationships
+    // (Target="#bookmark_name") rather than w:anchor attributes.  When CLEAN-008
+    // renames a bookmark, the .rels Target must also be updated or those links
+    // silently break in the downloaded file.
+    const RELS_NS_CLEAN008 = 'http://schemas.openxmlformats.org/package/2006/relationships';
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_HEADING}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading1"/></w:pPr>` +
+      `<w:bookmarkStart w:id="0" w:name="_Contacts_and_Support"/>` +
+      `<w:r><w:t xml:space="preserve"> Contacts and Support</w:t></w:r>` +
+      `<w:bookmarkEnd w:id="0"/>` +
+      `</w:p>` +
+      // r:id-based hyperlink (no w:anchor attribute)
+      `<w:p><w:hyperlink r:id="rId5" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:r><w:t>link text</w:t></w:r></w:hyperlink></w:p>` +
+      `<w:sectPr/>` +
+      `</w:body></w:document>`
+    );
+    zip.file(
+      'word/_rels/document.xml.rels',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="${RELS_NS_CLEAN008}">` +
+      `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+      // Internal anchor relationship — target must be updated from _Contacts_and_Support → Contacts_and_Support
+      `<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="#_Contacts_and_Support"/>` +
+      `</Relationships>`
+    );
+
+    const blob = await buildDocx(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+    const outZip = await JSZip.loadAsync(blob);
+
+    // Verify .rels Target was updated
+    const relsFile = outZip.file('word/_rels/document.xml.rels');
+    expect(relsFile).not.toBeNull();
+    const relsXml = await relsFile!.async('string');
+    expect(relsXml).toContain('Target="#Contacts_and_Support"');
+    expect(relsXml).not.toContain('Target="#_Contacts_and_Support"');
+    // Unrelated relationship must be preserved
+    expect(relsXml).toContain('Target="styles.xml"');
+  });
+
+  it('does not modify .rels entries that do not match the renamed bookmark', async () => {
+    // Other .rels entries (external links, non-anchor targets) must be untouched.
+    const RELS_NS_CLEAN008 = 'http://schemas.openxmlformats.org/package/2006/relationships';
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_HEADING}">` +
+      `<w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading1"/></w:pPr>` +
+      `<w:r><w:t xml:space="preserve"> Contacts and Support</w:t></w:r>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body></w:document>`
+    );
+    zip.file(
+      'word/_rels/document.xml.rels',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="${RELS_NS_CLEAN008}">` +
+      `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com" TargetMode="External"/>` +
+      `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="#Overview"/>` +
+      `</Relationships>`
+    );
+
+    const blob = await buildDocx(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+    const outZip = await JSZip.loadAsync(blob);
+
+    const relsFile = outZip.file('word/_rels/document.xml.rels');
+    expect(relsFile).not.toBeNull();
+    const relsXml = await relsFile!.async('string');
+    // External link is untouched
+    expect(relsXml).toContain('Target="https://example.com"');
+    // Unrelated internal link is also untouched
+    expect(relsXml).toContain('Target="#Overview"');
+  });
 });
 
 // ─── applyAcceptTrackedChangesAndRemoveComments (CLEAN-009) ──────────────────
@@ -3249,6 +3332,43 @@ describe('buildDocx — LINK-006 auto-applied bookmark retargets', () => {
     expect(xml).not.toContain('w:anchor="Other"');
   });
 
+  it('retargets a hyperlink whose w: prefix was stripped to a bare anchor= attribute', async () => {
+    // After a prior XMLSerializer pass the attribute may appear as anchor="_Eligibility"
+    // (no namespace prefix) rather than w:anchor="...".  getAttribute('w:anchor') and
+    // getAttributeNS(W, 'anchor') both return null in that state, so the third fallback
+    // getAttribute('anchor') is needed to match and retarget the link.
+    const W_NS_L6 = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_L6}">` +
+      `<w:body>` +
+      `<w:p>` +
+      // Bare anchor= attribute — no namespace prefix
+      `<w:hyperlink anchor="_Eligibility" w:history="1">` +
+      `<w:r><w:t>See eligibility</w:t></w:r>` +
+      `</w:hyperlink>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body></w:document>`
+    );
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Retargeted internal link "#_Eligibility" → "#Eligibility"',
+      targetField: 'link.bookmark._Eligibility',
+      value: 'Eligibility',
+    };
+
+    const xml = await getOutputDocXml(zip, [], [change]);
+    // Retarget must succeed despite the missing namespace prefix
+    expect(xml).toContain('w:anchor="Eligibility"');
+    expect(xml).not.toContain('w:anchor="_Eligibility"');
+    // No stale bare anchor= attribute should remain
+    expect(xml).not.toMatch(/(?<![:\w])anchor="_Eligibility"/);
+  });
+
   it('does not modify w:bookmarkStart w:name when only the hyperlink anchor changes', async () => {
     const zip = new JSZip();
     zip.file(
@@ -3326,6 +3446,92 @@ describe('buildDocx — LINK-006 auto-applied bookmark retargets', () => {
     expect(xml).toContain('w:anchor="_Program-specific_limitations"');
     expect(xml).not.toContain('w:anchor="_Eligibility"');
     expect(xml).not.toContain('w:anchor="_Program-specific_limitations_1"');
+  });
+
+  it('rewrites Target="#old" in .rels for an r:id-based hyperlink when LINK-006 retargets', async () => {
+    // Word's "Insert → Link → This Document" creates <w:hyperlink r:id="rIdN"> with a
+    // corresponding <Relationship Target="#bookmark_name"/> in .rels rather than an
+    // inline w:anchor attribute.  When LINK-006 retargets the link, the .rels Target
+    // must also be updated or Word can no longer resolve the bookmark.
+    const RELS_NS_L6 = 'http://schemas.openxmlformats.org/package/2006/relationships';
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"` +
+      ` xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">` +
+      `<w:body>` +
+      // r:id-based hyperlink — no w:anchor attribute
+      `<w:p><w:hyperlink r:id="rId10"><w:r><w:t>See eligibility</w:t></w:r></w:hyperlink></w:p>` +
+      `<w:sectPr/>` +
+      `</w:body></w:document>`
+    );
+    zip.file(
+      'word/_rels/document.xml.rels',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="${RELS_NS_L6}">` +
+      `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>` +
+      // Internal anchor relationship — LINK-006 must update this Target
+      `<Relationship Id="rId10" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="#_Eligibility"/>` +
+      `</Relationships>`
+    );
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Retargeted internal link "#_Eligibility" → "#Eligibility"',
+      targetField: 'link.bookmark._Eligibility',
+      value: 'Eligibility',
+    };
+
+    const blob = await buildDocx(zip, [], [change]);
+    const outZip = await JSZip.loadAsync(blob);
+
+    // .rels Target must be updated
+    const relsFile = outZip.file('word/_rels/document.xml.rels');
+    expect(relsFile).not.toBeNull();
+    const relsXml = await relsFile!.async('string');
+    expect(relsXml).toContain('Target="#Eligibility"');
+    expect(relsXml).not.toContain('Target="#_Eligibility"');
+    // Unrelated entry is preserved
+    expect(relsXml).toContain('Target="styles.xml"');
+
+    // The hyperlink element itself is untouched — r:id-based links have no w:anchor
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+    expect(docXml).toContain('r:id="rId10"');
+    expect(docXml).not.toContain('w:anchor=');
+  });
+
+  it('does not rewrite .rels when there is no matching r:id-based Target for the retarget', async () => {
+    // If the .rels file only has an external link (no Target="#..."), nothing should change.
+    const RELS_NS_L6 = 'http://schemas.openxmlformats.org/package/2006/relationships';
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeSimpleHyperlinkDocXml('_Eligibility'));
+    zip.file(
+      'word/_rels/document.xml.rels',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="${RELS_NS_L6}">` +
+      `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.com" TargetMode="External"/>` +
+      `</Relationships>`
+    );
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Retargeted internal link "#_Eligibility" → "#Eligibility"',
+      targetField: 'link.bookmark._Eligibility',
+      value: 'Eligibility',
+    };
+
+    const blob = await buildDocx(zip, [], [change]);
+    const outZip = await JSZip.loadAsync(blob);
+
+    // w:anchor still updated in document.xml
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+    expect(docXml).toContain('w:anchor="Eligibility"');
+
+    // .rels is unchanged — external link untouched
+    const relsXml = await outZip.file('word/_rels/document.xml.rels')!.async('string');
+    expect(relsXml).toContain('Target="https://example.com"');
+    expect(relsXml).not.toContain('Target="#');
   });
 });
 

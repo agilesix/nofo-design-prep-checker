@@ -493,6 +493,10 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
   const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
   const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
+  // Collects old→new anchor pairs for LINK-006 bookmark retargets so that the
+  // .rels file can be updated for r:id-based internal hyperlinks at the end.
+  const link006AnchorRemap = new Map<string, string>();
+
   for (const fix of fixes) {
     if (!fix.value) continue;
 
@@ -600,7 +604,10 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
       if (normalizedNewAnchor) {
         const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
         for (const el of hyperlinks) {
-          const elAnchor = el.getAttribute('w:anchor') ?? el.getAttributeNS(W, 'anchor');
+          const elAnchor =
+            el.getAttribute('w:anchor') ??
+            el.getAttributeNS(W, 'anchor') ??
+            el.getAttribute('anchor');
           if (elAnchor === oldAnchor) {
             el.removeAttributeNS(W, 'anchor');
             el.removeAttributeNS(null, 'anchor');
@@ -608,6 +615,8 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
             el.setAttributeNS(W, 'w:anchor', normalizedNewAnchor);
           }
         }
+        // Collect for .rels update (r:id-based internal links)
+        link006AnchorRemap.set(oldAnchor, normalizedNewAnchor);
       }
     }
 
@@ -615,6 +624,64 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
 
 
   zip.file('word/document.xml', serializeXml(xmlDoc));
+
+  // Update r:id-based internal hyperlinks in the .rels file for any
+  // LINK-006 bookmark retargets collected above.
+  if (link006AnchorRemap.size > 0) {
+    await updateRelsInternalAnchorTargets(zip, link006AnchorRemap);
+  }
+}
+
+/**
+ * Update r:id-based internal hyperlink targets in `word/_rels/*.rels` (e.g. document.xml.rels, header/footer rels)
+ * to reflect bookmark renames encoded in anchorRemap.
+ *
+ * For each <Relationship> whose Target starts with '#' and whose fragment
+ * (the portion after '#') appears as a key in anchorRemap, the Target is
+ * rewritten to '#' + anchorRemap.get(fragment).
+ *
+ * This keeps r:id-based internal hyperlinks (the form Word produces when using
+ * Insert → Link → This Document) aligned with bookmark names that were renamed
+ * by heading-text fixes (CLEAN-008 leading-space removal, HEAD-001 title-case,
+ * HEAD-004 text corrections, LINK-006 retargets).  Without this update, renamed
+ * bookmarks leave r:id-based links pointing to a non-existent anchor fragment.
+ */
+async function updateRelsInternalAnchorTargets(
+  zip: JSZip,
+  anchorRemap: Map<string, string>
+): Promise<void> {
+  if (anchorRemap.size === 0) return;
+
+  const RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+  const relsParser = new DOMParser();
+
+  const relsPaths = Object.keys(zip.files).filter(
+    p => p.startsWith('word/_rels/') && p.endsWith('.rels')
+  );
+
+  for (const relsFilePath of relsPaths) {
+    const relsFile = zip.file(relsFilePath);
+    if (!relsFile) continue;
+
+    const relsStr = await relsFile.async('string');
+    const relsXmlDoc = relsParser.parseFromString(relsStr, 'application/xml');
+
+    let changed = false;
+    for (const rel of Array.from(relsXmlDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'))) {
+      const target = rel.getAttribute('Target') ?? '';
+      if (!target.startsWith('#')) continue;
+      const fragment = target.slice(1);
+      const newFragment = anchorRemap.get(fragment);
+      if (newFragment !== undefined && newFragment !== fragment) {
+        rel.setAttribute('Target', '#' + newFragment);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      zip.file(relsFilePath, serializeXml(relsXmlDoc), { compression: 'STORE' });
+    }
+  }
 }
 
 /**
@@ -1226,6 +1293,13 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
         bm.setAttributeNS(W, 'w:name', newVal);
       }
     }
+
+    // Update r:id-based internal hyperlinks in .rels whose Target fragment
+    // matches a renamed bookmark.  w:anchor-based links are updated above;
+    // r:id-based links (Word's "Insert → Link → This Document" form) store
+    // the anchor in the relationship Target ("#old_name") and must be updated
+    // here or they will point to a non-existent bookmark after the rename.
+    await updateRelsInternalAnchorTargets(zip, anchorRemap);
   }
 
   if (changed) {
@@ -1420,6 +1494,9 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
         bm.setAttributeNS(W, 'w:name', anchorRemap.get(name)!);
       }
     }
+
+    // Keep r:id-based internal hyperlinks aligned with the renamed bookmarks.
+    await updateRelsInternalAnchorTargets(zip, anchorRemap);
   }
 
   if (changed) {
@@ -1784,6 +1861,9 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
         bm.setAttributeNS(W, 'w:name', anchorRemap.get(name)!);
       }
     }
+
+    // Keep r:id-based internal hyperlinks aligned with the renamed bookmarks.
+    await updateRelsInternalAnchorTargets(zip, anchorRemap);
   }
 
   if (changed) {
