@@ -7,8 +7,7 @@
 
 * **acl:** add three ACL/checklist auto-fixes ([2dbb350](https://github.com/agilesix/nofo-design-prep-checker/commit/2dbb350895bdfb160a4d1856cbcabe1d9fd40d26))
 * add ACL-specific auto-fixes for checklist glyphs, OpDiv/Agency labels, and Basic information formatting ([0ac136b](https://github.com/agilesix/nofo-design-prep-checker/commit/0ac136b177cb901bdf63cea530d8ec6776d71fe4))
-* add HEAD-007 auto-fix for "Intergovernmental Review" → sentence case ([2fa2fa7](https://github.com/agilesix/nofo-design-prep-checker/commit/2fa2fa7f3bc04ac562a9b24db4d2f67956025d6f))
-* add HEAD-007 auto-fix for "Intergovernmental Review" → sentence case ([5752c9c](https://github.com/agilesix/nofo-design-prep-checker/commit/5752c9c27189087467dcf067845d762e433cc79b))
+* add HEAD-007 auto-fix for "Intergovernmental Review" → sentence case ([2fa2fa7](https://github.com/agilesix/nofo-design-prep-checker/commit/2fa2fa7f3bc04ac562a9b24db4d2f67956025d6f)), ([5752c9c](https://github.com/agilesix/nofo-design-prep-checker/commit/5752c9c27189087467dcf067845d762e433cc79b))
 * **CDC-001:** add internal link to Financial capability statement bullet ([e790897](https://github.com/agilesix/nofo-design-prep-checker/commit/e790897b004e2583d78e3e2cf2c00f948ed63af9))
 * **CDC-001:** auto-fix missing internal link on Financial capability statement bullet ([eb91148](https://github.com/agilesix/nofo-design-prep-checker/commit/eb911483a6d63c89320a221699d117b895178b51))
 
