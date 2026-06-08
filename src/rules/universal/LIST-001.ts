@@ -18,49 +18,52 @@ const LIST_001: Rule = {
     const paragraphs = Array.from(htmlDoc.querySelectorAll('p'));
     const getContext = buildLocationLookup(htmlDoc);
 
-    // Count how many times each text appears in list-styled OOXML paragraphs
-    // (w:pStyle w:val containing "list", case-insensitive). Counts are consumed
-    // one-for-one as matching HTML paragraphs are encountered in document order,
-    // so a paragraph is only excluded when there is an unspent list-styled OOXML
-    // paragraph with the same text. This prevents a list-styled paragraph from
-    // masking a genuinely manual-bullet paragraph that happens to share text.
-    const listStyledCounts = new Map<string, number>();
+    // Build an ordered sequence of (text, isListStyled) from all non-empty
+    // OOXML body paragraphs. A forward-only cursor advances through this
+    // sequence as each HTML paragraph is processed, so a list-styled OOXML
+    // paragraph can only suppress the HTML paragraph at or after the same
+    // document position. This prevents a list-styled paragraph that appears
+    // LATER in the document from masking an earlier genuine manual-bullet
+    // paragraph that happens to share the same text (false negative).
+    interface OoxmlPara { text: string; isListStyled: boolean }
+    const ooxmlParas: OoxmlPara[] = [];
     if (doc.documentXml) {
       const xmlParser = new DOMParser();
       const xmlDoc = xmlParser.parseFromString(doc.documentXml, 'application/xml');
+      const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
       for (const para of Array.from(xmlDoc.getElementsByTagName('w:p'))) {
         const pPr = Array.from(para.children).find(c => c.localName === 'pPr');
-        if (!pPr) continue;
-        const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
-        if (!pStyle) continue;
-        const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-        const styleName =
-          pStyle.getAttribute('w:val') ??
-          pStyle.getAttributeNS(W, 'val') ??
-          pStyle.getAttribute('val') ??
-          '';
-        if (styleName.toLowerCase().includes('list')) {
-          const byNS = Array.from(para.getElementsByTagNameNS(W, 't'));
-          const byTag = Array.from(para.getElementsByTagName('w:t'));
-          const seen = new Set<Element>();
-          const nodes: Element[] = [];
-          for (const el of [...byNS, ...byTag]) {
-            if (!seen.has(el)) { seen.add(el); nodes.push(el); }
-          }
-          const text = nodes.map(t => t.textContent ?? '').join('').trim();
-          if (text) listStyledCounts.set(text, (listStyledCounts.get(text) ?? 0) + 1);
+        const pStyle = pPr ? Array.from(pPr.children).find(c => c.localName === 'pStyle') : undefined;
+        const styleName = pStyle
+          ? (pStyle.getAttribute('w:val') ?? pStyle.getAttributeNS(W, 'val') ?? pStyle.getAttribute('val') ?? '')
+          : '';
+        const byNS = Array.from(para.getElementsByTagNameNS(W, 't'));
+        const byTag = Array.from(para.getElementsByTagName('w:t'));
+        const seen = new Set<Element>();
+        const nodes: Element[] = [];
+        for (const el of [...byNS, ...byTag]) {
+          if (!seen.has(el)) { seen.add(el); nodes.push(el); }
+        }
+        const text = nodes.map(t => t.textContent ?? '').join('').trim();
+        if (text) {
+          ooxmlParas.push({ text, isListStyled: styleName.toLowerCase().includes('list') });
         }
       }
     }
 
-    // Consume one count for the given text; returns true if a list-styled
-    // OOXML paragraph existed and was charged for this HTML paragraph.
-    function consumeListStyled(text: string): boolean {
-      const n = listStyledCounts.get(text);
-      if (!n) return false;
-      if (n === 1) listStyledCounts.delete(text);
-      else listStyledCounts.set(text, n - 1);
-      return true;
+    // Scan forward from this cursor to find the OOXML paragraph whose text
+    // matches the current HTML paragraph, then advance the cursor past it.
+    // Returns true iff that matching OOXML paragraph carries a list style.
+    let ooxmlCursor = 0;
+    function isOoxmlListStyled(text: string): boolean {
+      if (!doc.documentXml || ooxmlParas.length === 0) return false;
+      for (let i = ooxmlCursor; i < ooxmlParas.length; i++) {
+        if (ooxmlParas[i]!.text === text) {
+          ooxmlCursor = i + 1;
+          return ooxmlParas[i]!.isListStyled;
+        }
+      }
+      return false;
     }
 
     // Find consecutive paragraphs that look like list items
@@ -75,9 +78,9 @@ const LIST_001: Rule = {
 
       // Paragraphs with a Word list style are excluded even when their text
       // run starts with a typed bullet character (e.g. ◦ with numId="0").
-      // consumeListStyled is called here (and only here) so the count is spent
-      // exactly once per HTML paragraph encountered in document order.
-      if ((isBullet || isNumbered) && !consumeListStyled(text)) {
+      // isOoxmlListStyled advances the forward cursor so each OOXML paragraph
+      // can only suppress the HTML paragraph at its matching document position.
+      if ((isBullet || isNumbered) && !isOoxmlListStyled(text)) {
         const type = isBullet ? 'bullet' : 'numbered';
         if (currentGroupStart === -1 || currentGroupType !== type) {
           if (currentGroupStart !== -1 && index - currentGroupStart >= 2) {

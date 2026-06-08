@@ -135,4 +135,31 @@ describe('LIST-001: still flags genuine manual bullets', () => {
     expect(issues).toHaveLength(1);
     expect(issues[0]!.ruleId).toBe('LIST-001');
   });
+
+  it('does not exclude a genuine manual bullet that appears BEFORE a list-styled paragraph with the same text', () => {
+    // This is the "manual first, list-styled later" ordering bug:
+    // A global text→count map populated upfront would see one count for
+    // "◦ Shared" (from the ListParagraph) and consume it against the first
+    // HTML paragraph (the Normal one), causing a false negative. The
+    // position-aware forward cursor only matches the ListParagraph to the
+    // HTML paragraph at the same document position, so the Normal paragraph
+    // is correctly identified as a genuine bullet.
+    //
+    // OOXML order: Normal "◦ Shared", ListParagraph "◦ Shared", Normal "◦ Other"
+    // HTML para 0 "◦ Shared" → scan finds Normal → isListStyled=false → flag
+    // HTML para 1 "◦ Shared" → scan finds ListParagraph → isListStyled=true → exclude
+    //   group [0] ends, size 1 < 2 → not reported
+    // HTML para 2 "◦ Other" → group [2] size 1 < 2 → not reported
+    // Result: 0 issues
+    const html =
+      '<p>◦ Shared</p>' +
+      '<p>◦ Shared</p>' +
+      '<p>◦ Other</p>';
+    const documentXml = wrapXml(
+      `<w:p><w:pPr><w:pStyle w:val="Normal"/></w:pPr><w:r><w:t>◦ Shared</w:t></w:r></w:p>` +
+      makeXmlPara('◦ Shared', 'ListParagraph', '0') +
+      `<w:p><w:pPr><w:pStyle w:val="Normal"/></w:pPr><w:r><w:t>◦ Other</w:t></w:r></w:p>`
+    );
+    expect(LIST_001.check(makeDoc(html, documentXml), OPTIONS)).toHaveLength(0);
+  });
 });
