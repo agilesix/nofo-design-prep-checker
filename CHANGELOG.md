@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.10.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.9.1...v1.10.0) (2026-06-08)
+
+
+### Features
+
+* **acl:** add three ACL/checklist auto-fixes ([2dbb350](https://github.com/agilesix/nofo-design-prep-checker/commit/2dbb350895bdfb160a4d1856cbcabe1d9fd40d26))
+* add ACL-specific auto-fixes for checklist glyphs, OpDiv/Agency labels, and Basic information formatting ([0ac136b](https://github.com/agilesix/nofo-design-prep-checker/commit/0ac136b177cb901bdf63cea530d8ec6776d71fe4))
+* add HEAD-007 auto-fix for "Intergovernmental Review" → sentence case ([2fa2fa7](https://github.com/agilesix/nofo-design-prep-checker/commit/2fa2fa7f3bc04ac562a9b24db4d2f67956025d6f))
+* add HEAD-007 auto-fix for "Intergovernmental Review" → sentence case ([5752c9c](https://github.com/agilesix/nofo-design-prep-checker/commit/5752c9c27189087467dcf067845d762e433cc79b))
+* **CDC-001:** add internal link to Financial capability statement bullet ([e790897](https://github.com/agilesix/nofo-design-prep-checker/commit/e790897b004e2583d78e3e2cf2c00f948ed63af9))
+* **CDC-001:** auto-fix missing internal link on Financial capability statement bullet ([eb91148](https://github.com/agilesix/nofo-design-prep-checker/commit/eb911483a6d63c89320a221699d117b895178b51))
+
+
+### Bug Fixes
+
+* **#290:** address review comments — hyperlink glyph tests, NBSP normalization, FORMAT-003 docstring ([de4df63](https://github.com/agilesix/nofo-design-prep-checker/commit/de4df637903d89d04c83badab4e01b3b6f42222c))
+* add getAttribute('anchor') fallback in LINK-006 retarget read ([f4a7127](https://github.com/agilesix/nofo-design-prep-checker/commit/f4a7127b1f909ab66292695b6d54f083a5383a9c))
+* **buildDocx:** restore missing reduce() in insertBookmarkOnHeadingIfAbsent ([4d7b71d](https://github.com/agilesix/nofo-design-prep-checker/commit/4d7b71d267a780967afa0fa2b164bf302dac2c3f))
+* **CDC-001:** add non-null assertion on runs[0] in insertBefore call ([9661dee](https://github.com/agilesix/nofo-design-prep-checker/commit/9661dee1974f419839f8299f7b54302116f078ab))
+* **ci:** dispatch both ci.yml and build.yml for release-please PRs ([6db4321](https://github.com/agilesix/nofo-design-prep-checker/commit/6db43213856349a5864c8780d4a724417a10bb6d))
+* correct three issues in applyHeadingSentenceCaseFix and HEAD-007 ([ffd2922](https://github.com/agilesix/nofo-design-prep-checker/commit/ffd29226bc1f90c4ec559a3b3ae0ce116fd9f361))
+* **FORMAT-003:** harden time format regex for ranges and noon/midnight ([26545da](https://github.com/agilesix/nofo-design-prep-checker/commit/26545dafa8b9ccd388f7f86231a11a4091974e80))
+* **LINK-006:** derive retarget anchor from slugifyHeading, not legacy bookmark name ([30ca1d5](https://github.com/agilesix/nofo-design-prep-checker/commit/30ca1d56710d39b2b2c3979013580fe95ab53cdd))
+* **LINK-006:** derive retarget anchor from slugifyHeading, not legacy… ([20fc791](https://github.com/agilesix/nofo-design-prep-checker/commit/20fc79154e54a450530b0ad64b898563befa28ed))
+* **LINK-006:** precompute lowercase bookmark map + add bookmark-creation regression tests ([8c505b8](https://github.com/agilesix/nofo-design-prep-checker/commit/8c505b892142dddaf852cdf06601c119b48a9dd5))
+* **LIST-001:** exclude ListParagraph-styled paras from manual-bullet … ([35ccea6](https://github.com/agilesix/nofo-design-prep-checker/commit/35ccea69ac4792278372750a06f8878f5568de19))
+* **LIST-001:** exclude ListParagraph-styled paras from manual-bullet detection ([b89db35](https://github.com/agilesix/nofo-design-prep-checker/commit/b89db354159b7122200b285f629b9625504babee))
+* match on trimmed text and guard length in applyHeadingSentenceCaseFix ([45bc031](https://github.com/agilesix/nofo-design-prep-checker/commit/45bc03166d3493476feac6e46efa5ecb7c27aa62))
+* reconcile remote multi-file scan with local TS2451 fix ([7d9985a](https://github.com/agilesix/nofo-design-prep-checker/commit/7d9985a52acfa45f69c5ee62d2c95733aac52415))
+* rename parser/relsDoc in updateRelsInternalAnchorTargets to avoid TS2451 ([10c3f7b](https://github.com/agilesix/nofo-design-prep-checker/commit/10c3f7bfa88a72b39f2b6edb2bfe75425c3e6250))
+* scan all word/_rels/*.rels files and fix TS2451 redeclaration ([c155c0f](https://github.com/agilesix/nofo-design-prep-checker/commit/c155c0ffa31eaa2ad7c81ce9d87113e154859dfb))
+* update .rels internal anchor targets when renaming bookmarks ([d87089e](https://github.com/agilesix/nofo-design-prep-checker/commit/d87089e65e0ff624d49b58d86748b1ad0ceb3e03))
+* update .rels internal anchor targets when renaming bookmarks ([cd0ca61](https://github.com/agilesix/nofo-design-prep-checker/commit/cd0ca6129ba325122c3c3aa6049e686ff79f693b))
+
 ## [Unreleased]
 
 ### Bug Fixes
