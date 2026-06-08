@@ -7100,11 +7100,9 @@ function makeCdcFinancialCapabilityDocXml(opts: {
 
   const bulletPara = bulletAlreadyLinked
     ? `<w:p>
-        <w:r>
-          <w:hyperlink w:anchor="Financial_capability_statement">
-            <w:r><w:t>Financial capability statement</w:t></w:r>
-          </w:hyperlink>
-        </w:r>
+        <w:hyperlink w:anchor="Financial_capability_statement">
+          <w:r><w:t>Financial capability statement</w:t></w:r>
+        </w:hyperlink>
        </w:p>`
     : `<w:p><w:r><w:t>Financial capability statement</w:t></w:r></w:p>`;
 
