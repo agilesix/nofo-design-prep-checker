@@ -4500,10 +4500,26 @@ async function applyCdcFinancialCapabilityLink(zip: JSZip, anchor: string): Prom
       }
     }
 
+    // Prefer the actual bookmark name on the matching H4–H6 heading (if present) so links stay valid
+    // even if earlier heading-text fixes (HEAD-004) rename bookmark slugs.
+    const resolvedAnchor = (() => {
+      for (const para of paragraphs) {
+        const level = getHeadingLevel(para);
+        if (level < 4 || level > 6) continue;
+        if (getParaText(para).trim().toLowerCase() !== TARGET) continue;
+        const bm = para.getElementsByTagName('w:bookmarkStart')[0];
+        const name =
+          bm?.getAttribute('w:name') ??
+          bm?.getAttributeNS(W, 'name') ??
+          bm?.getAttribute('name');
+        return name || slugifyHeading(getParaText(para));
+      }
+      return anchor;
+    })();
+
     // Build the w:hyperlink element, insert it before the first content node, then move content into it
     const hyperlink = xmlDoc.createElementNS(W, 'w:hyperlink');
-    hyperlink.setAttributeNS(W, 'w:anchor', anchor);
-
+    hyperlink.setAttributeNS(W, 'w:anchor', resolvedAnchor);
     wP.insertBefore(hyperlink, contentNodes[0]!);
 
     for (const node of contentNodes) {
