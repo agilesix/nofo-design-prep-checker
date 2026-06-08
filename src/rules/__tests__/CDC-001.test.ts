@@ -120,7 +120,7 @@ describe('CDC-001: skips silently when conditions are not met', () => {
     const html = `
       <h2>Project narrative</h2>
       <ul><li>Financial capability statement</li></ul>
-      <h3>Financial capability statement</h3>
+      <h4>Some other heading</h4>
     `;
     expect(CDC_001.check(makeDoc(html), OPTIONS)).toHaveLength(0);
   });
