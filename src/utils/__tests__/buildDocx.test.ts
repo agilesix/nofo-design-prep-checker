@@ -7173,3 +7173,133 @@ describe('buildDocx — HEAD-006: Agency Priorities → sentence case', () => {
     expect(extractParagraphTexts(outXml)[0]).toBe('Agency Priorities');
   });
 });
+
+// ─── CDC-001: Financial capability statement internal link ────────────────────
+
+/** Build a minimal document.xml for CDC-001 tests. */
+function makeCdcFinancialCapabilityDocXml(opts: {
+  includeTargetBullet?: boolean;
+  bulletAlreadyLinked?: boolean;
+  bulletOutsideSection?: boolean;
+}): string {
+  const { includeTargetBullet = true, bulletAlreadyLinked = false, bulletOutsideSection = false } = opts;
+
+  const bulletPara = bulletAlreadyLinked
+    ? `<w:p>
+        <w:hyperlink w:anchor="Financial_capability_statement">
+          <w:r><w:t>Financial capability statement</w:t></w:r>
+        </w:hyperlink>
+       </w:p>`
+    : `<w:p><w:r><w:t>Financial capability statement</w:t></w:r></w:p>`;
+
+  const inSection = includeTargetBullet && !bulletOutsideSection ? bulletPara : '';
+  const outSection = bulletOutsideSection ? bulletPara : '';
+
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS}">` +
+    `<w:body>` +
+    `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Project narrative</w:t></w:r></w:p>` +
+    inSection +
+    `<w:p><w:r><w:t>Some other text</w:t></w:r></w:p>` +
+    `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Next section</w:t></w:r></w:p>` +
+    outSection +
+    `<w:sectPr/>` +
+    `</w:body>` +
+    `</w:document>`
+  );
+}
+
+const CDC_001_CHANGE: AutoAppliedChange = {
+  ruleId: 'CDC-001',
+  description: 'Internal link added to "Financial capability statement" bullet.',
+  targetField: 'cdc.financial.capability.link',
+  value: 'Financial_capability_statement',
+};
+
+describe('buildDocx — CDC-001: Financial capability statement internal link', () => {
+  it('wraps the bullet run in w:hyperlink w:anchor when all conditions are met', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeCdcFinancialCapabilityDocXml({}));
+
+    const outXml = await getOutputDocXml(zip, [], [CDC_001_CHANGE]);
+
+    const xmlParser = new DOMParser();
+    const xmlDoc = xmlParser.parseFromString(outXml, 'application/xml');
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    const internalLinks = hyperlinks.filter(h => {
+      const anchor = h.getAttribute('w:anchor') ?? h.getAttributeNS(W_NS, 'anchor');
+      return anchor === 'Financial_capability_statement';
+    });
+    expect(internalLinks).toHaveLength(1);
+
+    // The link should contain the original text
+    const linkText = Array.from(internalLinks[0]!.getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '')
+      .join('');
+    expect(linkText).toBe('Financial capability statement');
+  });
+
+  it('adds the Hyperlink character style to runs inside the new hyperlink', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeCdcFinancialCapabilityDocXml({}));
+
+    const outXml = await getOutputDocXml(zip, [], [CDC_001_CHANGE]);
+
+    const xmlParser = new DOMParser();
+    const xmlDoc = xmlParser.parseFromString(outXml, 'application/xml');
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    const link = hyperlinks.find(h => {
+      const anchor = h.getAttribute('w:anchor') ?? h.getAttributeNS(W_NS, 'anchor');
+      return anchor === 'Financial_capability_statement';
+    });
+    expect(link).toBeDefined();
+    const rStyles = Array.from(link!.getElementsByTagName('w:rStyle'));
+    const hyperlinkStyle = rStyles.find(s => {
+      const val = s.getAttribute('w:val') ?? s.getAttributeNS(W_NS, 'val');
+      return val === 'Hyperlink';
+    });
+    expect(hyperlinkStyle).toBeDefined();
+  });
+
+  it('does not apply when the targetField is absent from autoAppliedChanges', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeCdcFinancialCapabilityDocXml({}));
+
+    const outXml = await getOutputDocXml(zip, [], []);
+
+    const xmlParser = new DOMParser();
+    const xmlDoc = xmlParser.parseFromString(outXml, 'application/xml');
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(0);
+  });
+
+  it('does not add a hyperlink when the bullet paragraph is outside the Project narrative section', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeCdcFinancialCapabilityDocXml({ bulletOutsideSection: true }));
+
+    const outXml = await getOutputDocXml(zip, [], [CDC_001_CHANGE]);
+
+    const xmlParser = new DOMParser();
+    const xmlDoc = xmlParser.parseFromString(outXml, 'application/xml');
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(0);
+  });
+
+  it('does nothing when no "Project narrative" H2 exists', async () => {
+    const zip = new JSZip();
+    // Document with no "Project narrative" heading
+    zip.file('word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS}"><w:body>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:t>Background</w:t></w:r></w:p>` +
+      `<w:p><w:r><w:t>Financial capability statement</w:t></w:r></w:p>` +
+      `<w:sectPr/></w:body></w:document>`
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [CDC_001_CHANGE]);
+    const xmlParser = new DOMParser();
+    const xmlDoc = xmlParser.parseFromString(outXml, 'application/xml');
+    expect(Array.from(xmlDoc.getElementsByTagName('w:hyperlink'))).toHaveLength(0);
+  });
+});

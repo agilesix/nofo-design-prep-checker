@@ -121,6 +121,9 @@ export async function buildDocx(
   const hasAttachmentsFileNameSentenceCase = autoAppliedChanges.some(
     c => c.targetField === 'struct.attachments.filename.sentencecase'
   );
+  const cdcFinancialCapabilityLinkChange = autoAppliedChanges.find(
+    c => c.targetField === 'cdc.financial.capability.link' && c.value
+  );
   const hasSamhsaH1DividerRemoval = autoAppliedChanges.some(
     c => c.targetField === 'samhsa.h1.dividers.remove'
   );
@@ -217,6 +220,13 @@ export async function buildDocx(
   // are not double-processed.
   if (hasRemoveDghtInstructionBoxes) {
     await applyRemoveDghtInstructionBoxes(zip);
+  }
+
+  // Add internal hyperlink to "Financial capability statement" bullet in
+  // "Project narrative" — CDC-specific, runs after preamble/scaffolding
+  // removal so the document structure is in its final form.
+  if (cdcFinancialCapabilityLinkChange) {
+    await applyCdcFinancialCapabilityLink(zip, cdcFinancialCapabilityLinkChange.value!);
   }
 
   // Apply tagline relocation
@@ -4511,5 +4521,142 @@ async function applyAclBasicInfoLabels(zip: JSZip): Promise<void> {
 
   if (changed) {
     zip.file('word/document.xml', serializeXml(xmlDoc));
+  }
+}
+
+// ─── CDC-001: Add internal link to "Financial capability statement" bullet ───
+
+/**
+ * Wrap the "Financial capability statement" list-item paragraph in the
+ * "Project narrative" H2 section in a w:hyperlink pointing to the given
+ * internal anchor slug.
+ *
+ * The function:
+ *  1. Locates the "Project narrative" Heading2 paragraph.
+ *  2. Scans subsequent paragraphs (until the next H2) for one whose
+ *     full text is an exact case-insensitive match to
+ *     "financial capability statement" and that has no existing w:hyperlink.
+ *  3. Wraps all w:r children of that paragraph in a new
+ *     w:hyperlink w:anchor=anchor element and applies the "Hyperlink"
+ *     character style to each run's w:rPr.
+ *
+ * If any expected element is absent the function exits silently.
+ */
+async function applyCdcFinancialCapabilityLink(zip: JSZip, anchor: string): Promise<void> {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const TARGET = 'financial capability statement';
+
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  const body = xmlDoc.getElementsByTagName('w:body')[0];
+  if (!body) return;
+
+  const paragraphs = Array.from(body.getElementsByTagName('w:p'));
+
+  // Locate "Project narrative" H2
+  let sectionStart = -1;
+  for (let i = 0; i < paragraphs.length; i++) {
+    const wP = paragraphs[i]!;
+    if (getHeadingLevel(wP) === 2 && getParaText(wP).trim().toLowerCase() === 'project narrative') {
+      sectionStart = i;
+      break;
+    }
+  }
+  if (sectionStart === -1) return;
+
+  // Section ends at the next H2 (or end of document)
+  let sectionEnd = paragraphs.length;
+  for (let i = sectionStart + 1; i < paragraphs.length; i++) {
+    if (getHeadingLevel(paragraphs[i]!) === 2) {
+      sectionEnd = i;
+      break;
+    }
+  }
+
+  // Find and patch the target paragraph
+  for (let i = sectionStart + 1; i < sectionEnd; i++) {
+    const wP = paragraphs[i]!;
+    if (getHeadingLevel(wP) > 0) continue;
+    if (getParaText(wP).trim().toLowerCase() !== TARGET) continue;
+    // Skip if a hyperlink is already present
+    if (wP.getElementsByTagName('w:hyperlink').length > 0) continue;
+
+    // Wrap all non-<w:pPr> children so we preserve ordering of bookmarks/comment ranges/etc.
+    const contentNodes = Array.from(wP.childNodes).filter(
+      n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName !== 'pPr'
+    ) as Element[];
+    if (contentNodes.length === 0) continue;
+
+    // Apply Hyperlink character style to any runs that will end up inside the hyperlink
+    for (const node of contentNodes) {
+      const byNS = Array.from(node.getElementsByTagNameNS(W, 'r')) as Element[];
+      const byTag = Array.from(node.getElementsByTagName('w:r')) as Element[];
+      const self = node.localName === 'r' ? [node] : [];
+      for (const run of Array.from(new Set<Element>([...self, ...byNS, ...byTag]))) {
+        c1AddHyperlinkStyle(xmlDoc, W, run);
+      }
+    }
+
+    // Prefer the actual bookmark name on the matching H4–H6 heading (if present) so links stay valid
+    // even if earlier heading-text fixes (HEAD-004) rename bookmark slugs.
+    const resolvedAnchor = (() => {
+      for (const para of paragraphs) {
+        const level = getHeadingLevel(para);
+        if (level < 4 || level > 6) continue;
+        if (getParaText(para).trim().toLowerCase() !== TARGET) continue;
+        const bm = para.getElementsByTagName('w:bookmarkStart')[0];
+        const name =
+          bm?.getAttribute('w:name') ??
+          bm?.getAttributeNS(W, 'name') ??
+          bm?.getAttribute('name');
+        return name || slugifyHeading(getParaText(para));
+      }
+      return anchor;
+    })();
+
+    // Build the w:hyperlink element, insert it before the first content node, then move content into it
+    const hyperlink = xmlDoc.createElementNS(W, 'w:hyperlink');
+    hyperlink.setAttributeNS(W, 'w:anchor', resolvedAnchor);
+    wP.insertBefore(hyperlink, contentNodes[0]!);
+
+    for (const node of contentNodes) {
+      hyperlink.appendChild(node);
+    }
+
+    zip.file('word/document.xml', serializeXml(xmlDoc));
+    return;
+  }
+}
+
+/**
+ * Ensure a w:r element carries w:rStyle w:val="Hyperlink" in its w:rPr.
+ * Creates w:rPr if absent; inserts w:rStyle as the first child of w:rPr if
+ * not already present.
+ */
+function c1AddHyperlinkStyle(xmlDoc: Document, W: string, run: Element): void {
+  let rPr = Array.from(run.childNodes).find(
+    n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'rPr'
+  ) as Element | undefined;
+
+  if (!rPr) {
+    rPr = xmlDoc.createElementNS(W, 'w:rPr');
+    run.insertBefore(rPr, run.firstChild);
+  }
+
+  const existingStyle = Array.from(rPr.childNodes).find(
+    n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'rStyle'
+  ) as Element | undefined;
+
+  if (existingStyle) {
+    existingStyle.setAttributeNS(W, 'w:val', 'Hyperlink');
+  } else {
+    const rStyle = xmlDoc.createElementNS(W, 'w:rStyle');
+    rStyle.setAttributeNS(W, 'w:val', 'Hyperlink');
+    rPr.insertBefore(rStyle, rPr.firstChild);
   }
 }
