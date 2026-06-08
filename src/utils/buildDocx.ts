@@ -680,7 +680,12 @@ function insertBookmarkOnHeadingIfAbsent(
     .replace(/\s+/g, ' ')
     .trim();
 
-  const paras = Array.from(xmlDoc.getElementsByTagNameNS(W, 'p'));
+  const paras = Array.from(
+    new Set([
+      ...Array.from(xmlDoc.getElementsByTagNameNS(W, 'p')),
+      ...Array.from(xmlDoc.getElementsByTagName('w:p')),
+    ])
+  );
   let targetPara: Element | null = null;
   for (const para of paras) {
     if (!isHeadingParagraph(para)) continue;
