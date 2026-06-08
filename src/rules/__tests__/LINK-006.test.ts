@@ -981,3 +981,99 @@ describe('LINK-006 leading-underscore bookmark auto-fix', () => {
     expect(issue.inputRequired).toBeUndefined();
   });
 });
+
+// ─── Heading-derived anchor regression: slugifyHeading wins over legacy bookmarks ─
+//
+// Bug: #_Resumes_and_job_1 was silently retargeted to #_Resumes_and_Job because
+// Source 1 (OOXML bookmark name matching) ran before Source 3 (heading text
+// matching) and found a legacy bookmark whose normalised name matched the
+// stripped anchor.  The fix reorders Sources so that when a heading is found,
+// the anchor is always derived via slugifyHeading on the heading text.
+
+describe('LINK-006 heading-derived anchor — slugifyHeading wins over legacy bookmarks', () => {
+  /** Minimal document.xml wrapping the given body XML. */
+  function wrapDocXml(body: string): string {
+    return (
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">` +
+      `<w:body>${body}</w:body></w:document>`
+    );
+  }
+
+  it('resolves #_Resumes_and_job_1 to slugifyHeading result, not a legacy bookmark', () => {
+    // The real-world scenario:
+    //  • Heading H5 "Resumes and job descriptions" — no bookmark attached
+    //  • Separate paragraph with stacked legacy bookmarks _Resume_and_Job,
+    //    _Resumes_and_Job, _Organization_Chart — none match the heading text
+    //  • Broken link #_Resumes_and_job_1 whose numeric suffix was appended by
+    //    Word when a second heading with similar text existed at some point
+    // Expected: retarget to "Resumes_and_job_descriptions" (slugifyHeading),
+    //           NOT to "_Resumes_and_Job" (legacy bookmark prefix-match).
+    const html =
+      '<h5>Resumes and job descriptions</h5>' +
+      '<p><a href="#_Resumes_and_job_1">See resume section</a></p>';
+
+    const documentXml = wrapDocXml(
+      // Heading paragraph (no bookmark)
+      `<w:p><w:pPr><w:pStyle w:val="Heading5"/></w:pPr>` +
+      `<w:r><w:t>Resumes and job descriptions</w:t></w:r></w:p>` +
+      // Separate anchor-only paragraph with stacked legacy bookmarks
+      `<w:p>` +
+      `<w:bookmarkStart w:id="1" w:name="_Resume_and_Job"/>` +
+      `<w:bookmarkStart w:id="2" w:name="_Resumes_and_Job"/>` +
+      `<w:bookmarkStart w:id="3" w:name="_Organization_Chart"/>` +
+      `<w:bookmarkEnd w:id="1"/>` +
+      `<w:bookmarkEnd w:id="2"/>` +
+      `<w:bookmarkEnd w:id="3"/>` +
+      `</w:p>`
+    );
+
+    const doc = makeDoc(html, documentXml);
+    const results = LINK_006.check(doc, OPTIONS);
+
+    // Must emit an AutoAppliedChange (auto-fix), not an instruction-only Issue
+    const change = results.find(r => !('severity' in r)) as AutoAppliedChange | undefined;
+    expect(change).toBeDefined();
+    expect(change!.ruleId).toBe('LINK-006');
+    expect(change!.targetField).toBe('link.bookmark._Resumes_and_job_1');
+
+    // The value must start with the slugifyHeading-derived anchor
+    expect(change!.value).toMatch(/^Resumes_and_job_descriptions/);
+    // Must NOT resolve to the legacy bookmark names
+    expect(change!.value).not.toBe('_Resumes_and_Job');
+    expect(change!.value).not.toBe('_Resume_and_Job');
+  });
+
+  it('still auto-fixes when heading has a case-mismatched OOXML bookmark', () => {
+    // Heading "Maintenance of Effort" has an existing Word-generated bookmark
+    // "Maintenance_of_effort" (lowercase 'e' — Word lowercases some words).
+    // slugifyHeading("Maintenance of Effort") = "Maintenance_of_Effort" (capital E).
+    // The case-insensitive lookup must find the existing bookmark and use its
+    // exact name so the written anchor wires up to the existing w:bookmarkStart.
+    const html =
+      '<h2>Maintenance of Effort</h2>' +
+      '<p><a href="#_Maintenance_of_effort">See MOE</a></p>';
+    const doc = makeDoc(html, xmlWithBookmarks('Maintenance_of_effort'));
+    const change = LINK_006.check(doc, OPTIONS).find(r => !('severity' in r)) as AutoAppliedChange | undefined;
+    expect(change).toBeDefined();
+    expect(change!.value).toBe('Maintenance_of_effort'); // exact OOXML name preserved
+  });
+
+  it('emits needsBookmarkCreation value for heading with no OOXML bookmark', () => {
+    // Heading "Project funding" exists in the HTML and OOXML but has no bookmark.
+    // Broken link #_Project_funding_1 should retarget to
+    // "Project_funding" and signal bookmark creation via the "::" encoding.
+    const html =
+      '<h2>Project funding</h2>' +
+      '<p><a href="#_Project_funding_1">See Project funding</a></p>';
+    const documentXml = wrapDocXml(
+      `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:r><w:t>Project funding</w:t></w:r></w:p>`
+    );
+    const change = LINK_006.check(makeDoc(html, documentXml), OPTIONS)
+      .find(r => !('severity' in r)) as AutoAppliedChange | undefined;
+    expect(change).toBeDefined();
+    // Value must encode both anchor and heading text for bookmark creation
+    expect(change!.value).toBe('Project_funding::Project funding');
+  });
+});

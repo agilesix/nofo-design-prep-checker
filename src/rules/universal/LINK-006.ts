@@ -29,10 +29,16 @@ type FuzzyMatchResult =
       headingText?: string;
       hadNumericSuffix?: boolean;
       matchedByNumericExtraction?: boolean;
-      /** True when the match came from Source 1 (OOXML bookmarks). The anchor
-       *  value is the exact w:name from an existing w:bookmarkStart element, so
-       *  writing it back produces a correctly-wired internal link. */
+      /** True when the anchor is known to be correct: either a case-insensitive
+       *  match to an existing w:bookmarkStart, or derived from heading text when
+       *  OOXML is present (so buildDocx can create the bookmark if needed).
+       *  When true, the check() emits an AutoAppliedChange instead of an Issue. */
       matchedByOoxmlBookmark?: boolean;
+      /** True when the anchor was derived from heading text and no existing
+       *  w:bookmarkStart with that name was found. buildDocx will insert a new
+       *  w:bookmarkStart / w:bookmarkEnd on the heading paragraph so the
+       *  downloaded docx is immediately usable in Word. */
+      needsBookmarkCreation?: boolean;
     }
   | { kind: 'ambiguous' }
   | { kind: 'none' };
@@ -136,13 +142,19 @@ const LINK_006: Rule = {
         const sectionId = findSectionForElement(link, doc);
 
         if (fuzzyResult.matchedByOoxmlBookmark) {
-          // Source 1 OOXML match: the exact bookmark name is known, so the
-          // anchor can be rewritten without user confirmation.
+          // Anchor is known to be correct (OOXML bookmark exists or heading
+          // found with OOXML present). Rewrite without user confirmation.
+          // When needsBookmarkCreation, encode headingText so buildDocx can
+          // insert w:bookmarkStart/End on the heading paragraph.
+          const encodedValue =
+            fuzzyResult.needsBookmarkCreation && fuzzyResult.headingText
+              ? `${fuzzyResult.anchor}::${fuzzyResult.headingText}`
+              : fuzzyResult.anchor;
           results.push({
             ruleId: 'LINK-006',
             description: `Retargeted internal link "#${anchor}" → "#${fuzzyResult.anchor}"`,
             targetField: `link.bookmark.${anchor}`,
-            value: fuzzyResult.anchor,
+            value: encodedValue,
           } as AutoAppliedChange);
         } else {
           // Source 2/3 match: derived from HTML id or heading text — we don't
@@ -358,15 +370,13 @@ function matchByNormalizedValue(
   htmlDoc: Document,
   xmlDoc: XMLDocument | null
 ): FuzzyMatchResult {
-  // ── Source 1: OOXML bookmark names ─────────────────────────────────────────
-  if (xmlDoc) {
-    const names = getOoxmlBookmarkNames(xmlDoc);
-    const matches = names.filter(n => normalizeAnchor(n) === normalizedAnchor);
-    if (matches.length === 1) return { kind: 'single', anchor: matches[0]!, matchedByOoxmlBookmark: true };
-    if (matches.length > 1) return { kind: 'ambiguous' };
-  }
-
   // ── Source 2: HTML element IDs (mammoth-mapped bookmarks) ──────────────────
+  // Exact normalized equality match against element IDs.  Retains higher
+  // priority than Source 3 (heading-text containment) so that a precise HTML
+  // id match wins over a looser heading-text containment match — this also
+  // preserves the original behaviour where Source 2 matches do not surface a
+  // link-text suggestion (no headingText is returned).
+  //
   // For heading elements, strip leading/trailing underscores from the id before
   // using it as a candidate anchor.  Leading underscores (e.g. _Contacts_and_Support)
   // come from headings whose text has a leading space — CLEAN-008 removes leading
@@ -388,27 +398,33 @@ function matchByNormalizedValue(
   if (idMatches.length === 1) return { kind: 'single', anchor: idMatches[0]! };
   if (idMatches.length > 1) return { kind: 'ambiguous' };
 
-  // ── Source 3: HTML heading text ──────────────────────────────────────────────
-  // Sub-check a (direct containment): the normalized anchor must appear *within*
-  // the normalized heading text. This handles short anchors like "Attachment_1"
-  // that target headings like "Attachment 1: Accreditation documentation".
+  // ── Source 3: HTML heading text (before OOXML bookmark names) ────────────────
+  // Running heading-text matching before OOXML bookmark name matching (Source 1)
+  // ensures that when a heading is found, the anchor is always derived from the
+  // heading text (via slugifyHeading) rather than from a legacy or TOC-generated
+  // bookmark that happens to normalise to the same string.
+  //
+  // Sub-check a (direct containment): the normalized anchor appears within the
+  // normalized heading text.  Handles short anchors like "Attachment_1" that
+  // target headings like "Attachment 1: Accreditation documentation".
   //
   // Sub-check b (stop-word containment): if direct containment fails, strip
-  // STOP_WORDS from both the anchor and the heading, then retry. This handles
-  // slugs where Word dropped connective words from the heading text, e.g.
-  // "#Program_requirements_expectations" for heading "Program requirements
-  // and expectations".
+  // STOP_WORDS from both sides and retry.  Handles slugs where Word dropped
+  // connective words, e.g. "#Program_requirements_expectations" for heading
+  // "Program requirements and expectations".
   //
-  // The suggested anchor prefers the heading's own id if mammoth assigned one;
-  // otherwise derives from the matched heading text via slugifyHeading().
-  // Leading underscores are stripped from heading ids — they come from headings
-  // whose text begins with a space (CLEAN-008 removes leading heading spaces in
-  // the output). Trailing underscores (from trailing spaces not stripped by
-  // CLEAN-008) are also stripped defensively — mirrors Source 2 above.
-  // headingText is carried through so the Review card can display it.
+  // When OOXML is present, a case-insensitive lookup is performed to find an
+  // existing bookmark whose name matches the derived anchor:
+  //  • Found  → use the exact OOXML name (preserving case), matchedByOoxmlBookmark
+  //  • Absent → auto-fix still applies but buildDocx must create the bookmark
+  //
+  // When OOXML is absent, the result carries no matchedByOoxmlBookmark flag and
+  // becomes an instruction-only Issue (unchanged behaviour).
   const cleanAnchor = removeStopWords(normalizedAnchor);
   const headings = Array.from(htmlDoc.querySelectorAll('h1,h2,h3,h4,h5,h6'));
-  const headingMatches: { anchor: string; headingText: string }[] = [];
+  const ooxmlNamesList = xmlDoc ? getOoxmlBookmarkNames(xmlDoc) : [];
+  const headingMatches: { anchor: string; headingText: string; exactBookmarkName?: string }[] = [];
+
   for (const h of headings) {
     const text = (h.textContent ?? '').trim();
     if (!text) continue;
@@ -426,15 +442,52 @@ function matchByNormalizedValue(
     const suggestion = rawId
       ? cleanHeadingId(rawId)
       : slugifyHeading(text);
-    if (!headingMatches.some(m => m.anchor === suggestion)) {
-      headingMatches.push({ anchor: suggestion, headingText: text });
+
+    // Case-insensitive OOXML bookmark lookup: if an existing bookmark already
+    // carries the derived anchor name (possibly with different case — Word and
+    // NOFO Builder may produce different casing), use it verbatim so the
+    // written anchor value wires up to the existing w:bookmarkStart element.
+    const lowerSuggestion = suggestion.toLowerCase();
+    const exactBookmarkName = ooxmlNamesList.find(
+      n => n.toLowerCase() === lowerSuggestion
+    );
+
+    const resolvedAnchor = exactBookmarkName ?? suggestion;
+    if (!headingMatches.some(m => m.anchor === resolvedAnchor)) {
+      headingMatches.push({ anchor: resolvedAnchor, headingText: text, exactBookmarkName });
     }
   }
 
   if (headingMatches.length === 1) {
-    return { kind: 'single', anchor: headingMatches[0]!.anchor, headingText: headingMatches[0]!.headingText };
+    const match = headingMatches[0]!;
+    if (xmlDoc !== null) {
+      // OOXML is present — anchor is reliable; emit auto-fix.
+      // needsBookmarkCreation signals buildDocx to insert w:bookmarkStart/End
+      // when no existing bookmark matched.
+      return {
+        kind: 'single',
+        anchor: match.anchor,
+        headingText: match.headingText,
+        matchedByOoxmlBookmark: true,
+        ...(match.exactBookmarkName ? {} : { needsBookmarkCreation: true }),
+      };
+    }
+    // No OOXML — instruction-only (headingText surfaced for link-text suggestion).
+    return { kind: 'single', anchor: match.anchor, headingText: match.headingText };
   }
   if (headingMatches.length > 1) return { kind: 'ambiguous' };
+
+  // ── Source 1: OOXML bookmark names (fallback) ──────────────────────────────
+  // Only reached when neither Source 2 (HTML id) nor Source 3 (heading text)
+  // produced a match.  Handles cases where a bookmark was renamed but has no
+  // corresponding heading element in the HTML (e.g. a stand-alone non-heading
+  // bookmark that the link truly targets).
+  if (xmlDoc) {
+    const names = getOoxmlBookmarkNames(xmlDoc);
+    const matches = names.filter(n => normalizeAnchor(n) === normalizedAnchor);
+    if (matches.length === 1) return { kind: 'single', anchor: matches[0]!, matchedByOoxmlBookmark: true };
+    if (matches.length > 1) return { kind: 'ambiguous' };
+  }
 
   return { kind: 'none' };
 }
