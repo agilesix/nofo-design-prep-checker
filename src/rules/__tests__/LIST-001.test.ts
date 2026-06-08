@@ -84,7 +84,7 @@ describe('LIST-001: ListParagraph with numId=0 and typed bullet is not flagged',
 // ─── Normal detection still works ─────────────────────────────────────────────
 
 describe('LIST-001: still flags genuine manual bullets', () => {
-  it('flags 3+ consecutive paragraphs with bullet chars and no list style in OOXML', () => {
+  it('flags 2+ consecutive paragraphs with bullet chars and no list style in OOXML', () => {
     const items = ['• Item one', '• Item two', '• Item three'];
     const html = items.map(t => `<p>${t}</p>`).join('');
     const documentXml = wrapXml(
