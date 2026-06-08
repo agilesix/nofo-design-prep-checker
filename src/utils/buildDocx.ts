@@ -703,8 +703,12 @@ function insertBookmarkOnHeadingIfAbsent(
   if (!targetPara) return;
 
   // Allocate a unique bookmark ID (max existing id + 1)
-  const allBms = Array.from(xmlDoc.getElementsByTagNameNS(W, 'bookmarkStart'));
-  const maxId = allBms.reduce((max, bm) => {
+  const allBms = [
+    ...Array.from(xmlDoc.getElementsByTagNameNS(W, 'bookmarkStart')),
+    ...Array.from(xmlDoc.getElementsByTagNameNS(W, 'bookmarkEnd')),
+    ...Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart')),
+    ...Array.from(xmlDoc.getElementsByTagName('w:bookmarkEnd')),
+  ];
     const idStr =
       bm.getAttribute('w:id') ??
       bm.getAttributeNS(W, 'id') ??
