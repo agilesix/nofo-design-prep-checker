@@ -4495,27 +4495,20 @@ async function applyCdcFinancialCapabilityLink(zip: JSZip, anchor: string): Prom
       c1AddHyperlinkStyle(xmlDoc, W, run);
     }
 
-    // Build the w:hyperlink element and move runs into it
+    // Build the w:hyperlink element, insert it where the first run was, then move runs into it
     const hyperlink = xmlDoc.createElementNS(W, 'w:hyperlink');
     hyperlink.setAttributeNS(W, 'w:anchor', anchor);
+
+    // Insert before the first run to preserve any non-run siblings (bookmarks, comment ranges, etc.)
+    wP.insertBefore(hyperlink, runs[0]);
+
     for (const run of runs) {
       hyperlink.appendChild(run);
     }
 
-    // Insert hyperlink after w:pPr (or at the start of the paragraph)
-    const pPr = Array.from(wP.childNodes).find(
-      n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'pPr'
-    );
-    if (pPr) {
-      pPr.parentNode!.insertBefore(hyperlink, pPr.nextSibling);
-    } else {
-      wP.insertBefore(hyperlink, wP.firstChild);
-    }
-
-    break;
+    zip.file('word/document.xml', serializeXml(xmlDoc));
+    return;
   }
-
-  zip.file('word/document.xml', serializeXml(xmlDoc));
 }
 
 /**
