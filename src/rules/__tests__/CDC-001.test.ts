@@ -3,15 +3,16 @@ import JSZip from 'jszip';
 import CDC_001 from '../opdiv/CDC-001';
 import type { ParsedDocument, AutoAppliedChange } from '../../types';
 
+const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const OPTIONS = { contentGuideId: 'cdc' as const };
 
-function makeDoc(html: string): ParsedDocument {
+function makeDoc(html: string, documentXml = ''): ParsedDocument {
   return {
     html,
     sections: [],
     rawText: '',
     zipArchive: new JSZip(),
-    documentXml: '',
+    documentXml,
     footnotesXml: '',
     endnotesXml: '',
     activeContentGuide: {
@@ -27,6 +28,37 @@ function makeDoc(html: string): ParsedDocument {
       },
     },
   };
+}
+
+function wrapXml(body: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W}"><w:body>${body}<w:sectPr/></w:body></w:document>`
+  );
+}
+
+function makeH2Para(text: string): string {
+  return (
+    `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+    `<w:r><w:t>${text}</w:t></w:r></w:p>`
+  );
+}
+
+function makeH5ParaWithBookmark(text: string, bookmarkName: string): string {
+  return (
+    `<w:p><w:pPr><w:pStyle w:val="Heading5"/></w:pPr>` +
+    `<w:bookmarkStart w:id="1" w:name="${bookmarkName}"/>` +
+    `<w:r><w:t>${text}</w:t></w:r>` +
+    `<w:bookmarkEnd w:id="1"/></w:p>`
+  );
+}
+
+function makeBulletPara(text: string): string {
+  return (
+    `<w:p><w:pPr><w:pStyle w:val="Bulletlevel1"/></w:pPr>` +
+    `<w:r><w:rPr><w:u w:val="single"/><w:highlight w:val="yellow"/></w:rPr>` +
+    `<w:t>${text}</w:t></w:r></w:p>`
+  );
 }
 
 // ─── Canonical trigger case ───────────────────────────────────────────────────
@@ -156,5 +188,46 @@ describe('CDC-001: skips silently when conditions are not met', () => {
 
   it('skips when the document has no html content', () => {
     expect(CDC_001.check(makeDoc(''), OPTIONS)).toHaveLength(0);
+  });
+});
+
+// ─── OOXML bookmark regression ────────────────────────────────────────────────
+
+describe('CDC-001: OOXML-based heading detection', () => {
+  it('uses existing w:bookmarkStart name directly when heading already has one', () => {
+    // The heading in OOXML has style "Heading5" (no space — mammoth would emit
+    // <p> not <h5>) and carries bookmark "_Financial_capability_statement".
+    // The rule must emit that exact name rather than slugifyHeading's output.
+    const html = `
+      <h2>Project narrative</h2>
+      <p>Financial capability statement</p>
+    `;
+    const documentXml = wrapXml(
+      makeH2Para('Project narrative') +
+      makeBulletPara('Financial capability statement') +
+      makeH5ParaWithBookmark('Financial capability statement', '_Financial_capability_statement')
+    );
+    const results = CDC_001.check(makeDoc(html, documentXml), OPTIONS);
+    expect(results).toHaveLength(1);
+    const change = results[0] as AutoAppliedChange;
+    expect(change.ruleId).toBe('CDC-001');
+    expect(change.targetField).toBe('cdc.financial.capability.link');
+    expect(change.value).toBe('_Financial_capability_statement');
+  });
+
+  it('skips silently when no matching H4–H6 heading exists in OOXML', () => {
+    // documentXml is present but contains no H4–H6 heading with matching text,
+    // so OOXML detection returns null and the rule must return [].
+    const html = `
+      <h2>Project narrative</h2>
+      <p>Financial capability statement</p>
+    `;
+    const documentXml = wrapXml(
+      makeH2Para('Project narrative') +
+      makeBulletPara('Financial capability statement') +
+      `<w:p><w:pPr><w:pStyle w:val="Heading5"/></w:pPr>` +
+      `<w:r><w:t>Some other heading</w:t></w:r></w:p>`
+    );
+    expect(CDC_001.check(makeDoc(html, documentXml), OPTIONS)).toHaveLength(0);
   });
 });

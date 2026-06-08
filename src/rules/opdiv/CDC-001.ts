@@ -19,10 +19,11 @@ import { slugifyHeading } from '../../utils/anchorUtils';
  *   4. An H4–H6 heading with text matching "Financial capability statement"
  *      (case-insensitive) exists somewhere in the document.
  *
- * When the rule fires, it emits an AutoAppliedChange whose value is the
- * slugified anchor of the target heading (via slugifyHeading). buildDocx.ts
- * reads that anchor and wraps the bullet's runs in a w:hyperlink w:anchor
- * element pointing to the bookmark.
+ * Heading detection uses OOXML when doc.documentXml is available (more reliable
+ * than HTML, since custom style names may not match mammoth's style map).
+ * When an existing w:bookmarkStart is found on the heading paragraph, its name
+ * is used directly as the anchor — slugifyHeading is only called when no
+ * bookmark exists yet.
  *
  * Scoped to all CDC content guides: cdc, cdc-research, cdc-dght-ssj,
  * cdc-dght-competitive, cdc-dghp.
@@ -30,10 +31,38 @@ import { slugifyHeading } from '../../utils/anchorUtils';
 
 const TARGET_TEXT = 'financial capability statement';
 const PROJECT_NARRATIVE = 'project narrative';
+const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
 function htmlHeadingLevel(el: Element): number {
   const m = el.tagName.toLowerCase().match(/^h([1-6])$/);
   return m ? parseInt(m[1]!, 10) : 0;
+}
+
+function ooxmlHeadingLevel(para: Element): number {
+  const pPr = Array.from(para.children).find(c => c.localName === 'pPr');
+  if (!pPr) return 0;
+  const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+  if (!pStyle) return 0;
+  const val =
+    pStyle.getAttribute('w:val') ??
+    pStyle.getAttributeNS(W_NS, 'val') ??
+    pStyle.getAttribute('val') ??
+    '';
+  const m = val.match(/^Heading\s*(\d+)$/i);
+  if (!m) return 0;
+  const level = parseInt(m[1]!, 10);
+  return level >= 1 && level <= 6 ? level : 0;
+}
+
+function ooxmlParaText(para: Element): string {
+  const byNS = Array.from(para.getElementsByTagNameNS(W_NS, 't'));
+  const byTag = Array.from(para.getElementsByTagName('w:t'));
+  const seen = new Set<Element>();
+  const nodes: Element[] = [];
+  for (const el of [...byNS, ...byTag]) {
+    if (!seen.has(el)) { seen.add(el); nodes.push(el); }
+  }
+  return nodes.map(t => t.textContent ?? '').join('').trim();
 }
 
 const CDC_001: Rule = {
@@ -68,18 +97,45 @@ const CDC_001: Rule = {
       }
     }
 
-    // 3. Find a matching H4–H6 heading anywhere in the document
+    // 3. Find a matching H4–H6 heading anywhere in the document.
+    //    Prefer OOXML when available: custom Word style names (e.g. "Heading5"
+    //    without a space, or locale variants) may not match mammoth's style map
+    //    and would produce a <p> instead of <h5> in the HTML output.
+    //    When the OOXML heading paragraph already carries a w:bookmarkStart, use
+    //    that name directly so the hyperlink target stays stable even if HEAD-004
+    //    later renames bookmark slugs.
     let targetAnchor: string | null = null;
-    for (const el of bodyChildren) {
-      const level = htmlHeadingLevel(el);
-      if (level >= 4 && level <= 6) {
-        const text = (el.textContent ?? '').trim();
-        if (text.toLowerCase() === TARGET_TEXT) {
-          targetAnchor = slugifyHeading(text);
-          break;
+
+    if (doc.documentXml) {
+      const xmlParser = new DOMParser();
+      const xmlDoc = xmlParser.parseFromString(doc.documentXml, 'application/xml');
+      for (const para of Array.from(xmlDoc.getElementsByTagName('w:p'))) {
+        const level = ooxmlHeadingLevel(para);
+        if (level < 4 || level > 6) continue;
+        const text = ooxmlParaText(para);
+        if (text.toLowerCase() !== TARGET_TEXT) continue;
+        const bm = para.getElementsByTagName('w:bookmarkStart')[0];
+        const bmName =
+          bm?.getAttribute('w:name') ??
+          bm?.getAttributeNS(W_NS, 'name') ??
+          bm?.getAttribute('name');
+        targetAnchor = bmName || slugifyHeading(text);
+        break;
+      }
+    } else {
+      // Fallback when OOXML is absent (e.g. unit tests that supply HTML only)
+      for (const el of bodyChildren) {
+        const level = htmlHeadingLevel(el);
+        if (level >= 4 && level <= 6) {
+          const text = (el.textContent ?? '').trim();
+          if (text.toLowerCase() === TARGET_TEXT) {
+            targetAnchor = slugifyHeading(text);
+            break;
+          }
         }
       }
     }
+
     if (!targetAnchor) return [];
 
     // 4. Find "Financial capability statement" bullet in the section without
