@@ -423,6 +423,12 @@ function matchByNormalizedValue(
   const cleanAnchor = removeStopWords(normalizedAnchor);
   const headings = Array.from(htmlDoc.querySelectorAll('h1,h2,h3,h4,h5,h6'));
   const ooxmlNamesList = xmlDoc ? getOoxmlBookmarkNames(xmlDoc) : [];
+  // Precompute lowercase → exact-name map for O(1) lookup per heading instead
+  // of an O(bookmarks) linear scan inside the heading loop.
+  const ooxmlNamesLower = new Map<string, string>();
+  for (const n of ooxmlNamesList) {
+    if (!ooxmlNamesLower.has(n.toLowerCase())) ooxmlNamesLower.set(n.toLowerCase(), n);
+  }
   const headingMatches: { anchor: string; headingText: string; exactBookmarkName?: string }[] = [];
 
   for (const h of headings) {
@@ -447,10 +453,7 @@ function matchByNormalizedValue(
     // carries the derived anchor name (possibly with different case — Word and
     // NOFO Builder may produce different casing), use it verbatim so the
     // written anchor value wires up to the existing w:bookmarkStart element.
-    const lowerSuggestion = suggestion.toLowerCase();
-    const exactBookmarkName = ooxmlNamesList.find(
-      n => n.toLowerCase() === lowerSuggestion
-    );
+    const exactBookmarkName = ooxmlNamesLower.get(suggestion.toLowerCase());
 
     const resolvedAnchor = exactBookmarkName ?? suggestion;
     if (headingMatches.some(m => m.anchor === resolvedAnchor)) return { kind: 'ambiguous' };
