@@ -32,12 +32,21 @@ const LIST_001: Rule = {
         if (!pPr) continue;
         const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
         if (!pStyle) continue;
-        const styleName = pStyle.getAttribute('w:val') ?? '';
+        const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+        const styleName =
+          pStyle.getAttribute('w:val') ??
+          pStyle.getAttributeNS(W, 'val') ??
+          pStyle.getAttribute('val') ??
+          '';
         if (styleName.toLowerCase().includes('list')) {
-          const text = Array.from(para.getElementsByTagName('w:t'))
-            .map(t => t.textContent ?? '')
-            .join('')
-            .trim();
+          const byNS = Array.from(para.getElementsByTagNameNS(W, 't'));
+          const byTag = Array.from(para.getElementsByTagName('w:t'));
+          const seen = new Set<Element>();
+          const nodes: Element[] = [];
+          for (const el of [...byNS, ...byTag]) {
+            if (!seen.has(el)) { seen.add(el); nodes.push(el); }
+          }
+          const text = nodes.map(t => t.textContent ?? '').join('').trim();
           if (text) listStyledTexts.add(text);
         }
       }
