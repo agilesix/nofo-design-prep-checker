@@ -669,24 +669,23 @@ function insertBookmarkOnHeadingIfAbsent(
     if (name === anchor) return;
   }
 
-  // Find the heading paragraph whose trimmed text matches headingText
+  // Find the heading paragraph whose text matches headingText (whitespace- and NBSP-normalised)
+  const normalizedHeadingText = headingText
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
   const paras = Array.from(xmlDoc.getElementsByTagNameNS(W, 'p'));
   let targetPara: Element | null = null;
   for (const para of paras) {
-    const pPr = Array.from(para.children).find(c => c.localName === 'pPr');
-    if (!pPr) continue;
-    const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
-    if (!pStyle) continue;
-    const styleName =
-      pStyle.getAttribute('w:val') ??
-      pStyle.getAttributeNS(W, 'val') ??
-      pStyle.getAttribute('val') ??
-      '';
-    if (!styleName.match(/^heading[\s]?[1-6]$/i)) continue;
-    // Get text content from all w:t descendants
-    const tEls = Array.from(para.getElementsByTagNameNS(W, 't'));
-    const paraText = tEls.map(t => t.textContent ?? '').join('').trim();
-    if (paraText === headingText.trim()) {
+    if (!isHeadingParagraph(para)) continue;
+
+    const paraText = getParaText(para)
+      .replace(/\u00a0/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (paraText === normalizedHeadingText) {
       targetPara = para;
       break;
     }
