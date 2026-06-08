@@ -453,9 +453,8 @@ function matchByNormalizedValue(
     );
 
     const resolvedAnchor = exactBookmarkName ?? suggestion;
-    if (!headingMatches.some(m => m.anchor === resolvedAnchor)) {
-      headingMatches.push({ anchor: resolvedAnchor, headingText: text, exactBookmarkName });
-    }
+    if (headingMatches.some(m => m.anchor === resolvedAnchor)) return { kind: 'ambiguous' };
+    headingMatches.push({ anchor: resolvedAnchor, headingText: text, exactBookmarkName });
   }
 
   if (headingMatches.length === 1) {
