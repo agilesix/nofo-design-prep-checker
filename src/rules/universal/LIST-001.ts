@@ -5,7 +5,7 @@ import { buildLocationLookup } from '../../utils/locationContext';
  * LIST-001: Fake lists using manual bullets or dashes
  * Detects paragraphs that start with manual bullet characters instead of using proper list markup.
  */
-const MANUAL_BULLET_PATTERN = /^[\u2022\u2023\u25E6\u2043\u2219\u25CF\u25CB\u25A0\u25A1\-*]\s+/;
+const MANUAL_BULLET_PATTERN = /^[•‣◦⁃∙●○■□\-*]\s+/;
 const MANUAL_NUMBER_PATTERN = /^\d+[.)]\s+/;
 
 const LIST_001: Rule = {
@@ -18,12 +18,13 @@ const LIST_001: Rule = {
     const paragraphs = Array.from(htmlDoc.querySelectorAll('p'));
     const getContext = buildLocationLookup(htmlDoc);
 
-    // Build a set of paragraph text content for paragraphs that carry a Word
-    // list style (w:pStyle w:val containing "list", case-insensitive). These
-    // paragraphs are excluded from manual-bullet detection: they are properly
-    // styled as list items even when numId="0" suppresses the auto-generated
-    // glyph and the text run opens with a typed bullet character such as ◦.
-    const listStyledTexts = new Set<string>();
+    // Count how many times each text appears in list-styled OOXML paragraphs
+    // (w:pStyle w:val containing "list", case-insensitive). Counts are consumed
+    // one-for-one as matching HTML paragraphs are encountered in document order,
+    // so a paragraph is only excluded when there is an unspent list-styled OOXML
+    // paragraph with the same text. This prevents a list-styled paragraph from
+    // masking a genuinely manual-bullet paragraph that happens to share text.
+    const listStyledCounts = new Map<string, number>();
     if (doc.documentXml) {
       const xmlParser = new DOMParser();
       const xmlDoc = xmlParser.parseFromString(doc.documentXml, 'application/xml');
@@ -47,9 +48,19 @@ const LIST_001: Rule = {
             if (!seen.has(el)) { seen.add(el); nodes.push(el); }
           }
           const text = nodes.map(t => t.textContent ?? '').join('').trim();
-          if (text) listStyledTexts.add(text);
+          if (text) listStyledCounts.set(text, (listStyledCounts.get(text) ?? 0) + 1);
         }
       }
+    }
+
+    // Consume one count for the given text; returns true if a list-styled
+    // OOXML paragraph existed and was charged for this HTML paragraph.
+    function consumeListStyled(text: string): boolean {
+      const n = listStyledCounts.get(text);
+      if (!n) return false;
+      if (n === 1) listStyledCounts.delete(text);
+      else listStyledCounts.set(text, n - 1);
+      return true;
     }
 
     // Find consecutive paragraphs that look like list items
@@ -64,7 +75,9 @@ const LIST_001: Rule = {
 
       // Paragraphs with a Word list style are excluded even when their text
       // run starts with a typed bullet character (e.g. ◦ with numId="0").
-      if ((isBullet || isNumbered) && !listStyledTexts.has(text)) {
+      // consumeListStyled is called here (and only here) so the count is spent
+      // exactly once per HTML paragraph encountered in document order.
+      if ((isBullet || isNumbered) && !consumeListStyled(text)) {
         const type = isBullet ? 'bullet' : 'numbered';
         if (currentGroupStart === -1 || currentGroupType !== type) {
           if (currentGroupStart !== -1 && index - currentGroupStart >= 2) {

@@ -112,4 +112,27 @@ describe('LIST-001: still flags genuine manual bullets', () => {
     const html = '<p>• Only item</p>';
     expect(LIST_001.check(makeDoc(html, ''), OPTIONS)).toHaveLength(0);
   });
+
+  it('flags a manual-bullet paragraph that shares text with a list-styled one elsewhere', () => {
+    // One ListParagraph with "◦ Shared item" and one Normal paragraph also
+    // with "◦ Shared item". The list-styled match should only absorb one
+    // occurrence; the Normal one (plus two others) should still form a group.
+    const html =
+      '<p>◦ Shared item</p>' +   // list-styled → excluded
+      '<p>◦ Shared item</p>' +   // Normal → genuine bullet (same text, count exhausted)
+      '<p>◦ Another item</p>' +
+      '<p>◦ Third item</p>';
+    const documentXml = wrapXml(
+      // First paragraph: ListParagraph (list-styled, excluded)
+      makeXmlPara('◦ Shared item', 'ListParagraph', '0') +
+      // Second paragraph: Normal (genuine manual bullet)
+      `<w:p><w:pPr><w:pStyle w:val="Normal"/></w:pPr><w:r><w:t>◦ Shared item</w:t></w:r></w:p>` +
+      `<w:p><w:pPr><w:pStyle w:val="Normal"/></w:pPr><w:r><w:t>◦ Another item</w:t></w:r></w:p>` +
+      `<w:p><w:pPr><w:pStyle w:val="Normal"/></w:pPr><w:r><w:t>◦ Third item</w:t></w:r></w:p>`
+    );
+    // The three Normal paragraphs form a consecutive group → 1 issue
+    const issues = LIST_001.check(makeDoc(html, documentXml), OPTIONS);
+    expect(issues).toHaveLength(1);
+    expect(issues[0]!.ruleId).toBe('LIST-001');
+  });
 });
