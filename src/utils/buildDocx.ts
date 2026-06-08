@@ -4484,26 +4484,30 @@ async function applyCdcFinancialCapabilityLink(zip: JSZip, anchor: string): Prom
     // Skip if a hyperlink is already present
     if (wP.getElementsByTagName('w:hyperlink').length > 0) continue;
 
-    // Collect all direct w:r children
-    const runs = Array.from(wP.childNodes).filter(
-      n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'r'
+    // Wrap all non-<w:pPr> children so we preserve ordering of bookmarks/comment ranges/etc.
+    const contentNodes = Array.from(wP.childNodes).filter(
+      n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName !== 'pPr'
     ) as Element[];
-    if (runs.length === 0) continue;
+    if (contentNodes.length === 0) continue;
 
-    // Apply Hyperlink character style to each run
-    for (const run of runs) {
-      c1AddHyperlinkStyle(xmlDoc, W, run);
+    // Apply Hyperlink character style to any runs that will end up inside the hyperlink
+    for (const node of contentNodes) {
+      const byNS = Array.from(node.getElementsByTagNameNS(W, 'r')) as Element[];
+      const byTag = Array.from(node.getElementsByTagName('w:r')) as Element[];
+      const self = node.localName === 'r' ? [node] : [];
+      for (const run of Array.from(new Set<Element>([...self, ...byNS, ...byTag]))) {
+        c1AddHyperlinkStyle(xmlDoc, W, run);
+      }
     }
 
-    // Build the w:hyperlink element, insert it where the first run was, then move runs into it
+    // Build the w:hyperlink element, insert it before the first content node, then move content into it
     const hyperlink = xmlDoc.createElementNS(W, 'w:hyperlink');
     hyperlink.setAttributeNS(W, 'w:anchor', anchor);
 
-    // Insert before the first run to preserve any non-run siblings (bookmarks, comment ranges, etc.)
-    wP.insertBefore(hyperlink, runs[0]!);
+    wP.insertBefore(hyperlink, contentNodes[0]!);
 
-    for (const run of runs) {
-      hyperlink.appendChild(run);
+    for (const node of contentNodes) {
+      hyperlink.appendChild(node);
     }
 
     zip.file('word/document.xml', serializeXml(xmlDoc));
