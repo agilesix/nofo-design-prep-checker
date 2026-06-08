@@ -4526,10 +4526,13 @@ function c1AddHyperlinkStyle(xmlDoc: Document, W: string, run: Element): void {
     run.insertBefore(rPr, run.firstChild);
   }
 
-  const hasStyle = Array.from(rPr.childNodes).some(
+  const existingStyle = Array.from(rPr.childNodes).find(
     n => n.nodeType === Node.ELEMENT_NODE && (n as Element).localName === 'rStyle'
-  );
-  if (!hasStyle) {
+  ) as Element | undefined;
+
+  if (existingStyle) {
+    existingStyle.setAttributeNS(W, 'w:val', 'Hyperlink');
+  } else {
     const rStyle = xmlDoc.createElementNS(W, 'w:rStyle');
     rStyle.setAttributeNS(W, 'w:val', 'Hyperlink');
     rPr.insertBefore(rStyle, rPr.firstChild);
