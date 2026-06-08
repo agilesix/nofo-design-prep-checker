@@ -3535,6 +3535,92 @@ describe('buildDocx — LINK-006 auto-applied bookmark retargets', () => {
   });
 });
 
+// ─── LINK-006 bookmark creation via "anchor::headingText" encoding ────────────
+
+describe('buildDocx — LINK-006 needsBookmarkCreation: inserts w:bookmarkStart on heading', () => {
+  const W_NS_L6C = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+  function makeDocWithHeadingAndBrokenLink(): string {
+    return (
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_L6C}">` +
+      `<w:body>` +
+      // Heading paragraph — NO bookmark yet
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading5"/></w:pPr>` +
+      `<w:r><w:t>Resumes and job descriptions</w:t></w:r>` +
+      `</w:p>` +
+      // Body paragraph with the broken hyperlink
+      `<w:p>` +
+      `<w:hyperlink w:anchor="_Resumes_and_job_1">` +
+      `<w:r><w:t>See resume section</w:t></w:r>` +
+      `</w:hyperlink>` +
+      `</w:p>` +
+      `<w:sectPr/>` +
+      `</w:body></w:document>`
+    );
+  }
+
+  it('inserts w:bookmarkStart and w:bookmarkEnd on the heading paragraph when the value encodes "anchor::headingText"', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeDocWithHeadingAndBrokenLink());
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Retargeted internal link "#_Resumes_and_job_1" → "#Resumes_and_job_descriptions"',
+      targetField: 'link.bookmark._Resumes_and_job_1',
+      // "anchor::headingText" encoding signals buildDocx to create the bookmark
+      value: 'Resumes_and_job_descriptions::Resumes and job descriptions',
+    };
+
+    const xml = await getOutputDocXml(zip, [], [change]);
+
+    // Hyperlink must be retargeted
+    expect(xml).toContain('w:anchor="Resumes_and_job_descriptions"');
+    expect(xml).not.toContain('w:anchor="_Resumes_and_job_1"');
+
+    // A new w:bookmarkStart with the correct name must appear
+    expect(xml).toContain('w:name="Resumes_and_job_descriptions"');
+
+    // The bookmarkStart and bookmarkEnd must share the same w:id
+    const startMatch = xml.match(/w:bookmarkStart[^>]*w:name="Resumes_and_job_descriptions"[^>]*w:id="(\d+)"|w:bookmarkStart[^>]*w:id="(\d+)"[^>]*w:name="Resumes_and_job_descriptions"/);
+    expect(startMatch).not.toBeNull();
+    const bmId = startMatch![1] ?? startMatch![2];
+    expect(xml).toContain(`w:bookmarkEnd w:id="${bmId}"`);
+  });
+
+  it('does not insert a duplicate bookmark when one with the same name already exists', async () => {
+    const zip = new JSZip();
+    // Document already has a bookmark named "Resumes_and_job_descriptions"
+    zip.file(
+      'word/document.xml',
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_L6C}"><w:body>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading5"/></w:pPr>` +
+      `<w:bookmarkStart w:id="5" w:name="Resumes_and_job_descriptions"/>` +
+      `<w:r><w:t>Resumes and job descriptions</w:t></w:r>` +
+      `<w:bookmarkEnd w:id="5"/>` +
+      `</w:p>` +
+      `<w:p><w:hyperlink w:anchor="_Resumes_and_job_1"><w:r><w:t>See section</w:t></w:r></w:hyperlink></w:p>` +
+      `<w:sectPr/></w:body></w:document>`
+    );
+
+    const change: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Retargeted internal link "#_Resumes_and_job_1" → "#Resumes_and_job_descriptions"',
+      targetField: 'link.bookmark._Resumes_and_job_1',
+      value: 'Resumes_and_job_descriptions::Resumes and job descriptions',
+    };
+
+    const xml = await getOutputDocXml(zip, [], [change]);
+
+    // Exactly one bookmarkStart with this name — no duplicate inserted
+    const occurrences = (xml.match(/w:name="Resumes_and_job_descriptions"/g) ?? []).length;
+    expect(occurrences).toBe(1);
+  });
+});
+
 // ─── LINK-006 + CLEAN-008 interaction ────────────────────────────────────────
 //
 // These tests cover the two real-world failing cases the user reported:

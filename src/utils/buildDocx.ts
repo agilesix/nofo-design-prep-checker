@@ -597,10 +597,16 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
     }
 
     // LINK-006: retarget internal bookmark anchor
-    // targetField: "link.bookmark.{old_anchor}", value: "{new_anchor}"
+    // targetField: "link.bookmark.{old_anchor}"
+    // value: "{new_anchor}" or "{new_anchor}::{headingText}" when a bookmark
+    //   needs to be created on the heading paragraph (needsBookmarkCreation).
     if (fix.ruleId === 'LINK-006' && fix.targetField?.startsWith('link.bookmark.')) {
       const oldAnchor = fix.targetField.replace('link.bookmark.', '');
-      const normalizedNewAnchor = (fix.value ?? '').trim().replace(/^#/, '');
+      const rawValue = (fix.value ?? '').trim().replace(/^#/, '');
+      // Split "newAnchor::headingText" encoding used when bookmark creation is needed
+      const colonIdx = rawValue.indexOf('::');
+      const normalizedNewAnchor = colonIdx >= 0 ? rawValue.slice(0, colonIdx) : rawValue;
+      const headingTextForBookmark = colonIdx >= 0 ? rawValue.slice(colonIdx + 2) : null;
       if (normalizedNewAnchor) {
         const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
         for (const el of hyperlinks) {
@@ -617,6 +623,10 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
         }
         // Collect for .rels update (r:id-based internal links)
         link006AnchorRemap.set(oldAnchor, normalizedNewAnchor);
+        // Create bookmark on the heading paragraph when none exists yet
+        if (headingTextForBookmark) {
+          insertBookmarkOnHeadingIfAbsent(xmlDoc, normalizedNewAnchor, headingTextForBookmark);
+        }
       }
     }
 
@@ -630,6 +640,98 @@ async function applyDocumentBodyFixes(zip: JSZip, fixes: AcceptedFix[]): Promise
   if (link006AnchorRemap.size > 0) {
     await updateRelsInternalAnchorTargets(zip, link006AnchorRemap);
   }
+}
+
+/**
+ * Insert w:bookmarkStart + w:bookmarkEnd elements for `anchor` on the heading
+ * paragraph whose text matches `headingText`, unless the bookmark already exists.
+ *
+ * Called by the LINK-006 retarget handler when the resolved anchor was derived
+ * from heading text (via slugifyHeading) but no existing w:bookmarkStart with
+ * that name was found. Inserting the bookmark ensures the downloaded docx has a
+ * working internal link in Word immediately, not just after NOFO Builder import.
+ */
+function insertBookmarkOnHeadingIfAbsent(
+  xmlDoc: XMLDocument,
+  anchor: string,
+  headingText: string
+): void {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+  // Skip if the bookmark already exists
+  const existing = Array.from(
+    new Set([
+      ...Array.from(xmlDoc.getElementsByTagNameNS(W, 'bookmarkStart')),
+      ...Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart')),
+    ])
+  );
+  for (const bm of existing) {
+    const name =
+      bm.getAttribute('w:name') ??
+      bm.getAttributeNS(W, 'name') ??
+      bm.getAttribute('name') ??
+      '';
+    if (name === anchor) return;
+  }
+
+  // Find the heading paragraph whose text matches headingText (whitespace- and NBSP-normalised)
+  const normalizedHeadingText = headingText
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const paras = Array.from(
+    new Set([
+      ...Array.from(xmlDoc.getElementsByTagNameNS(W, 'p')),
+      ...Array.from(xmlDoc.getElementsByTagName('w:p')),
+    ])
+  );
+  let targetPara: Element | null = null;
+  for (const para of paras) {
+    if (!isHeadingParagraph(para)) continue;
+
+    const paraText = getParaText(para)
+      .replace(/\u00a0/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (paraText === normalizedHeadingText) {
+      targetPara = para;
+      break;
+    }
+  }
+  if (!targetPara) return;
+
+  // Allocate a unique bookmark ID (max existing id + 1)
+  const allBms = [
+    ...Array.from(xmlDoc.getElementsByTagNameNS(W, 'bookmarkStart')),
+    ...Array.from(xmlDoc.getElementsByTagNameNS(W, 'bookmarkEnd')),
+    ...Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart')),
+    ...Array.from(xmlDoc.getElementsByTagName('w:bookmarkEnd')),
+  ];
+  const maxId = allBms.reduce((max, bm) => {
+    const idStr =
+      bm.getAttribute('w:id') ??
+      bm.getAttributeNS(W, 'id') ??
+      bm.getAttribute('id') ??
+      '0';
+    return Math.max(max, parseInt(idStr, 10) || 0);
+  }, 0);
+  const newId = String(maxId + 1);
+
+  // Create w:bookmarkStart
+  const bmStart = xmlDoc.createElementNS(W, 'w:bookmarkStart');
+  bmStart.setAttributeNS(W, 'w:id', newId);
+  bmStart.setAttributeNS(W, 'w:name', anchor);
+
+  // Create w:bookmarkEnd
+  const bmEnd = xmlDoc.createElementNS(W, 'w:bookmarkEnd');
+  bmEnd.setAttributeNS(W, 'w:id', newId);
+
+  // Insert bookmarkStart after w:pPr (or at beginning if no w:pPr)
+  const pPr = Array.from(targetPara.children).find(c => c.localName === 'pPr');
+  targetPara.insertBefore(bmStart, pPr ? pPr.nextSibling : targetPara.firstChild);
+  targetPara.appendChild(bmEnd);
 }
 
 /**
