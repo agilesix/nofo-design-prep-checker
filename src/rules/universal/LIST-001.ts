@@ -25,7 +25,13 @@ const LIST_001: Rule = {
     // paragraph with the same text. This prevents a list-styled paragraph from
     // masking a genuinely manual-bullet paragraph that happens to share text.
     const listStyledCounts = new Map<string, number>();
-if (doc.documentXml && paragraphs.some(p => { const t = (p.textContent ?? '').trim(); return MANUAL_BULLET_PATTERN.test(t) || MANUAL_NUMBER_PATTERN.test(t); })) {
+    if (
+      doc.documentXml &&
+      paragraphs.some(p => {
+        const t = (p.textContent ?? '').trim();
+        return MANUAL_BULLET_PATTERN.test(t) || MANUAL_NUMBER_PATTERN.test(t);
+      })
+    ) {
       const xmlParser = new DOMParser();
       const xmlDoc = xmlParser.parseFromString(doc.documentXml, 'application/xml');
       for (const para of Array.from(xmlDoc.getElementsByTagName('w:p'))) {
