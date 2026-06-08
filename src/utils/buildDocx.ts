@@ -709,6 +709,7 @@ function insertBookmarkOnHeadingIfAbsent(
     ...Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart')),
     ...Array.from(xmlDoc.getElementsByTagName('w:bookmarkEnd')),
   ];
+  const maxId = allBms.reduce((max, bm) => {
     const idStr =
       bm.getAttribute('w:id') ??
       bm.getAttributeNS(W, 'id') ??
