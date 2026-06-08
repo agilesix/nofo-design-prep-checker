@@ -108,11 +108,12 @@ These run for ACF, ACL, CDC (standard), CMS, and IHS content guides.
 | STRUCT-005 | Required "Review and Selection" or "Step 5" section | ACF, ACL, CDC, CMS, IHS |
 | STRUCT-006 | Required "Award Administration" or "Step 6" section | ACF, ACL, CDC, CMS, IHS |
 
-### CDC auto-applied changes (CLEAN-007)
+### CDC auto-applied changes (CLEAN-007, CDC-001)
 
 | Rule ID | Title | Severity | Description |
 |---------|-------|----------|-------------|
 | CLEAN-007 | Remove CDC preamble content (auto-apply) | — | CDC NOFO templates often begin with editorial instructions, content-guide reference tables, or other scaffolding that is not part of the NOFO itself. When any non-empty content appears before the heading "Step 1: Review the Opportunity" (any heading level, case-insensitive), everything before that heading is silently removed from the downloaded document. The heading itself and all content after it are preserved. CDC NOFO metadata (Author, Subject, Keywords, Tagline) lives inside the document body under Step 1, not before it, so this removal is safe. No entry appears in the auto-applied list when Step 1 is already the first body element. Applies to all CDC content guides: `cdc`, `cdc-research`, `cdc-dght-ssj`, `cdc-dght-competitive`, `cdc-dghp`. |
+| CDC-001 | Add internal link to "Financial capability statement" bullet (auto-apply) | — | CDC NOFOs include a "Financial capability statement" bullet inside the "Project narrative" H2 section. NOFO Builder expects this bullet to carry an internal hyperlink pointing to the matching H4–H6 heading elsewhere in the document. When all four conditions hold — (1) CDC content guide, (2) a "Project narrative" H2 exists, (3) a bullet in that section matches "Financial capability statement" (case-insensitive) and has no existing internal hyperlink, and (4) an H4–H6 heading with that text exists in the document — the rule silently wraps the bullet's text run(s) in a `w:hyperlink` pointing to the heading's existing `w:bookmarkStart` name. If no bookmark yet exists on the heading, the anchor is derived via `slugifyHeading`. All run-level formatting (underline, highlight, color) is preserved. Applies to all CDC content guides: `cdc`, `cdc-research`, `cdc-dght-ssj`, `cdc-dght-competitive`, `cdc-dghp`. |
 
 ### Supported CDC content guides
 
