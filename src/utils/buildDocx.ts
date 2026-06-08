@@ -659,7 +659,12 @@ function insertBookmarkOnHeadingIfAbsent(
   const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
   // Skip if the bookmark already exists
-  const existing = Array.from(xmlDoc.getElementsByTagNameNS(W, 'bookmarkStart'));
+  const existing = Array.from(
+    new Set([
+      ...Array.from(xmlDoc.getElementsByTagNameNS(W, 'bookmarkStart')),
+      ...Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart')),
+    ])
+  );
   for (const bm of existing) {
     const name =
       bm.getAttribute('w:name') ??
