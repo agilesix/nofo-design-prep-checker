@@ -18,6 +18,31 @@ const LIST_001: Rule = {
     const paragraphs = Array.from(htmlDoc.querySelectorAll('p'));
     const getContext = buildLocationLookup(htmlDoc);
 
+    // Build a set of paragraph text content for paragraphs that carry a Word
+    // list style (w:pStyle w:val containing "list", case-insensitive). These
+    // paragraphs are excluded from manual-bullet detection: they are properly
+    // styled as list items even when numId="0" suppresses the auto-generated
+    // glyph and the text run opens with a typed bullet character such as ◦.
+    const listStyledTexts = new Set<string>();
+    if (doc.documentXml) {
+      const xmlParser = new DOMParser();
+      const xmlDoc = xmlParser.parseFromString(doc.documentXml, 'application/xml');
+      for (const para of Array.from(xmlDoc.getElementsByTagName('w:p'))) {
+        const pPr = Array.from(para.children).find(c => c.localName === 'pPr');
+        if (!pPr) continue;
+        const pStyle = Array.from(pPr.children).find(c => c.localName === 'pStyle');
+        if (!pStyle) continue;
+        const styleName = pStyle.getAttribute('w:val') ?? '';
+        if (styleName.toLowerCase().includes('list')) {
+          const text = Array.from(para.getElementsByTagName('w:t'))
+            .map(t => t.textContent ?? '')
+            .join('')
+            .trim();
+          if (text) listStyledTexts.add(text);
+        }
+      }
+    }
+
     // Find consecutive paragraphs that look like list items
     const fakeBulletGroups: { start: number; end: number; type: 'bullet' | 'numbered' }[] = [];
     let currentGroupStart = -1;
@@ -28,7 +53,9 @@ const LIST_001: Rule = {
       const isBullet = MANUAL_BULLET_PATTERN.test(text);
       const isNumbered = MANUAL_NUMBER_PATTERN.test(text);
 
-      if (isBullet || isNumbered) {
+      // Paragraphs with a Word list style are excluded even when their text
+      // run starts with a typed bullet character (e.g. ◦ with numId="0").
+      if ((isBullet || isNumbered) && !listStyledTexts.has(text)) {
         const type = isBullet ? 'bullet' : 'numbered';
         if (currentGroupStart === -1 || currentGroupType !== type) {
           if (currentGroupStart !== -1 && index - currentGroupStart >= 2) {
