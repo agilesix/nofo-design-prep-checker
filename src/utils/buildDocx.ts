@@ -4500,7 +4500,7 @@ async function applyCdcFinancialCapabilityLink(zip: JSZip, anchor: string): Prom
     hyperlink.setAttributeNS(W, 'w:anchor', anchor);
 
     // Insert before the first run to preserve any non-run siblings (bookmarks, comment ranges, etc.)
-    wP.insertBefore(hyperlink, runs[0]);
+    wP.insertBefore(hyperlink, runs[0]!);
 
     for (const run of runs) {
       hyperlink.appendChild(run);
