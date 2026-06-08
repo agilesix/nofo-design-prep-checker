@@ -51,10 +51,15 @@ const LIST_001: Rule = {
           const seen = new Set<Element>();
           const nodes: Element[] = [];
           for (const el of [...byNS, ...byTag]) {
-            if (!seen.has(el)) { seen.add(el); nodes.push(el); }
+            if (!seen.has(el)) {
+              seen.add(el);
+              nodes.push(el);
+            }
           }
           const text = nodes.map(t => t.textContent ?? '').join('').trim();
-          if (text) listStyledCounts.set(text, (listStyledCounts.get(text) ?? 0) + 1);
+          if (text && (MANUAL_BULLET_PATTERN.test(text) || MANUAL_NUMBER_PATTERN.test(text))) {
+            listStyledCounts.set(text, (listStyledCounts.get(text) ?? 0) + 1);
+          }
         }
       }
     }
