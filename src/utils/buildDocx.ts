@@ -2718,7 +2718,7 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
 
       endnotesRoot.appendChild(endnoteEl);
     } else {
-      imported.setAttribute('w:id', String(newId));
+      imported.setAttributeNS(W, 'w:id', String(newId));
       endnotesRoot.appendChild(imported);
     }
   }
