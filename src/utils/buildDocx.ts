@@ -2633,10 +2633,7 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
   // (i.e. only present in headers/footers) gets the next sequential ID,
   // so those references remain valid after conversion.
   type HFEntry = { path: string; dom: Document; refs: NoteRef[] };
-  const hfPaths = Object.keys(zip.files).filter(name =>
-    /^word\/(header|footer)\d*\.xml$/.test(name)
-  );
-  const hfEntries: HFEntry[] = [];
+  const hfPaths = getStoryPartPaths(zip).filter(name => /^word\/(header|footer)\d*\.xml$/.test(name));
   for (const path of hfPaths) {
     const hfFile = zip.file(path);
     if (!hfFile) continue;
