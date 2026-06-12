@@ -2640,10 +2640,9 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
 
   const endnotesRoot = targetDom.documentElement;
 
-  // Collect separator/continuation entries to preserve at the top.
   const separatorEntries = Array.from(endnotesRoot.getElementsByTagName('w:endnote')).filter(en => {
     const type = en.getAttribute('w:type');
-    return type === 'separator' || type === 'continuationSeparator';
+    return type === 'separator' || type === 'continuationSeparator' || type === 'continuationNotice';
   });
 
   // Remove all children from the root so we can rebuild it cleanly.
