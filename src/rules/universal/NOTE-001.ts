@@ -20,15 +20,18 @@ const NOTE_001: Rule = {
   id: 'NOTE-001',
   autoApply: true,
   check(doc: ParsedDocument, _options: RuleRunnerOptions): AutoAppliedChange[] {
-    if (!doc.documentXml || !doc.documentXml.includes('w:footnoteReference')) return [];
+    if (!doc.documentXml || !doc.footnotesXml) return [];
+    if (!doc.documentXml.includes('w:footnoteReference')) return [];
 
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(doc.documentXml, 'application/xml');
     const fnRefs = Array.from(xmlDoc.getElementsByTagName('w:footnoteReference'));
-    const count = fnRefs.filter(el => {
-      const id = parseInt(el.getAttribute('w:id') ?? '', 10);
-      return !isNaN(id) && id >= 1;
-    }).length;
+    const uniqueIds = new Set(
+      fnRefs
+        .map(el => parseInt(el.getAttribute('w:id') ?? '', 10))
+        .filter(id => !isNaN(id) && id >= 1)
+    );
+    const count = uniqueIds.size;
 
     if (count === 0) return [];
 

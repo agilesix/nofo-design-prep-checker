@@ -7,14 +7,26 @@ const OPTIONS = { contentGuideId: null } as const;
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
-function makeDoc(documentXml: string): ParsedDocument {
+/** Minimal footnotes.xml that satisfies the "file is present" guard. */
+const MINIMAL_FOOTNOTES_XML =
+  `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+  `<w:footnotes xmlns:w="${W}">` +
+  `<w:footnote w:type="separator" w:id="-1"><w:p/></w:footnote>` +
+  `</w:footnotes>`;
+
+/**
+ * Build a ParsedDocument. footnotesXml defaults to a minimal non-empty value
+ * (simulating a document that has a word/footnotes.xml part). Pass '' explicitly
+ * when testing the "footnotes.xml absent" path.
+ */
+function makeDoc(documentXml: string, footnotesXml = MINIMAL_FOOTNOTES_XML): ParsedDocument {
   return {
     html: '',
     sections: [],
     rawText: '',
     zipArchive: new JSZip(),
     documentXml,
-    footnotesXml: '',
+    footnotesXml,
     endnotesXml: '',
     activeContentGuide: null,
   };
@@ -53,6 +65,12 @@ describe('NOTE-001: footnote-to-endnote auto-apply', () => {
     expect(NOTE_001.check(makeDoc(''), OPTIONS)).toHaveLength(0);
   });
 
+  it('returns no changes when footnotesXml is absent (empty string)', () => {
+    // Even with footnote references in the body, no change is emitted when
+    // word/footnotes.xml is not present — applyFootnoteToEndnoteFix would no-op.
+    expect(NOTE_001.check(makeDoc(ONE_FOOTNOTE_XML, ''), OPTIONS)).toHaveLength(0);
+  });
+
   it('returns no changes when there are no footnote references in the body', () => {
     expect(NOTE_001.check(makeDoc(NO_FOOTNOTES_XML), OPTIONS)).toHaveLength(0);
   });
@@ -73,7 +91,22 @@ describe('NOTE-001: footnote-to-endnote auto-apply', () => {
     expect(change.description).not.toMatch(/footnotes/);
   });
 
-  it('returns an AutoAppliedChange counting all footnote references', () => {
+  it('counts unique footnote IDs, not raw reference elements', () => {
+    // The same footnote ID appears twice (e.g. a cross-reference). Should count as 1.
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W}">` +
+      `<w:body>` +
+      `<w:p><w:r><w:footnoteReference w:id="1"/></w:r></w:p>` +
+      `<w:p><w:r><w:footnoteReference w:id="1"/></w:r></w:p>` +
+      `<w:sectPr/></w:body>` +
+      `</w:document>`;
+    const results = NOTE_001.check(makeDoc(xml), OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as AutoAppliedChange).value).toBe('1');
+  });
+
+  it('returns an AutoAppliedChange counting all unique footnote IDs', () => {
     const results = NOTE_001.check(makeDoc(THREE_FOOTNOTES_XML), OPTIONS);
     expect(results).toHaveLength(1);
     const change = results[0] as AutoAppliedChange;
