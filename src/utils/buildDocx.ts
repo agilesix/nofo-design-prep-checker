@@ -2617,7 +2617,7 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
     }
   }
 
-  const body = docDom.getElementsByTagName('w:body')[0];
+  const body = docDom.getElementsByTagNameNS(W, 'body')[0];
   const bodyRefs = body ? gatherRefs(body) : [];
 
   // Assign new sequential IDs in reading order (each unique (kind, oldId) pair
