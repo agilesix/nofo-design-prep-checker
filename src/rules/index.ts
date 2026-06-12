@@ -106,7 +106,6 @@ export const allRules: Rule[] = [
   TABLE_004,
   FORMAT_002,
   FORMAT_003,
-  NOTE_001,
 
   // Heading rules
   HEAD_001,
@@ -134,6 +133,7 @@ export const allRules: Rule[] = [
   TABLE_003,
 
   // Note rules
+  NOTE_001,
   NOTE_004,
 
   // Image rules
