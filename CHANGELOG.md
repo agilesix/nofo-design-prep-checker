@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.11.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.10.0...v1.11.0) (2026-06-12)
+
+
+### Features
+
+* **NOTE-001:** silent footnote-to-endnote auto-fix on download ([6d357ca](https://github.com/agilesix/nofo-design-prep-checker/commit/6d357ca218f8890192ce4744105514ef735574fb))
+* **NOTE-001:** silent footnote-to-endnote auto-fix on download ([c9bd03e](https://github.com/agilesix/nofo-design-prep-checker/commit/c9bd03e76206fad2a42581d0f5327bf4e03d6984))
+
+
+### Bug Fixes
+
+* **CDC-001:** use OOXML heading detection and existing bookmark name ([f927b4c](https://github.com/agilesix/nofo-design-prep-checker/commit/f927b4c56567eb898a385076cb97448bb6325f65))
+* **CDC-001:** use OOXML heading detection and existing bookmark name ([7c66b96](https://github.com/agilesix/nofo-design-prep-checker/commit/7c66b96306d8d2ca1b0dc672ea456043e5343a15))
+* **CLEAN-010:** skip items ending with any terminal punctuation ([3d1ca99](https://github.com/agilesix/nofo-design-prep-checker/commit/3d1ca998473cfebfcff8e2894a931665b250cc48))
+* **CLEAN-010:** skip items ending with any terminal punctuation ([06aa9ec](https://github.com/agilesix/nofo-design-prep-checker/commit/06aa9ec689e16b1125cc83f491efeafdd042c192))
+* **CLEAN-010:** sync patcher skip condition with detection logic ([d4e90e9](https://github.com/agilesix/nofo-design-prep-checker/commit/d4e90e9da901455311e6592cfefb84ee2960cbc7))
+* **NOTE-001:** build endnotes.xml from fresh DOM to prevent namespace corruption ([a15415f](https://github.com/agilesix/nofo-design-prep-checker/commit/a15415f556b9de08ef1585ef92bdf3b6834d03ed))
+* **NOTE-001:** build endnotes.xml from fresh DOM to prevent namespace… ([84cc1d7](https://github.com/agilesix/nofo-design-prep-checker/commit/84cc1d780c4eaff50d4d634786937eeab41a4e67))
+* **NOTE-001:** clarify importNode comment — always called regardless of source ([a3ef8c1](https://github.com/agilesix/nofo-design-prep-checker/commit/a3ef8c124fbaccd66c2554b8c3c15e15998f655f))
+* **NOTE-001:** DOM detection, rels/CT registration, patcher tests ([bd22ff8](https://github.com/agilesix/nofo-design-prep-checker/commit/bd22ff86a4976c7347bdae320c91ecbd4330477d))
+* **NOTE-001:** guard on footnotesXml, deduplicate footnote IDs ([f87e565](https://github.com/agilesix/nofo-design-prep-checker/commit/f87e565d7e5f97ec493d651c4383e4f03cde8f47))
+* **NOTE-001:** replace DOM assembly with string-based XML for notes f… ([fea2079](https://github.com/agilesix/nofo-design-prep-checker/commit/fea2079a6354d94e94f70135d172b040c53a6245))
+* **NOTE-001:** replace DOM assembly with string-based XML for notes files ([f99aaba](https://github.com/agilesix/nofo-design-prep-checker/commit/f99aaba1017f7877b5dae91b1c6e8a356d971fb9))
+* **NOTE-001:** restore as warning rule with improved detection ([7246b1c](https://github.com/agilesix/nofo-design-prep-checker/commit/7246b1c9150b01caf183ed872a9513e15da82d89))
+* **NOTE-001:** restore as warning rule with improved detection ([5781229](https://github.com/agilesix/nofo-design-prep-checker/commit/5781229e10fcfdf70e9728b3ea8fb2895025a21f))
+* **NOTE-001:** restore hfEntries declaration dropped by Copilot ([b21c8c8](https://github.com/agilesix/nofo-design-prep-checker/commit/b21c8c8799c7e45ba0a56f90718c535cfa064ab3))
+* **NOTE-001:** rewrite refs in headers/footers and tighten detection ([aa18258](https://github.com/agilesix/nofo-design-prep-checker/commit/aa18258c9b3de4249f06a4220a14f781b742ebbb))
+* **NOTE-001:** track prefix→URI bindings to avoid stripping xmlns from unrelated prefixes ([753b076](https://github.com/agilesix/nofo-design-prep-checker/commit/753b076d52c7b93f7303684d88d73bf670aa0659))
+* **NOTE-001:** use setAttribute for null-namespace attrs in patcher ([bf4cced](https://github.com/agilesix/nofo-design-prep-checker/commit/bf4cced1a7c9fb26432bd0a24c0a77a96eaf8eca))
+* **NOTE-001:** use setAttribute for null-namespace attrs in patcher ([5cafa3a](https://github.com/agilesix/nofo-design-prep-checker/commit/5cafa3ad915dc4cc77c1b4836fed9da14e49fe35))
+
 ## [1.10.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.9.1...v1.10.0) (2026-06-08)
 
 
