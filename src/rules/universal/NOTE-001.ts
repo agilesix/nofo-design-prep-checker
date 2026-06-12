@@ -1,44 +1,79 @@
-import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
+import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from '../../types';
 
 /**
- * NOTE-001: Real Word footnotes detected
+ * NOTE-001: Silently convert all Word footnotes to endnotes on download.
  *
- * Inspects word/footnotes.xml to confirm actual user-authored footnotes exist.
- * Word always writes separator/continuationSeparator entries into footnotes.xml
- * even when there are no real footnotes, so we skip those and only flag entries
- * without a w:type attribute (or with w:type="normal").
+ * Inspects word/document.xml for w:footnoteReference elements to detect
+ * user-authored footnotes. When found, returns an AutoAppliedChange that
+ * triggers applyFootnoteToEndnoteFix in buildDocx — which merges footnotes
+ * and existing endnotes in document reading order, renumbers them
+ * sequentially, writes the result into word/endnotes.xml, and clears the
+ * user-authored entries from word/footnotes.xml.
  *
- * The SimplerNOFOs style guide requires all notes to be endnotes. Word footnotes
- * will not import correctly into NOFO Builder.
+ * Word always writes separator/continuationSeparator entries into both XML
+ * parts even when there are no user notes; those structural entries are
+ * preserved and never renumbered.
+ *
+ * No Issue card is emitted under any circumstances.
  */
+
+/** Returns true if el is a descendant of a w:del element. */
+function isInsideDeletion(el: Element): boolean {
+  let node: Element | null = el.parentElement;
+  while (node) {
+    if (node.tagName === 'w:del') return true;
+    node = node.parentElement;
+  }
+  return false;
+}
+
 const NOTE_001: Rule = {
   id: 'NOTE-001',
-  check(doc: ParsedDocument, _options: RuleRunnerOptions): Issue[] {
-    if (!doc.footnotesXml) return [];
+  autoApply: true,
+  check(doc: ParsedDocument, _options: RuleRunnerOptions): AutoAppliedChange[] {
+    if (!doc.documentXml || !doc.footnotesXml) return [];
+    if (!doc.documentXml.includes('w:footnoteReference')) return [];
 
-    const footnoteTagPattern = /<w:footnote\b[^>]*>/g;
-    const separatorTypePattern = /w:type="(?:separator|continuationSeparator|continuationNotice)"/;
+    const parser = new DOMParser();
 
-    const hasRealFootnotes = Array.from(doc.footnotesXml.matchAll(footnoteTagPattern))
-      .some(match => !separatorTypePattern.test(match[0]));
+    // Determine which footnote IDs actually exist as user-authored entries in
+    // word/footnotes.xml — these are the notes applyFootnoteToEndnoteFix will
+    // convert. Separator entries (w:type="separator" etc.) and ID < 1 are
+    // structural placeholders and must not be counted.
+    const fnDoc = parser.parseFromString(doc.footnotesXml, 'application/xml');
+    const authoredIds = new Set(
+      Array.from(fnDoc.getElementsByTagName('w:footnote'))
+        .filter(el => {
+          const type = el.getAttribute('w:type');
+          return !type || type === 'normal';
+        })
+        .map(el => parseInt(el.getAttribute('w:id') ?? '', 10))
+        .filter((id): id is number => !isNaN(id) && id >= 1)
+    );
+    if (authoredIds.size === 0) return [];
 
-    if (!hasRealFootnotes) return [];
+    // Cross-reference with live body references: exclude refs inside tracked
+    // deletions (w:del). CLEAN-009 accepts tracked changes before the patcher
+    // runs, so a reference that exists only inside w:del will be gone by the
+    // time applyFootnoteToEndnoteFix executes.
+    const xmlDoc = parser.parseFromString(doc.documentXml, 'application/xml');
+    const liveIds = new Set(
+      Array.from(xmlDoc.getElementsByTagName('w:footnoteReference'))
+        .filter(el => !isInsideDeletion(el))
+        .map(el => parseInt(el.getAttribute('w:id') ?? '', 10))
+        .filter((id): id is number => authoredIds.has(id))
+    );
+    const count = liveIds.size;
+    if (count === 0) return [];
 
-    return [{
-      id: 'NOTE-001-footnotes',
-      ruleId: 'NOTE-001',
-      title: 'Document contains footnotes that must be converted to endnotes',
-      severity: 'warning',
-      sectionId: doc.sections[0]?.id ?? 'section-preamble',
-      description:
-        'This document contains Word footnotes. The SimplerNOFOs style guide requires all notes ' +
-        'to be endnotes — Word footnotes will not import correctly into NOFO Builder and will ' +
-        'not appear in the published NOFO.',
-      suggestedFix:
-        'In Microsoft Word, go to References → Show Notes. In the notes pane, click Convert and ' +
-        'select "Convert all footnotes to endnotes", then save the document.',
-      instructionOnly: true,
-    }];
+    return [
+      {
+        ruleId: 'NOTE-001',
+        description: `${count} footnote${count === 1 ? '' : 's'} converted to endnote${count === 1 ? '' : 's'} and renumbered sequentially.`,
+        targetField: 'note.footnote-to-endnote',
+        value: String(count),
+      },
+    ];
   },
 };
 

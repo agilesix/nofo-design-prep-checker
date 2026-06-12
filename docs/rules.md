@@ -49,7 +49,7 @@ Universal rules run on every document regardless of which content guide is selec
 
 | Rule ID | Title | Severity | Description |
 |---------|-------|----------|-------------|
-| NOTE-001 | Footnotes present | Warning | The document appears to contain footnotes. All notes must be converted to endnotes before design. |
+| NOTE-001 | Convert footnotes to endnotes (auto-apply) | — | Silently converts all Word footnotes to endnotes on download. When footnotes are detected, all footnote references and any existing endnote references are collected in document reading order, merged into a single ordered list, and written into word/endnotes.xml renumbered sequentially starting at 1. The user-authored entries in word/footnotes.xml are removed; the separator and continuationSeparator structural entries in both files are always preserved. No issue card is emitted. Summary entry when footnotes are converted: "N footnote(s) converted to endnote(s) and renumbered sequentially." No entry appears in the auto-applied list when no footnotes are present. |
 | NOTE-004 | Orphaned "Footnotes" heading | Warning | A heading paragraph with the text "Footnotes" (or close variation) was found, but the document contains no footnotes or endnotes. This heading is likely a leftover from the Word template and will appear as an empty section in the published NOFO. |
 
 ### Images (IMG)
