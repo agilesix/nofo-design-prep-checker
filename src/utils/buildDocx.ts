@@ -2605,15 +2605,15 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
       if (ref.kind === 'footnote') {
         const enRef = dom.createElementNS(W, 'w:endnoteReference');
         for (const attr of Array.from(ref.element.attributes)) {
-          if (attr.name === 'w:id') {
-            enRef.setAttribute('w:id', String(newId));
+          if (attr.localName === 'id' && (attr.namespaceURI === W || attr.name === 'w:id')) {
+            enRef.setAttributeNS(W, 'w:id', String(newId));
           } else {
             enRef.setAttributeNS(attr.namespaceURI, attr.name, attr.value);
           }
         }
         ref.element.parentNode!.replaceChild(enRef, ref.element);
       } else {
-        ref.element.setAttribute('w:id', String(newId));
+        ref.element.setAttributeNS(W, 'w:id', String(newId));
       }
     }
   }
