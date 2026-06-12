@@ -4,6 +4,20 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
+## 2026-06-12 — NOTE-001 auto-fix reverted; restored as improved warning rule
+
+**Decision:** The NOTE-001 footnote-to-endnote auto-fix introduced in the same sprint was reverted after four fix attempts failed to resolve "unreadable content" errors when opening downloaded documents in Word. NOTE-001 is restored as a warning rule, but with improved detection: it now scans for live w:footnoteReference elements in word/document.xml rather than looking for a "Footnotes" heading at the bottom of the document.
+
+**Reason — auto-fix not feasible:** The footnote-to-endnote conversion requires restructuring relationships across three separate XML files (word/document.xml, word/footnotes.xml, word/endnotes.xml) and creating new XML elements in a browser-based pipeline. The browser DOM APIs (DOMParser, XMLSerializer, createElementNS, setAttributeNS) were not designed with OOXML compatibility in mind. Every fix attempt resolved one namespace corruption vector only to expose another. Unlike other auto-fix rules in the tool — which make surgical edits to existing well-formed XML — this conversion involves creating new elements and cross-file restructuring that the browser serialization pipeline cannot reliably handle.
+
+**Reason — warning is sufficient:** Footnotes in NOFOs are relatively rare, and Word provides a one-click conversion (References → Convert to Endnotes) that takes seconds. The warning surfaces the issue clearly and gives the user the information they need to fix it before re-uploading.
+
+**Reason — improved detection:** The previous NOTE-001 warning checked for a "Footnotes" heading at the bottom of the document. NOFO Builder templates sometimes include that heading even when no actual footnotes exist, producing false positives. Scanning for w:footnoteReference elements is the authoritative signal — these are the inline markers Word inserts when a real footnote exists. Deleted references (inside w:del or w:moveFrom) are excluded so the count reflects only live footnotes in the current document state.
+
+**Outcome:** NOTE-001 emits a dismissible warning with a footnote count when live footnotes are detected. No download-time XML manipulation is performed. NOTE-004 (orphaned "Footnotes" heading) is unaffected.
+
+---
+
 ## 2026-06-12 — NOTE-001 patcher: use setAttribute(localName) for null-namespace attributes
 
 **Decision:** In `applyFootnoteToEndnoteFix` (buildDocx.ts), when copying attributes from a source element onto a newly created element, the else-branch for null-namespace attributes uses `setAttribute(attr.localName, attr.value)`, not `setAttribute(attr.name, attr.value)` and not a prefix-resolution fallback.

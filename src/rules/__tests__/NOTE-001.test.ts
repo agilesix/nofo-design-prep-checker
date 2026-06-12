@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
 import NOTE_001 from '../universal/NOTE-001';
-import type { ParsedDocument, AutoAppliedChange } from '../../types';
+import type { ParsedDocument, Issue } from '../../types';
 
 const OPTIONS = { contentGuideId: null } as const;
 
@@ -74,31 +74,25 @@ const THREE_FOOTNOTES_XML =
   `<w:sectPr/></w:body>` +
   `</w:document>`;
 
-describe('NOTE-001: footnote-to-endnote auto-apply', () => {
-  it('returns no changes when documentXml is empty', () => {
+describe('NOTE-001: footnotes detected warning', () => {
+  it('returns no results when documentXml is empty', () => {
     expect(NOTE_001.check(makeDoc(''), OPTIONS)).toHaveLength(0);
   });
 
-  it('returns no changes when footnotesXml is absent (empty string)', () => {
-    // Even with footnote references in the body, no change is emitted when
-    // word/footnotes.xml is not present — applyFootnoteToEndnoteFix would no-op.
+  it('returns no results when footnotesXml is absent (empty string)', () => {
     expect(NOTE_001.check(makeDoc(ONE_FOOTNOTE_XML, ''), OPTIONS)).toHaveLength(0);
   });
 
-  it('returns no changes when there are no footnote references in the body', () => {
+  it('returns no results when there are no footnote references in the body', () => {
     expect(NOTE_001.check(makeDoc(NO_FOOTNOTES_XML), OPTIONS)).toHaveLength(0);
   });
 
-  it('returns no changes when footnotesXml has no user-authored entries matching the body refs', () => {
-    // Body references footnote id=1, but footnotesXml only contains separator
-    // entries. applyFootnoteToEndnoteFix would return early (no authored notes),
-    // so NOTE-001 must not emit a spurious change.
+  it('returns no results when footnotesXml has no user-authored entries matching the body refs', () => {
+    // Body references footnote id=1, but footnotesXml only contains separator entries.
     expect(NOTE_001.check(makeDoc(ONE_FOOTNOTE_XML, MINIMAL_FOOTNOTES_XML), OPTIONS)).toHaveLength(0);
   });
 
-  it('returns no changes when footnote references are only inside tracked deletions (w:del)', () => {
-    // CLEAN-009 accepts tracked changes before applyFootnoteToEndnoteFix runs,
-    // so a reference that exists only inside w:del will be gone by patch time.
+  it('returns no results when footnote references are only inside w:del', () => {
     const xml =
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
       `<w:document xmlns:w="${W}">` +
@@ -112,20 +106,45 @@ describe('NOTE-001: footnote-to-endnote auto-apply', () => {
     expect(NOTE_001.check(makeDoc(xml, makeAuthoredFootnotesXml([1])), OPTIONS)).toHaveLength(0);
   });
 
-  it('returns an AutoAppliedChange when one footnote reference is present', () => {
+  it('returns no results when footnote references are only inside w:moveFrom', () => {
+    const xml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W}">` +
+      `<w:body>` +
+      `<w:p><w:moveFrom w:id="5" w:author="A" w:date="2024-01-01T00:00:00Z">` +
+      `<w:r><w:footnoteReference w:id="1"/></w:r>` +
+      `</w:moveFrom></w:p>` +
+      `<w:sectPr/></w:body>` +
+      `</w:document>`;
+    expect(NOTE_001.check(makeDoc(xml, makeAuthoredFootnotesXml([1])), OPTIONS)).toHaveLength(0);
+  });
+
+  it('emits a warning Issue when one live footnote reference is present', () => {
     const results = NOTE_001.check(makeDoc(ONE_FOOTNOTE_XML, makeAuthoredFootnotesXml([1])), OPTIONS);
     expect(results).toHaveLength(1);
-    const change = results[0] as AutoAppliedChange;
-    expect(change.ruleId).toBe('NOTE-001');
-    expect(change.targetField).toBe('note.footnote-to-endnote');
-    expect(change.value).toBe('1');
+    const issue = results[0] as Issue;
+    expect(issue.ruleId).toBe('NOTE-001');
+    expect(issue.severity).toBe('warning');
+    expect(issue.instructionOnly).toBe(true);
   });
 
   it('uses singular "footnote" in the description for a single footnote', () => {
     const results = NOTE_001.check(makeDoc(ONE_FOOTNOTE_XML, makeAuthoredFootnotesXml([1])), OPTIONS);
-    const change = results[0] as AutoAppliedChange;
-    expect(change.description).toMatch(/1 footnote converted/i);
-    expect(change.description).not.toMatch(/footnotes/);
+    const issue = results[0] as Issue;
+    expect(issue.description).toMatch(/1 footnote\b/i);
+    expect(issue.description).not.toMatch(/1 footnotes/i);
+  });
+
+  it('uses plural "footnotes" in the description for multiple footnotes', () => {
+    const results = NOTE_001.check(makeDoc(THREE_FOOTNOTES_XML, makeAuthoredFootnotesXml([1, 2, 3])), OPTIONS);
+    const issue = results[0] as Issue;
+    expect(issue.description).toMatch(/3 footnotes/i);
+  });
+
+  it('description includes instruction to convert in Word', () => {
+    const results = NOTE_001.check(makeDoc(ONE_FOOTNOTE_XML, makeAuthoredFootnotesXml([1])), OPTIONS);
+    const issue = results[0] as Issue;
+    expect(issue.description).toMatch(/Convert to Endnotes/i);
   });
 
   it('counts unique footnote IDs, not raw reference elements', () => {
@@ -140,20 +159,11 @@ describe('NOTE-001: footnote-to-endnote auto-apply', () => {
       `</w:document>`;
     const results = NOTE_001.check(makeDoc(xml, makeAuthoredFootnotesXml([1])), OPTIONS);
     expect(results).toHaveLength(1);
-    expect((results[0] as AutoAppliedChange).value).toBe('1');
-  });
-
-  it('returns an AutoAppliedChange counting all unique footnote IDs', () => {
-    const results = NOTE_001.check(makeDoc(THREE_FOOTNOTES_XML, makeAuthoredFootnotesXml([1, 2, 3])), OPTIONS);
-    expect(results).toHaveLength(1);
-    const change = results[0] as AutoAppliedChange;
-    expect(change.value).toBe('3');
-    expect(change.description).toMatch(/3 footnotes converted/i);
+    expect((results[0] as Issue).description).toMatch(/1 footnote\b/i);
   });
 
   it('counts only the intersection of authored footnotes and live body references', () => {
-    // Body references footnotes 1 and 2, but footnotes.xml only has an entry
-    // for id=1. The count should be 1, not 2.
+    // Body references footnotes 1 and 2, but footnotes.xml only has an entry for id=1.
     const xml =
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
       `<w:document xmlns:w="${W}">` +
@@ -164,11 +174,10 @@ describe('NOTE-001: footnote-to-endnote auto-apply', () => {
       `</w:document>`;
     const results = NOTE_001.check(makeDoc(xml, makeAuthoredFootnotesXml([1])), OPTIONS);
     expect(results).toHaveLength(1);
-    expect((results[0] as AutoAppliedChange).value).toBe('1');
+    expect((results[0] as Issue).description).toMatch(/1 footnote\b/i);
   });
 
   it('ignores separator-only entries (w:id="-1", "0") in the document body', () => {
-    // Separator references use negative or zero IDs — not user-authored footnotes.
     const xml =
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
       `<w:document xmlns:w="${W}">` +
@@ -180,14 +189,14 @@ describe('NOTE-001: footnote-to-endnote auto-apply', () => {
     expect(NOTE_001.check(makeDoc(xml), OPTIONS)).toHaveLength(0);
   });
 
-  it('is an autoApply rule', () => {
-    expect(NOTE_001.autoApply).toBe(true);
+  it('is not an autoApply rule', () => {
+    expect(NOTE_001.autoApply).toBe(false);
   });
 
-  it('never returns an Issue card', () => {
+  it('always returns an Issue (not an AutoAppliedChange)', () => {
     const results = NOTE_001.check(makeDoc(THREE_FOOTNOTES_XML, makeAuthoredFootnotesXml([1, 2, 3])), OPTIONS);
     for (const r of results) {
-      expect('severity' in r).toBe(false);
+      expect('severity' in r).toBe(true);
     }
   });
 });
