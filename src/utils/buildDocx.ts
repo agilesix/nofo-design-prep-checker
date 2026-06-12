@@ -2712,7 +2712,8 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
   // path, targetDom is already empty but this is harmless.
   while (endnotesRoot.firstChild) endnotesRoot.removeChild(endnotesRoot.firstChild);
 
-  // Re-add separator entries, importing into targetDom when from a different document.
+  // Re-add separator entries. importNode ensures ownership by targetDom regardless
+  // of which source document the entries came from.
   for (const sep of separatorEntries) {
     endnotesRoot.appendChild(targetDom.importNode(sep, true));
   }
