@@ -2698,6 +2698,53 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
   zip.file('word/document.xml', serializeXml(docDom));
   zip.file('word/endnotes.xml', serializeXml(targetDom));
   zip.file('word/footnotes.xml', serializeXml(footnotesDom));
+
+  // When endnotes.xml is newly created (it was absent from the original archive),
+  // register it in word/_rels/document.xml.rels and [Content_Types].xml so Word
+  // can resolve the endnoteReference elements we just wrote into document.xml.
+  if (!endnotesFile) {
+    const RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+    const ENDNOTES_REL_TYPE =
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes';
+    const TYPES_NS = 'http://schemas.openxmlformats.org/package/2006/content-types';
+    const ENDNOTES_CT =
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml';
+
+    const relsPath = 'word/_rels/document.xml.rels';
+    const relsFile = zip.file(relsPath);
+    if (relsFile) {
+      const relsDoc = parser.parseFromString(await relsFile.async('string'), 'application/xml');
+      const relsRoot = relsDoc.documentElement;
+      const existing = Array.from(relsRoot.getElementsByTagNameNS(RELS_NS, 'Relationship'));
+      if (!existing.some(el => el.getAttribute('Type') === ENDNOTES_REL_TYPE)) {
+        const ids = existing.map(el => {
+          const m = (el.getAttribute('Id') ?? '').match(/^rId(\d+)$/);
+          return m ? parseInt(m[1]!, 10) : 0;
+        });
+        const rel = relsDoc.createElementNS(RELS_NS, 'Relationship');
+        rel.setAttribute('Id', `rId${Math.max(0, ...ids) + 1}`);
+        rel.setAttribute('Type', ENDNOTES_REL_TYPE);
+        rel.setAttribute('Target', 'endnotes.xml');
+        relsRoot.appendChild(rel);
+        zip.file(relsPath, serializeXml(relsDoc), { compression: 'STORE' });
+      }
+    }
+
+    const ctPath = '[Content_Types].xml';
+    const ctFile = zip.file(ctPath);
+    if (ctFile) {
+      const ctDoc = parser.parseFromString(await ctFile.async('string'), 'application/xml');
+      const ctRoot = ctDoc.documentElement;
+      const overrides = Array.from(ctRoot.getElementsByTagNameNS(TYPES_NS, 'Override'));
+      if (!overrides.some(el => el.getAttribute('PartName') === '/word/endnotes.xml')) {
+        const override = ctDoc.createElementNS(TYPES_NS, 'Override');
+        override.setAttribute('PartName', '/word/endnotes.xml');
+        override.setAttribute('ContentType', ENDNOTES_CT);
+        ctRoot.appendChild(override);
+        zip.file(ctPath, serializeXml(ctDoc), { compression: 'STORE' });
+      }
+    }
+  }
 }
 
 // ─── CLEAN-010: Add trailing periods to list items for consistency ─────────────

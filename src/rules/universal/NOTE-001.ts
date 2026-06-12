@@ -20,25 +20,24 @@ const NOTE_001: Rule = {
   id: 'NOTE-001',
   autoApply: true,
   check(doc: ParsedDocument, _options: RuleRunnerOptions): AutoAppliedChange[] {
-    if (!doc.documentXml) return [];
+    if (!doc.documentXml || !doc.documentXml.includes('w:footnoteReference')) return [];
 
-    const fnRefPattern = /<w:footnoteReference\b[^/]*/g;
-    const matches = Array.from(doc.documentXml.matchAll(fnRefPattern));
-
-    const userRefs = matches.filter(m => {
-      const idMatch = /w:id="(-?\d+)"/.exec(m[0]);
-      const id = idMatch ? parseInt(idMatch[1]!, 10) : NaN;
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(doc.documentXml, 'application/xml');
+    const fnRefs = Array.from(xmlDoc.getElementsByTagName('w:footnoteReference'));
+    const count = fnRefs.filter(el => {
+      const id = parseInt(el.getAttribute('w:id') ?? '', 10);
       return !isNaN(id) && id >= 1;
-    });
+    }).length;
 
-    if (userRefs.length === 0) return [];
+    if (count === 0) return [];
 
     return [
       {
         ruleId: 'NOTE-001',
-        description: `${userRefs.length} footnote${userRefs.length === 1 ? '' : 's'} converted to endnote${userRefs.length === 1 ? '' : 's'} and renumbered sequentially.`,
+        description: `${count} footnote${count === 1 ? '' : 's'} converted to endnote${count === 1 ? '' : 's'} and renumbered sequentially.`,
         targetField: 'note.footnote-to-endnote',
-        value: String(userRefs.length),
+        value: String(count),
       },
     ];
   },
