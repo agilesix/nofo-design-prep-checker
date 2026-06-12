@@ -2584,11 +2584,12 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
     function walk(node: Node): void {
       if (node.nodeType !== Node.ELEMENT_NODE) return;
       const el = node as Element;
-      const tag = el.tagName;
-      if (tag === 'w:footnoteReference' || tag === 'w:endnoteReference') {
-        const id = parseInt(el.getAttribute('w:id') ?? '', 10);
+      const ns = el.namespaceURI;
+      const ln = el.localName;
+      if (ns === W && (ln === 'footnoteReference' || ln === 'endnoteReference')) {
+        const id = parseInt((el.getAttribute('w:id') ?? el.getAttributeNS(W, 'id') ?? ''), 10);
         if (!isNaN(id) && id >= 1) {
-          refs.push({ kind: tag === 'w:footnoteReference' ? 'footnote' : 'endnote', oldId: id, element: el });
+          refs.push({ kind: ln === 'footnoteReference' ? 'footnote' : 'endnote', oldId: id, element: el });
         }
       }
       for (const child of Array.from(el.childNodes)) walk(child);
