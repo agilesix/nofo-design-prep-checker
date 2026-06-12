@@ -2565,10 +2565,10 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
 
   const endnoteByOldId = new Map<number, Element>();
   if (endnotesDom) {
-    for (const en of Array.from(endnotesDom.getElementsByTagName('w:endnote'))) {
-      const type = en.getAttribute('w:type');
+    for (const en of Array.from(endnotesDom.getElementsByTagNameNS(W, 'endnote'))) {
+      const type = en.getAttribute('w:type') ?? en.getAttributeNS(W, 'type');
       if (type === 'separator' || type === 'continuationSeparator' || type === 'continuationNotice') continue;
-      const id = parseInt(en.getAttribute('w:id') ?? '', 10);
+      const id = parseInt((en.getAttribute('w:id') ?? en.getAttributeNS(W, 'id') ?? ''), 10);
       if (!isNaN(id) && id >= 1) endnoteByOldId.set(id, en);
     }
   }
