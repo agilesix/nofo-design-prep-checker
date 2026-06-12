@@ -1513,6 +1513,26 @@ describe('buildDocx — NOTE-001: footnote-to-endnote conversion', () => {
     expect(endnotesRelCount).toBe(1);
   });
 
+  it('does not inject xmlns:w="" on converted elements', async () => {
+    // setAttributeNS(null, 'w:prefixedAttr', ...) causes XMLSerializer to emit
+    // xmlns:w="" on the element, overriding the root-level namespace declaration
+    // and making Word reject the document as unreadable. A valid re-declaration
+    // (xmlns:w="http://...") is legal XML and not checked here.
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeNoteDocXml([{ kind: 'footnote', id: 1 }]));
+    zip.file('word/footnotes.xml', makeFootnotesXml([{ id: 1, text: 'Note.' }]));
+    zip.file('word/endnotes.xml', makeEndnotesXml());
+    zip.file('word/_rels/document.xml.rels', makeDocRels());
+    zip.file('[Content_Types].xml', makeContentTypes());
+
+    const outZip = await getOutputZip(zip, [], [NOTE_001_CHANGE]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+
+    // The empty binding xmlns:w="" is the corruption: it unbinds the w: prefix
+    // for all descendants, invalidating every w:-namespaced element and attribute.
+    expect(docXml).not.toContain('xmlns:w=""');
+  });
+
   it('rewrites w:footnoteReference elements in header/footer parts', async () => {
     // Header contains a footnote reference to id=1; body also references id=1.
     // After conversion both should be w:endnoteReference with id=1.

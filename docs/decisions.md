@@ -4,6 +4,20 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
+## 2026-06-12 — NOTE-001 patcher: use setAttribute(localName) for null-namespace attributes
+
+**Decision:** In `applyFootnoteToEndnoteFix` (buildDocx.ts), when copying attributes from a source element onto a newly created element, the else-branch for null-namespace attributes uses `setAttribute(attr.localName, attr.value)`, not `setAttribute(attr.name, attr.value)` and not a prefix-resolution fallback.
+
+**Reason:** `setAttributeNS(null, qualifiedName, value)` where `qualifiedName` contains a colon (e.g. `w:customMarkFollows`) puts the DOM in an inconsistent state: the attribute carries a `w:` prefix but no namespace. XMLSerializer resolves the conflict by emitting `xmlns:w=""` on the element, which overrides the root-level namespace declaration and unbinds the `w:` prefix for all descendants — corrupting the DOCX package and causing Word to report "unreadable content."
+
+**Why not `setAttribute(attr.name, ...)`?** For a null-namespace attribute whose name contains a colon, `setAttribute(attr.name, ...)` is functionally identical to `setAttributeNS(null, attr.name, ...)` — it reintroduces the xmlns injection bug.
+
+**Why not resolve the prefix?** For valid OOXML parsed with `DOMParser('application/xml')`, every `w:`-prefixed attribute will have `attr.namespaceURI === W` (not null) — the null branch is unreachable for real Word documents. It only fires for genuinely unnamespaced attributes (no prefix), where `attr.name === attr.localName` anyway. Adding prefix-resolution logic would handle a case that does not occur in practice and could mask future parsing bugs.
+
+**Do not change this pattern** without first verifying that the alternative does not emit `xmlns:w=""` on converted elements (the regression test in buildDocx.test.ts — "does not inject xmlns:w='' on converted elements" — is the canonical check).
+
+---
+
 ## 2026-06-12 — NOTE-001 upgraded from warning to silent footnote-to-endnote auto-fix
 
 **Decision:** NOTE-001 no longer emits a warning issue card. It now silently converts all Word footnotes to endnotes on download and renumbers all notes (footnotes and endnotes combined) sequentially based on their order of appearance in the document body. The summary entry reads: "N footnote(s) converted to endnote(s) and renumbered sequentially."
