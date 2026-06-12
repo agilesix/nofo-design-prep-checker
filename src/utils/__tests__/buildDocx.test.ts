@@ -1563,6 +1563,32 @@ describe('buildDocx — NOTE-001: footnote-to-endnote conversion', () => {
     expect(hdrXml).toContain('w:endnoteReference');
     expect(hdrXml).toContain('w:id="1"');
   });
+
+  it('word/endnotes.xml is well-formed and retains namespace declarations after conversion', async () => {
+    // Regression: when endnotesDom was mutated in-place, XMLSerializer could
+    // inject xmlns:w="" on programmatically-created elements, or drop the root
+    // namespace declaration entirely — both cause Word to reject the document.
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeNoteDocXml([{ kind: 'footnote', id: 1 }]));
+    zip.file('word/footnotes.xml', makeFootnotesXml([{ id: 1, text: 'Converted note.' }]));
+    zip.file('word/endnotes.xml', makeEndnotesXml());
+    zip.file('word/_rels/document.xml.rels', makeDocRels());
+    zip.file('[Content_Types].xml', makeContentTypes());
+
+    const outZip = await getOutputZip(zip, [], [NOTE_001_CHANGE]);
+    const enXml = await outZip.file('word/endnotes.xml')!.async('string');
+
+    // Must parse as valid XML (no <parsererror> element)
+    const domParser = new DOMParser();
+    const enDoc = domParser.parseFromString(enXml, 'application/xml');
+    expect(enDoc.getElementsByTagName('parsererror')).toHaveLength(0);
+
+    // Root element must carry the WordprocessingML namespace declaration
+    expect(enDoc.documentElement.getAttribute('xmlns:w')).toBe(W_NS_NOTE);
+
+    // The empty-binding corruption must not appear in endnotes.xml either
+    expect(enXml).not.toContain('xmlns:w=""');
+  });
 });
 
 // ─── applyListPeriodFix (CLEAN-010) ──────────────────────────────────────────

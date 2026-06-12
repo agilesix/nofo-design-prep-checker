@@ -2664,34 +2664,58 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
   }
 
   // Rebuild endnotes.xml.
-  // Determine the target document to import nodes into. If endnotesDom exists,
-  // reuse it (preserving its namespace declarations). Otherwise create one by
-  // cloning the footnotes document structure and renaming the root element.
+  // Always build from a fresh parsed document rather than mutating the existing
+  // endnotesDom in-place. Appending programmatically-created elements (via
+  // createElementNS) into a mutated parsed document can cause XMLSerializer to
+  // inject spurious namespace declarations on those new nodes, corrupting the
+  // output DOCX when Word validates namespace bindings.
   let targetDom: Document;
+  let separatorSource: Document;
+
   if (endnotesDom) {
-    targetDom = endnotesDom;
+    // Snapshot the root element's attributes (namespace declarations, mc:Ignorable,
+    // etc.) from the existing endnotes document, then parse a fresh empty-root
+    // document with those same attributes. This gives programmatically-created
+    // child elements a clean, consistent namespace context during serialization.
+    const srcRoot = endnotesDom.documentElement;
+    const rootAttrStr = Array.from(srcRoot.attributes)
+      .map(a => `${a.name}="${a.value.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`)
+      .join(' ');
+    targetDom = parser.parseFromString(
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:endnotes ${rootAttrStr}/>`,
+      'application/xml'
+    );
+    separatorSource = endnotesDom;
   } else {
-    // Clone footnotesDom and rename root to w:endnotes
+    // No endnotes.xml exists yet: clone the footnotes document structure,
+    // renaming root and element tags to their endnote equivalents.
     const clonedXml = serializeXml(footnotesDom)
       .replace(/<w:footnotes\b/, '<w:endnotes')
       .replace(/<\/w:footnotes>/, '</w:endnotes>')
       .replace(/<w:footnote\b/g, '<w:endnote')
       .replace(/<\/w:footnote>/g, '</w:endnote>');
     targetDom = parser.parseFromString(clonedXml, 'application/xml');
+    separatorSource = targetDom;
   }
 
   const endnotesRoot = targetDom.documentElement;
 
-  const separatorEntries = Array.from(endnotesRoot.getElementsByTagNameNS(W, 'endnote')).filter(en => {
+  const separatorEntries = Array.from(
+    separatorSource.documentElement.getElementsByTagNameNS(W, 'endnote')
+  ).filter(en => {
     const type = en.getAttribute('w:type') ?? en.getAttributeNS(W, 'type');
     return type === 'separator' || type === 'continuationSeparator' || type === 'continuationNotice';
   });
 
-  // Remove all children from the root so we can rebuild it cleanly.
+  // Clear any children from the root. For the no-endnotes path (clone from
+  // footnotesDom), this removes user-authored note stubs. For the endnotesDom
+  // path, targetDom is already empty but this is harmless.
   while (endnotesRoot.firstChild) endnotesRoot.removeChild(endnotesRoot.firstChild);
 
-  // Re-add separator entries first.
-  for (const sep of separatorEntries) endnotesRoot.appendChild(sep);
+  // Re-add separator entries, importing into targetDom when from a different document.
+  for (const sep of separatorEntries) {
+    endnotesRoot.appendChild(targetDom.importNode(sep, true));
+  }
 
   // Append merged notes in reading order.
   for (const [key, newId] of keyToNewId.entries()) {
