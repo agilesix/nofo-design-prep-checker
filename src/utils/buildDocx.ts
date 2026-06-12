@@ -2725,8 +2725,8 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
 
   // Clean footnotes.xml: remove user-authored entries, keep separator entries.
   const footnotesRoot = footnotesDom.documentElement;
-  for (const fn of Array.from(footnotesRoot.getElementsByTagName('w:footnote'))) {
-    const type = fn.getAttribute('w:type');
+  for (const fn of Array.from(footnotesRoot.getElementsByTagNameNS(W, 'footnote'))) {
+    const type = fn.getAttribute('w:type') ?? fn.getAttributeNS(W, 'type');
     if (type === 'separator' || type === 'continuationSeparator' || type === 'continuationNotice') continue;
     fn.parentNode?.removeChild(fn);
   }
