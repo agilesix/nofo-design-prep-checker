@@ -20,6 +20,8 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ## 2026-06-12 — NOTE-001 patcher: use setAttribute(localName) for null-namespace attributes
 
+> **Superseded.** `applyFootnoteToEndnoteFix` and its regression tests were removed when the NOTE-001 auto-fix was reverted (see entry above). This entry is retained for historical context only.
+
 **Decision:** In `applyFootnoteToEndnoteFix` (buildDocx.ts), when copying attributes from a source element onto a newly created element, the else-branch for null-namespace attributes uses `setAttribute(attr.localName, attr.value)`, not `setAttribute(attr.name, attr.value)` and not a prefix-resolution fallback.
 
 **Reason:** `setAttributeNS(null, qualifiedName, value)` where `qualifiedName` contains a colon (e.g. `w:customMarkFollows`) puts the DOM in an inconsistent state: the attribute carries a `w:` prefix but no namespace. XMLSerializer resolves the conflict by emitting `xmlns:w=""` on the element, which overrides the root-level namespace declaration and unbinds the `w:` prefix for all descendants — corrupting the DOCX package and causing Word to report "unreadable content."
@@ -33,6 +35,8 @@ This file logs significant decisions made during the development of the NOFO Des
 ---
 
 ## 2026-06-12 — NOTE-001 upgraded from warning to silent footnote-to-endnote auto-fix
+
+> **Superseded.** The auto-fix described here was reverted after four fix attempts failed. NOTE-001 is restored as a warning rule with improved detection. See "NOTE-001 auto-fix reverted" entry above.
 
 **Decision:** NOTE-001 no longer emits a warning issue card. It now silently converts all Word footnotes to endnotes on download and renumbers all notes (footnotes and endnotes combined) sequentially based on their order of appearance in the document body. The summary entry reads: "N footnote(s) converted to endnote(s) and renumbered sequentially."
 
