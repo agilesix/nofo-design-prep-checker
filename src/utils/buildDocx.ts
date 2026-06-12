@@ -2521,9 +2521,9 @@ async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<v
  * concatenated <w:t> text is '.'. The period is appended to the trimmed end of
  * the last <w:t> element that contains non-whitespace text.
  *
- * Items that already end with ':' or ';' are also skipped — only a missing
- * period triggers the fix (other terminal punctuation such as '?' or '!'
- * is treated the same as no period).
+ * Items that already end with any terminal punctuation (. ? ! : ; ,) are
+ * skipped. Only a period (.) acts as the list-level trigger — lists where no
+ * items end with a period are left unchanged.
  *
  * Empty list items (no text content) are skipped.
  */
@@ -2548,7 +2548,8 @@ async function applyListPeriodFix(zip: JSZip): Promise<void> {
 
     for (let i = 0; i < group.length; i++) {
       const text = texts[i]!;
-      if (text.length === 0 || text.endsWith('.') || text.endsWith(':') || text.endsWith(';')) continue;
+      const trailingPunctuation = /[.?!:;,]\s*$/;
+      if (text.length === 0 || trailingPunctuation.test(text)) continue;
 
       // Find the last <w:t> with non-whitespace content and append '.'
       const wTs = Array.from(group[i]!.getElementsByTagName('w:t'));
