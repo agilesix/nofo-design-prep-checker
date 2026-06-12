@@ -2674,6 +2674,12 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
         }
       }
       while (imported.firstChild) endnoteEl.appendChild(imported.firstChild);
+
+      for (const fnRef of Array.from(endnoteEl.getElementsByTagName('w:footnoteRef'))) {
+        const enRef = targetDom.createElementNS(W, 'w:endnoteRef');
+        fnRef.parentNode?.replaceChild(enRef, fnRef);
+      }
+
       endnotesRoot.appendChild(endnoteEl);
     } else {
       imported.setAttribute('w:id', String(newId));
