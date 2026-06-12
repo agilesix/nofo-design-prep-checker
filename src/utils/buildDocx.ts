@@ -2703,8 +2703,8 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
       // Re-tag as w:endnote by creating a new element and transferring children/attrs.
       const endnoteEl = targetDom.createElementNS(W, 'w:endnote');
       for (const attr of Array.from(imported.attributes)) {
-        if (attr.name === 'w:id') {
-          endnoteEl.setAttribute('w:id', String(newId));
+        if (attr.localName === 'id' && (attr.namespaceURI === W || attr.name === 'w:id')) {
+          endnoteEl.setAttributeNS(W, 'w:id', String(newId));
         } else {
           endnoteEl.setAttributeNS(attr.namespaceURI, attr.name, attr.value);
         }
