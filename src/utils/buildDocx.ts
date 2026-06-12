@@ -2671,21 +2671,22 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
   // elements; serializing each element from its source document and assembling
   // the output as a string preserves namespace context exactly as Word wrote it.
 
-  /** Namespace URIs declared on a root opening-tag string. */
-  function parseRootNsUris(rootTag: string): Set<string> {
-    const uris = new Set<string>();
-    const re = /\s+xmlns(?::[a-zA-Z0-9_.-]+)?="([^"]*)"/g;
+  /** Prefix→URI bindings declared on a root opening-tag string (empty string key = default ns). */
+  function parseRootNsBindings(rootTag: string): Map<string, string> {
+    const bindings = new Map<string, string>();
+    const re = /\s+xmlns(?::([a-zA-Z0-9_.-]+))?="([^"]*)"/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(rootTag)) !== null) {
-      if (m[1]) uris.add(m[1]);
+      bindings.set(m[1] ?? '', m[2] ?? '');
     }
-    return uris;
+    return bindings;
   }
 
   /** Serialize a DOM element to XML, stripping xmlns declarations from its outer
-   *  opening tag only when their URI is already declared on the output root element.
-   *  Declarations for namespaces not in rootNsUris are kept so inner elements remain valid. */
-  function serializeNoteEl(el: Element, rootNsUris: Set<string>): string {
+   *  opening tag only when the exact same prefix→URI binding is already on the
+   *  output root. Declarations for different prefixes or URIs are kept so that
+   *  all prefix references within the element remain resolvable. */
+  function serializeNoteEl(el: Element, rootNsBindings: Map<string, string>): string {
     const xml = _xmlSerializer.serializeToString(el);
     let inQ = false, q = '', gtIdx = -1;
     for (let i = 0; i < xml.length; i++) {
@@ -2695,8 +2696,9 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
     }
     if (gtIdx === -1) return xml;
     const stripped = xml.slice(0, gtIdx + 1).replace(
-      /\s+xmlns(?::[a-zA-Z0-9_.-]+)?="([^"]*)"/g,
-      (_m: string, uri: string) => rootNsUris.has(uri) ? '' : _m
+      /\s+xmlns(?::([a-zA-Z0-9_.-]+))?="([^"]*)"/g,
+      (_m: string, prefix: string | undefined, uri: string) =>
+        rootNsBindings.get(prefix ?? '') === uri ? '' : _m
     );
     return stripped + xml.slice(gtIdx + 1);
   }
@@ -2734,8 +2736,8 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
     ? extractOpenTag(endnotesXmlStr, 'w:endnotes')
     : footnotesOpenTag.replace(/^<w:footnotes\b/, '<w:endnotes');
 
-  const endnotesNsUris = parseRootNsUris(endnotesOpenTag);
-  const footnotesNsUris = parseRootNsUris(footnotesOpenTag);
+  const endnotesNsBindings = parseRootNsBindings(endnotesOpenTag);
+  const footnotesNsBindings = parseRootNsBindings(footnotesOpenTag);
 
   // Separator entries for word/endnotes.xml. When endnotesDom exists use its
   // endnote separators; otherwise pull from footnotesDom and rename the tags.
@@ -2749,7 +2751,7 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
       return type === 'separator' || type === 'continuationSeparator' || type === 'continuationNotice';
     })
     .map(en => {
-      let s = serializeNoteEl(en, endnotesNsUris);
+      let s = serializeNoteEl(en, endnotesNsBindings);
       if (!endnotesDom) {
         s = s
           .replace(/^<w:footnote\b/, '<w:endnote')
@@ -2768,7 +2770,7 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
     const sourceEl = kind === 'footnote' ? footnoteByOldId.get(oldId) : endnoteByOldId.get(oldId);
     if (!sourceEl) continue;
 
-    let s = serializeNoteEl(sourceEl, endnotesNsUris);
+    let s = serializeNoteEl(sourceEl, endnotesNsBindings);
 
     // Update w:id on the outer element only (not child elements).
     s = s.replace(
@@ -2801,7 +2803,7 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
       const type = fn.getAttribute('w:type') ?? fn.getAttributeNS(W, 'type');
       return type === 'separator' || type === 'continuationSeparator' || type === 'continuationNotice';
     })
-    .map(fn => serializeNoteEl(fn, footnotesNsUris));
+    .map(fn => serializeNoteEl(fn, footnotesNsBindings));
 
   const footnotesXmlOut =
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
