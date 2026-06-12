@@ -2545,11 +2545,13 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
   const parser = new DOMParser();
 
   const docDom = parser.parseFromString(await docFile.async('string'), 'application/xml');
-  const footnotesDom = parser.parseFromString(await footnotesFile.async('string'), 'application/xml');
+  const footnotesXmlStr = await footnotesFile.async('string');
+  const footnotesDom = parser.parseFromString(footnotesXmlStr, 'application/xml');
 
   const endnotesFile = zip.file('word/endnotes.xml');
-  const endnotesDom = endnotesFile
-    ? parser.parseFromString(await endnotesFile.async('string'), 'application/xml')
+  const endnotesXmlStr = endnotesFile ? await endnotesFile.async('string') : null;
+  const endnotesDom = endnotesXmlStr
+    ? parser.parseFromString(endnotesXmlStr, 'application/xml')
     : null;
 
   // Build maps: old ID → element for user-authored footnotes and endnotes.
@@ -2663,62 +2665,101 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
     zip.file(path, serializeXml(dom));
   }
 
-  // Rebuild endnotes.xml.
-  // Always build from a fresh parsed document rather than mutating the existing
-  // endnotesDom in-place. Appending programmatically-created elements (via
-  // createElementNS) into a mutated parsed document can cause XMLSerializer to
-  // inject spurious namespace declarations on those new nodes, corrupting the
-  // output DOCX when Word validates namespace bindings.
-  let targetDom: Document;
-  let separatorSource: Document;
+  // Rebuild word/endnotes.xml and word/footnotes.xml as strings rather than
+  // through DOM manipulation. Cross-document importNode and createElementNS
+  // can cause XMLSerializer to inject spurious xmlns declarations on individual
+  // elements; serializing each element from its source document and assembling
+  // the output as a string preserves namespace context exactly as Word wrote it.
 
-  if (endnotesDom) {
-    // Snapshot the root element's attributes (namespace declarations, mc:Ignorable,
-    // etc.) from the existing endnotes document, then parse a fresh empty-root
-    // document with those same attributes. This gives programmatically-created
-    // child elements a clean, consistent namespace context during serialization.
-    const srcRoot = endnotesDom.documentElement;
-    const rootAttrStr = Array.from(srcRoot.attributes)
-      .map(a => `${a.name}="${a.value.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`)
-      .join(' ');
-    targetDom = parser.parseFromString(
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:endnotes ${rootAttrStr}/>`,
-      'application/xml'
+  /** Namespace URIs declared on a root opening-tag string. */
+  function parseRootNsUris(rootTag: string): Set<string> {
+    const uris = new Set<string>();
+    const re = /\s+xmlns(?::[a-zA-Z0-9_.-]+)?="([^"]*)"/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(rootTag)) !== null) {
+      if (m[1]) uris.add(m[1]);
+    }
+    return uris;
+  }
+
+  /** Serialize a DOM element to XML, stripping xmlns declarations from its outer
+   *  opening tag only when their URI is already declared on the output root element.
+   *  Declarations for namespaces not in rootNsUris are kept so inner elements remain valid. */
+  function serializeNoteEl(el: Element, rootNsUris: Set<string>): string {
+    const xml = _xmlSerializer.serializeToString(el);
+    let inQ = false, q = '', gtIdx = -1;
+    for (let i = 0; i < xml.length; i++) {
+      if (inQ) { if (xml[i] === q) inQ = false; }
+      else if (xml[i] === '"' || xml[i] === "'") { inQ = true; q = xml[i]!; }
+      else if (xml[i] === '>') { gtIdx = i; break; }
+    }
+    if (gtIdx === -1) return xml;
+    const stripped = xml.slice(0, gtIdx + 1).replace(
+      /\s+xmlns(?::[a-zA-Z0-9_.-]+)?="([^"]*)"/g,
+      (_m: string, uri: string) => rootNsUris.has(uri) ? '' : _m
     );
-    separatorSource = endnotesDom;
-  } else {
-    // No endnotes.xml exists yet: clone the footnotes document structure,
-    // renaming root and element tags to their endnote equivalents.
-    const clonedXml = serializeXml(footnotesDom)
-      .replace(/<w:footnotes\b/, '<w:endnotes')
-      .replace(/<\/w:footnotes>/, '</w:endnotes>')
-      .replace(/<w:footnote\b/g, '<w:endnote')
-      .replace(/<\/w:footnote>/g, '</w:endnote>');
-    targetDom = parser.parseFromString(clonedXml, 'application/xml');
-    separatorSource = targetDom;
+    return stripped + xml.slice(gtIdx + 1);
   }
 
-  const endnotesRoot = targetDom.documentElement;
-
-  const separatorEntries = Array.from(
-    separatorSource.documentElement.getElementsByTagNameNS(W, 'endnote')
-  ).filter(en => {
-    const type = en.getAttribute('w:type') ?? en.getAttributeNS(W, 'type');
-    return type === 'separator' || type === 'continuationSeparator' || type === 'continuationNotice';
-  });
-
-  // Clear any children from the root. For the no-endnotes path (clone from
-  // footnotesDom), this removes user-authored note stubs. For the endnotesDom
-  // path, targetDom is already empty but this is harmless.
-  while (endnotesRoot.firstChild) endnotesRoot.removeChild(endnotesRoot.firstChild);
-
-  // Re-add separator entries. importNode ensures ownership by targetDom regardless
-  // of which source document the entries came from.
-  for (const sep of separatorEntries) {
-    endnotesRoot.appendChild(targetDom.importNode(sep, true));
+  /** Extract the opening tag (non-self-closing) of the first element matching
+   *  localName from a raw XML string, including all attributes verbatim. */
+  function extractOpenTag(xml: string, localName: string): string {
+    const prefix = `<${localName}`;
+    let pos = 0;
+    while (pos < xml.length) {
+      const start = xml.indexOf(prefix, pos);
+      if (start === -1) break;
+      const next = xml[start + prefix.length];
+      if (next === ' ' || next === '\t' || next === '\n' || next === '\r' || next === '>' || next === '/') {
+        let inQ2 = false, q2 = '';
+        for (let i = start; i < xml.length; i++) {
+          if (inQ2) { if (xml[i] === q2) inQ2 = false; }
+          else if (xml[i] === '"' || xml[i] === "'") { inQ2 = true; q2 = xml[i]!; }
+          else if (xml[i] === '>') {
+            const tag = xml.slice(start, i + 1);
+            return tag.endsWith('/>') ? tag.slice(0, -2) + '>' : tag;
+          }
+        }
+        break;
+      }
+      pos = start + 1;
+    }
+    return `<${localName}>`;
   }
 
-  // Append merged notes in reading order.
+  // Root opening tags extracted verbatim from source XML to preserve all namespace
+  // declarations exactly as Word wrote them (w:, r:, w14:, mc:, etc.).
+  const footnotesOpenTag = extractOpenTag(footnotesXmlStr, 'w:footnotes');
+  const endnotesOpenTag = endnotesXmlStr
+    ? extractOpenTag(endnotesXmlStr, 'w:endnotes')
+    : footnotesOpenTag.replace(/^<w:footnotes\b/, '<w:endnotes');
+
+  const endnotesNsUris = parseRootNsUris(endnotesOpenTag);
+  const footnotesNsUris = parseRootNsUris(footnotesOpenTag);
+
+  // Separator entries for word/endnotes.xml. When endnotesDom exists use its
+  // endnote separators; otherwise pull from footnotesDom and rename the tags.
+  const endnoteSepSrc = endnotesDom ?? footnotesDom;
+  const endnoteSepLocalName = endnotesDom ? 'endnote' : 'footnote';
+  const endnoteSepParts = Array.from(
+    endnoteSepSrc.documentElement.getElementsByTagNameNS(W, endnoteSepLocalName)
+  )
+    .filter(en => {
+      const type = en.getAttribute('w:type') ?? en.getAttributeNS(W, 'type');
+      return type === 'separator' || type === 'continuationSeparator' || type === 'continuationNotice';
+    })
+    .map(en => {
+      let s = serializeNoteEl(en, endnotesNsUris);
+      if (!endnotesDom) {
+        s = s
+          .replace(/^<w:footnote\b/, '<w:endnote')
+          .replace(/<\/w:footnote>$/, '</w:endnote>');
+      }
+      return s;
+    });
+
+  // Merged user notes in reading order.
+  const endnoteBodyParts: string[] = [];
   for (const [key, newId] of keyToNewId.entries()) {
     const colonIdx = key.indexOf(':');
     const kind = key.slice(0, colonIdx) as 'footnote' | 'endnote';
@@ -2727,46 +2768,50 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
     const sourceEl = kind === 'footnote' ? footnoteByOldId.get(oldId) : endnoteByOldId.get(oldId);
     if (!sourceEl) continue;
 
-    // Import the source element into the target document.
-    const imported = targetDom.importNode(sourceEl, true);
+    let s = serializeNoteEl(sourceEl, endnotesNsUris);
+
+    // Update w:id on the outer element only (not child elements).
+    s = s.replace(
+      /^(<w:(?:foot|end)note\b[^>]*\b)w:id="[^"]*"/,
+      `$1w:id="${newId}"`
+    );
 
     if (kind === 'footnote') {
-      // Re-tag as w:endnote by creating a new element and transferring children/attrs.
-      const endnoteEl = targetDom.createElementNS(W, 'w:endnote');
-      for (const attr of Array.from(imported.attributes)) {
-        if (attr.localName === 'id' && (attr.namespaceURI === W || attr.name === 'w:id')) {
-          endnoteEl.setAttributeNS(W, 'w:id', String(newId));
-        } else if (attr.namespaceURI) {
-          endnoteEl.setAttributeNS(attr.namespaceURI, attr.name, attr.value);
-        } else {
-          endnoteEl.setAttribute(attr.localName, attr.value);
-        }
-      }
-      while (imported.firstChild) endnoteEl.appendChild(imported.firstChild);
-
-      for (const fnRef of Array.from(endnoteEl.getElementsByTagNameNS(W, 'footnoteRef'))) {
-        const enRef = targetDom.createElementNS(W, 'w:endnoteRef');
-        fnRef.parentNode?.replaceChild(enRef, fnRef);
-      }
-
-      endnotesRoot.appendChild(endnoteEl);
-    } else {
-      imported.setAttributeNS(W, 'w:id', String(newId));
-      endnotesRoot.appendChild(imported);
+      s = s
+        .replace(/^<w:footnote\b/, '<w:endnote')
+        .replace(/<\/w:footnote>$/, '</w:endnote>')
+        .replace(/<w:footnoteRef\b/g, '<w:endnoteRef')
+        .replace(/<\/w:footnoteRef>/g, '</w:endnoteRef>');
     }
+
+    endnoteBodyParts.push(s);
   }
 
-  // Clean footnotes.xml: remove user-authored entries, keep separator entries.
-  const footnotesRoot = footnotesDom.documentElement;
-  for (const fn of Array.from(footnotesRoot.getElementsByTagNameNS(W, 'footnote'))) {
-    const type = fn.getAttribute('w:type') ?? fn.getAttributeNS(W, 'type');
-    if (type === 'separator' || type === 'continuationSeparator' || type === 'continuationNotice') continue;
-    fn.parentNode?.removeChild(fn);
-  }
+  const endnotesXmlOut =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+    endnotesOpenTag + '\n' +
+    [...endnoteSepParts, ...endnoteBodyParts].join('\n') + '\n' +
+    '</w:endnotes>';
+
+  // word/footnotes.xml: retain only the structural separator entries.
+  const footnoteSepParts = Array.from(
+    footnotesDom.documentElement.getElementsByTagNameNS(W, 'footnote')
+  )
+    .filter(fn => {
+      const type = fn.getAttribute('w:type') ?? fn.getAttributeNS(W, 'type');
+      return type === 'separator' || type === 'continuationSeparator' || type === 'continuationNotice';
+    })
+    .map(fn => serializeNoteEl(fn, footnotesNsUris));
+
+  const footnotesXmlOut =
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
+    footnotesOpenTag + '\n' +
+    footnoteSepParts.join('\n') + '\n' +
+    '</w:footnotes>';
 
   zip.file('word/document.xml', serializeXml(docDom));
-  zip.file('word/endnotes.xml', serializeXml(targetDom));
-  zip.file('word/footnotes.xml', serializeXml(footnotesDom));
+  zip.file('word/endnotes.xml', endnotesXmlOut);
+  zip.file('word/footnotes.xml', footnotesXmlOut);
 
   // When endnotes.xml is newly created (it was absent from the original archive),
   // register it in word/_rels/document.xml.rels and [Content_Types].xml so Word

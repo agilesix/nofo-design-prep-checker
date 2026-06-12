@@ -1514,10 +1514,8 @@ describe('buildDocx — NOTE-001: footnote-to-endnote conversion', () => {
   });
 
   it('does not inject xmlns:w="" on converted elements', async () => {
-    // setAttributeNS(null, 'w:prefixedAttr', ...) causes XMLSerializer to emit
-    // xmlns:w="" on the element, overriding the root-level namespace declaration
-    // and making Word reject the document as unreadable. A valid re-declaration
-    // (xmlns:w="http://...") is legal XML and not checked here.
+    // xmlns:w="" (empty binding) unbinds the w: prefix for all descendants,
+    // invalidating every w:-namespaced element and attribute.
     const zip = new JSZip();
     zip.file('word/document.xml', makeNoteDocXml([{ kind: 'footnote', id: 1 }]));
     zip.file('word/footnotes.xml', makeFootnotesXml([{ id: 1, text: 'Note.' }]));
@@ -1528,8 +1526,6 @@ describe('buildDocx — NOTE-001: footnote-to-endnote conversion', () => {
     const outZip = await getOutputZip(zip, [], [NOTE_001_CHANGE]);
     const docXml = await outZip.file('word/document.xml')!.async('string');
 
-    // The empty binding xmlns:w="" is the corruption: it unbinds the w: prefix
-    // for all descendants, invalidating every w:-namespaced element and attribute.
     expect(docXml).not.toContain('xmlns:w=""');
   });
 
@@ -1565,9 +1561,9 @@ describe('buildDocx — NOTE-001: footnote-to-endnote conversion', () => {
   });
 
   it('word/endnotes.xml is well-formed and retains namespace declarations after conversion', async () => {
-    // Regression: when endnotesDom was mutated in-place, XMLSerializer could
-    // inject xmlns:w="" on programmatically-created elements, or drop the root
-    // namespace declaration entirely — both cause Word to reject the document.
+    // Regression: DOM-based assembly caused XMLSerializer to inject spurious xmlns
+    // declarations on programmatically-created elements — the string-based assembler
+    // strips them from each serialized element since the root already carries them.
     const zip = new JSZip();
     zip.file('word/document.xml', makeNoteDocXml([{ kind: 'footnote', id: 1 }]));
     zip.file('word/footnotes.xml', makeFootnotesXml([{ id: 1, text: 'Converted note.' }]));
@@ -1578,7 +1574,7 @@ describe('buildDocx — NOTE-001: footnote-to-endnote conversion', () => {
     const outZip = await getOutputZip(zip, [], [NOTE_001_CHANGE]);
     const enXml = await outZip.file('word/endnotes.xml')!.async('string');
 
-    // Must parse as valid XML (no <parsererror> element)
+    // Must parse as valid XML
     const domParser = new DOMParser();
     const enDoc = domParser.parseFromString(enXml, 'application/xml');
     expect(enDoc.getElementsByTagName('parsererror')).toHaveLength(0);
@@ -1586,8 +1582,21 @@ describe('buildDocx — NOTE-001: footnote-to-endnote conversion', () => {
     // Root element must carry the WordprocessingML namespace declaration
     expect(enDoc.documentElement.getAttribute('xmlns:w')).toBe(W_NS_NOTE);
 
-    // The empty-binding corruption must not appear in endnotes.xml either
+    // Empty binding corruption must not appear anywhere
     expect(enXml).not.toContain('xmlns:w=""');
+
+    // No xmlns re-declarations on elements after the root opening tag
+    const rootOpenEnd = (() => {
+      const rootStart = enXml.indexOf('<w:endnotes');
+      let inQ = false, qCh = '';
+      for (let i = rootStart; i < enXml.length; i++) {
+        if (inQ) { if (enXml[i] === qCh) inQ = false; }
+        else if (enXml[i] === '"' || enXml[i] === "'") { inQ = true; qCh = enXml[i]!; }
+        else if (enXml[i] === '>') return i + 1;
+      }
+      return enXml.length;
+    })();
+    expect(enXml.slice(rootOpenEnd)).not.toContain('xmlns:w=');
   });
 });
 
