@@ -186,3 +186,33 @@ describe('CLEAN-010: items ending with colon or semicolon are skipped', () => {
     expect(CLEAN_010.check(doc, OPTIONS)).toHaveLength(0);
   });
 });
+
+// ─── New terminal punctuation: ?, !, , are treated as already punctuated ─────
+
+describe('CLEAN-010: items ending with ?, !, or , are skipped', () => {
+  it('does not count an item ending with ? toward totalToFix', () => {
+    const doc = makeDoc(makeListXml(['Item 1.', 'Item 2?', 'Item 3']));
+    const results = CLEAN_010.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as AutoAppliedChange).value).toBe('1'); // only Item 3
+  });
+
+  it('does not count an item ending with ! toward totalToFix', () => {
+    const doc = makeDoc(makeListXml(['Item 1.', 'Item 2!', 'Item 3']));
+    const results = CLEAN_010.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as AutoAppliedChange).value).toBe('1'); // only Item 3
+  });
+
+  it('does not count an item ending with , toward totalToFix', () => {
+    const doc = makeDoc(makeListXml(['Item 1.', 'Item 2,', 'Item 3']));
+    const results = CLEAN_010.check(doc, OPTIONS);
+    expect(results).toHaveLength(1);
+    expect((results[0] as AutoAppliedChange).value).toBe('1'); // only Item 3
+  });
+
+  it('returns no changes when all non-period items end with ?, !, or ,', () => {
+    const doc = makeDoc(makeListXml(['Item 1.', 'Item 2?', 'Item 3!']));
+    expect(CLEAN_010.check(doc, OPTIONS)).toHaveLength(0);
+  });
+});

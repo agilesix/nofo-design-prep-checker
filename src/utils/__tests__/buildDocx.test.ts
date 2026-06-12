@@ -1434,6 +1434,24 @@ describe('buildDocx — CLEAN-010: list period normalization', () => {
     expect(texts[2]).toBe('Item 3.');
   });
 
+  it('does not append a period to items ending with ?, !, or ,', async () => {
+    // List qualifies (has a period). Items ending with ?, !, , are already
+    // punctuated and must be left unchanged; only the bare item gets a period.
+    const zip = new JSZip();
+    zip.file(
+      'word/document.xml',
+      makeListDocXml([{ numId: '1', items: ['Item 1.', 'Item 2?', 'Item 3!', 'Item 4,', 'Item 5'] }])
+    );
+
+    const outXml = await getOutputDocXml(zip, [], [LIST_PERIOD_CHANGE]);
+    const texts = extractParagraphTexts(outXml);
+    expect(texts[0]).toBe('Item 1.');
+    expect(texts[1]).toBe('Item 2?'); // already punctuated → unchanged
+    expect(texts[2]).toBe('Item 3!'); // already punctuated → unchanged
+    expect(texts[3]).toBe('Item 4,'); // already punctuated → unchanged
+    expect(texts[4]).toBe('Item 5.'); // plain text → gets period
+  });
+
   it('does not modify the document when targetField is absent', async () => {
     const zip = new JSZip();
     zip.file(

@@ -37,6 +37,7 @@ const CLEAN_010: Rule = {
     const xmlDoc = parser.parseFromString(xml, 'application/xml');
 
     const groups = groupListParagraphs(Array.from(xmlDoc.getElementsByTagName('w:p')));
+    const trailingPunctuation = /[.?!:;,]$/;
     let totalToFix = 0;
 
     for (const group of groups) {
@@ -44,7 +45,6 @@ const CLEAN_010: Rule = {
       const texts = group.map(p => getItemText(p).trimEnd());
       const withPeriod = texts.filter(t => t.endsWith('.')).length;
       if (withPeriod === 0) continue;
-      const trailingPunctuation = /[.?!:;,]\s*$/;
       totalToFix += texts.filter(t => t.length > 0 && !trailingPunctuation.test(t)).length;
     }
 

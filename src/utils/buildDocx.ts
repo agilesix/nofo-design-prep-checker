@@ -2537,6 +2537,7 @@ async function applyListPeriodFix(zip: JSZip): Promise<void> {
 
   const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
   const groups = groupListParagraphs(paragraphs);
+  const trailingPunctuation = /[.?!:;,]$/;
   let changed = false;
 
   for (const group of groups) {
@@ -2548,7 +2549,6 @@ async function applyListPeriodFix(zip: JSZip): Promise<void> {
 
     for (let i = 0; i < group.length; i++) {
       const text = texts[i]!;
-      const trailingPunctuation = /[.?!:;,]\s*$/;
       if (text.length === 0 || trailingPunctuation.test(text)) continue;
 
       // Find the last <w:t> with non-whitespace content and append '.'
