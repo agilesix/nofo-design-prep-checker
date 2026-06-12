@@ -1,44 +1,46 @@
-import type { Rule, Issue, ParsedDocument, RuleRunnerOptions } from '../../types';
+import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from '../../types';
 
 /**
- * NOTE-001: Real Word footnotes detected
+ * NOTE-001: Silently convert all Word footnotes to endnotes on download.
  *
- * Inspects word/footnotes.xml to confirm actual user-authored footnotes exist.
- * Word always writes separator/continuationSeparator entries into footnotes.xml
- * even when there are no real footnotes, so we skip those and only flag entries
- * without a w:type attribute (or with w:type="normal").
+ * Inspects word/document.xml for w:footnoteReference elements to detect
+ * user-authored footnotes. When found, returns an AutoAppliedChange that
+ * triggers applyFootnoteToEndnoteFix in buildDocx — which merges footnotes
+ * and existing endnotes in document reading order, renumbers them
+ * sequentially, writes the result into word/endnotes.xml, and clears the
+ * user-authored entries from word/footnotes.xml.
  *
- * The SimplerNOFOs style guide requires all notes to be endnotes. Word footnotes
- * will not import correctly into NOFO Builder.
+ * Word always writes separator/continuationSeparator entries into both XML
+ * parts even when there are no user notes; those structural entries are
+ * preserved and never renumbered.
+ *
+ * No Issue card is emitted under any circumstances.
  */
 const NOTE_001: Rule = {
   id: 'NOTE-001',
-  check(doc: ParsedDocument, _options: RuleRunnerOptions): Issue[] {
-    if (!doc.footnotesXml) return [];
+  autoApply: true,
+  check(doc: ParsedDocument, _options: RuleRunnerOptions): AutoAppliedChange[] {
+    if (!doc.documentXml) return [];
 
-    const footnoteTagPattern = /<w:footnote\b[^>]*>/g;
-    const separatorTypePattern = /w:type="(?:separator|continuationSeparator|continuationNotice)"/;
+    const fnRefPattern = /<w:footnoteReference\b[^/]*/g;
+    const matches = Array.from(doc.documentXml.matchAll(fnRefPattern));
 
-    const hasRealFootnotes = Array.from(doc.footnotesXml.matchAll(footnoteTagPattern))
-      .some(match => !separatorTypePattern.test(match[0]));
+    const userRefs = matches.filter(m => {
+      const idMatch = /w:id="(-?\d+)"/.exec(m[0]);
+      const id = idMatch ? parseInt(idMatch[1]!, 10) : NaN;
+      return !isNaN(id) && id >= 1;
+    });
 
-    if (!hasRealFootnotes) return [];
+    if (userRefs.length === 0) return [];
 
-    return [{
-      id: 'NOTE-001-footnotes',
-      ruleId: 'NOTE-001',
-      title: 'Document contains footnotes that must be converted to endnotes',
-      severity: 'warning',
-      sectionId: doc.sections[0]?.id ?? 'section-preamble',
-      description:
-        'This document contains Word footnotes. The SimplerNOFOs style guide requires all notes ' +
-        'to be endnotes — Word footnotes will not import correctly into NOFO Builder and will ' +
-        'not appear in the published NOFO.',
-      suggestedFix:
-        'In Microsoft Word, go to References → Show Notes. In the notes pane, click Convert and ' +
-        'select "Convert all footnotes to endnotes", then save the document.',
-      instructionOnly: true,
-    }];
+    return [
+      {
+        ruleId: 'NOTE-001',
+        description: `${userRefs.length} footnote${userRefs.length === 1 ? '' : 's'} converted to endnote${userRefs.length === 1 ? '' : 's'} and renumbered sequentially.`,
+        targetField: 'note.footnote-to-endnote',
+        value: String(userRefs.length),
+      },
+    ];
   },
 };
 

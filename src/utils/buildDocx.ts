@@ -145,6 +145,9 @@ export async function buildDocx(
   const hasIntergovernmentalReviewSentenceCaseFix = autoAppliedChanges.some(
     c => c.targetField === 'heading.intergovernmentalreview.sentencecase'
   );
+  const hasFootnoteToEndnoteFix = autoAppliedChanges.some(
+    c => c.targetField === 'note.footnote-to-endnote'
+  );
   const h2TitleCaseChanges = autoAppliedChanges.filter(
     c => c.targetField === 'heading.h2.titlecase' && c.value
   );
@@ -364,6 +367,11 @@ export async function buildDocx(
   // Correct "Intergovernmental Review" heading to sentence case
   if (hasIntergovernmentalReviewSentenceCaseFix) {
     await applyIntergovernmentalReviewSentenceCaseFix(zip);
+  }
+
+  // Convert footnotes to endnotes and renumber all notes sequentially
+  if (hasFootnoteToEndnoteFix) {
+    await applyFootnoteToEndnoteFix(zip);
   }
 
   // Strip content controls — unconditional, silent (documented on the Download
@@ -2508,6 +2516,183 @@ async function applyAcceptTrackedChangesAndRemoveComments(zip: JSZip): Promise<v
     }
     zip.file(relsPath, serializeXml(relsDoc), { compression: 'STORE' });
   }
+}
+
+// ─── NOTE-001: Convert footnotes to endnotes ────────────────────────────────────
+
+/**
+ * Converts all Word footnotes to endnotes on download.
+ *
+ * Algorithm:
+ * 1. Walk word/document.xml in reading order to collect all w:footnoteReference
+ *    and w:endnoteReference elements in the order they appear in the body.
+ * 2. Assign new sequential IDs (starting at 1) based on that reading order.
+ * 3. Update body references: w:footnoteReference → w:endnoteReference (new ID);
+ *    existing w:endnoteReference → updated ID.
+ * 4. Rebuild word/endnotes.xml: preserve separator/continuationSeparator entries
+ *    at the top, then append the merged notes in reading order with new IDs.
+ *    Footnote elements are re-tagged as w:endnote.
+ * 5. Clear user-authored entries from word/footnotes.xml while preserving its
+ *    separator/continuationSeparator entries (Word requires the file to exist).
+ */
+async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+  const docFile = zip.file('word/document.xml');
+  const footnotesFile = zip.file('word/footnotes.xml');
+  if (!docFile || !footnotesFile) return;
+
+  const parser = new DOMParser();
+
+  const docDom = parser.parseFromString(await docFile.async('string'), 'application/xml');
+  const footnotesDom = parser.parseFromString(await footnotesFile.async('string'), 'application/xml');
+
+  const endnotesFile = zip.file('word/endnotes.xml');
+  const endnotesDom = endnotesFile
+    ? parser.parseFromString(await endnotesFile.async('string'), 'application/xml')
+    : null;
+
+  // Build maps: old ID → element for user-authored footnotes and endnotes.
+  // A user-authored entry has no w:type attribute (or w:type="normal") and ID >= 1.
+  const footnoteByOldId = new Map<number, Element>();
+  for (const fn of Array.from(footnotesDom.getElementsByTagName('w:footnote'))) {
+    const type = fn.getAttribute('w:type');
+    if (type === 'separator' || type === 'continuationSeparator' || type === 'continuationNotice') continue;
+    const id = parseInt(fn.getAttribute('w:id') ?? '', 10);
+    if (!isNaN(id) && id >= 1) footnoteByOldId.set(id, fn);
+  }
+  if (footnoteByOldId.size === 0) return;
+
+  const endnoteByOldId = new Map<number, Element>();
+  if (endnotesDom) {
+    for (const en of Array.from(endnotesDom.getElementsByTagName('w:endnote'))) {
+      const type = en.getAttribute('w:type');
+      if (type === 'separator' || type === 'continuationSeparator' || type === 'continuationNotice') continue;
+      const id = parseInt(en.getAttribute('w:id') ?? '', 10);
+      if (!isNaN(id) && id >= 1) endnoteByOldId.set(id, en);
+    }
+  }
+
+  // Walk the document body in reading order, collecting all footnote/endnote refs.
+  type NoteRef = { kind: 'footnote' | 'endnote'; oldId: number; element: Element };
+  const bodyRefs: NoteRef[] = [];
+
+  function collectRefs(node: Node): void {
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node as Element;
+    const tag = el.tagName;
+    if (tag === 'w:footnoteReference' || tag === 'w:endnoteReference') {
+      const id = parseInt(el.getAttribute('w:id') ?? '', 10);
+      if (!isNaN(id) && id >= 1) {
+        bodyRefs.push({ kind: tag === 'w:footnoteReference' ? 'footnote' : 'endnote', oldId: id, element: el });
+      }
+    }
+    for (const child of Array.from(el.childNodes)) collectRefs(child);
+  }
+
+  const body = docDom.getElementsByTagName('w:body')[0];
+  if (body) collectRefs(body);
+
+  // Assign new sequential IDs in reading order (each unique (kind, oldId) pair
+  // gets exactly one new ID; duplicates reuse the same new ID).
+  const keyToNewId = new Map<string, number>();
+  let nextId = 1;
+  for (const ref of bodyRefs) {
+    const key = `${ref.kind}:${ref.oldId}`;
+    if (!keyToNewId.has(key)) keyToNewId.set(key, nextId++);
+  }
+
+  // Update body references in-place.
+  for (const ref of bodyRefs) {
+    const newId = keyToNewId.get(`${ref.kind}:${ref.oldId}`)!;
+    if (ref.kind === 'footnote') {
+      // Replace w:footnoteReference with w:endnoteReference, copy all attributes.
+      const enRef = docDom.createElementNS(W, 'w:endnoteReference');
+      for (const attr of Array.from(ref.element.attributes)) {
+        if (attr.name === 'w:id') {
+          enRef.setAttribute('w:id', String(newId));
+        } else {
+          enRef.setAttributeNS(attr.namespaceURI, attr.name, attr.value);
+        }
+      }
+      ref.element.parentNode!.replaceChild(enRef, ref.element);
+    } else {
+      ref.element.setAttribute('w:id', String(newId));
+    }
+  }
+
+  // Rebuild endnotes.xml.
+  // Determine the target document to import nodes into. If endnotesDom exists,
+  // reuse it (preserving its namespace declarations). Otherwise create one by
+  // cloning the footnotes document structure and renaming the root element.
+  let targetDom: Document;
+  if (endnotesDom) {
+    targetDom = endnotesDom;
+  } else {
+    // Clone footnotesDom and rename root to w:endnotes
+    const clonedXml = serializeXml(footnotesDom)
+      .replace(/<w:footnotes\b/, '<w:endnotes')
+      .replace(/<\/w:footnotes>/, '</w:endnotes>')
+      .replace(/<w:footnote\b/g, '<w:endnote')
+      .replace(/<\/w:footnote>/g, '</w:endnote>');
+    targetDom = parser.parseFromString(clonedXml, 'application/xml');
+  }
+
+  const endnotesRoot = targetDom.documentElement;
+
+  // Collect separator/continuation entries to preserve at the top.
+  const separatorEntries = Array.from(endnotesRoot.getElementsByTagName('w:endnote')).filter(en => {
+    const type = en.getAttribute('w:type');
+    return type === 'separator' || type === 'continuationSeparator';
+  });
+
+  // Remove all children from the root so we can rebuild it cleanly.
+  while (endnotesRoot.firstChild) endnotesRoot.removeChild(endnotesRoot.firstChild);
+
+  // Re-add separator entries first.
+  for (const sep of separatorEntries) endnotesRoot.appendChild(sep);
+
+  // Append merged notes in reading order.
+  for (const [key, newId] of keyToNewId.entries()) {
+    const colonIdx = key.indexOf(':');
+    const kind = key.slice(0, colonIdx) as 'footnote' | 'endnote';
+    const oldId = parseInt(key.slice(colonIdx + 1), 10);
+
+    const sourceEl = kind === 'footnote' ? footnoteByOldId.get(oldId) : endnoteByOldId.get(oldId);
+    if (!sourceEl) continue;
+
+    // Import the source element into the target document.
+    const imported = targetDom.importNode(sourceEl, true);
+
+    if (kind === 'footnote') {
+      // Re-tag as w:endnote by creating a new element and transferring children/attrs.
+      const endnoteEl = targetDom.createElementNS(W, 'w:endnote');
+      for (const attr of Array.from(imported.attributes)) {
+        if (attr.name === 'w:id') {
+          endnoteEl.setAttribute('w:id', String(newId));
+        } else {
+          endnoteEl.setAttributeNS(attr.namespaceURI, attr.name, attr.value);
+        }
+      }
+      while (imported.firstChild) endnoteEl.appendChild(imported.firstChild);
+      endnotesRoot.appendChild(endnoteEl);
+    } else {
+      imported.setAttribute('w:id', String(newId));
+      endnotesRoot.appendChild(imported);
+    }
+  }
+
+  // Clean footnotes.xml: remove user-authored entries, keep separator entries.
+  const footnotesRoot = footnotesDom.documentElement;
+  for (const fn of Array.from(footnotesRoot.getElementsByTagName('w:footnote'))) {
+    const type = fn.getAttribute('w:type');
+    if (type === 'separator' || type === 'continuationSeparator' || type === 'continuationNotice') continue;
+    fn.parentNode?.removeChild(fn);
+  }
+
+  zip.file('word/document.xml', serializeXml(docDom));
+  zip.file('word/endnotes.xml', serializeXml(targetDom));
+  zip.file('word/footnotes.xml', serializeXml(footnotesDom));
 }
 
 // ─── CLEAN-010: Add trailing periods to list items for consistency ─────────────

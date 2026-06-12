@@ -4,6 +4,20 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
+## 2026-06-12 — NOTE-001 upgraded from warning to silent footnote-to-endnote auto-fix
+
+**Decision:** NOTE-001 no longer emits a warning issue card. It now silently converts all Word footnotes to endnotes on download and renumbers all notes (footnotes and endnotes combined) sequentially based on their order of appearance in the document body. The summary entry reads: "N footnote(s) converted to endnote(s) and renumbered sequentially."
+
+**Reason:** NOFO Builder only interprets citations that live in word/endnotes.xml as proper endnotes. Footnotes — which Word stores in word/footnotes.xml and renders at the bottom of each page — are either dropped or rendered as disconnected body text when the document is imported into NOFO Builder. The conversion is unambiguous and mechanical: footnote content moves to the endnotes XML, body reference elements are swapped from w:footnoteReference to w:endnoteReference, and all notes are renumbered in reading order. No user judgment is required, making this a safe silent fix.
+
+**Separator/continuation preservation:** Word reserves IDs 0 and -1 in both word/footnotes.xml and word/endnotes.xml for separator and continuation notice entries (w:type="separator" and w:type="continuationSeparator"). These are structural entries Word requires for correct rendering — they must be preserved at the top of each file and must never be renumbered or overwritten during the conversion.
+
+**Alternative considered:** Keeping NOTE-001 as a warning and asking the user to convert footnotes manually in Word before uploading. Rejected because the conversion is fully automatable and the manual steps in Word are non-obvious to non-technical users. A silent fix delivers the correct output without requiring the user to know about the footnote/endnote distinction at all.
+
+**Outcome:** Documents with footnotes produce a correctly structured endnotes-only download compatible with NOFO Builder. Documents with both footnotes and endnotes have all notes merged and renumbered in document reading order.
+
+---
+
 ## 2026-05-29 — Bookmark renames must update w:anchor, w:bookmarkStart, and _rels Target in lock-step
 
 **Decision:** Added `updateRelsInternalAnchorTargets(zip, anchorRemap)` helper in `buildDocx.ts` and called it from every site that renames bookmarks: CLEAN-008 (`applyHeadingLeadingSpaceFix`), HEAD-001 (`applyH2TitleCaseFix`), HEAD-004 (`applyHeadingTextCorrections`), and the LINK-006 bookmark-retarget path (`applyDocumentBodyFixes`).
