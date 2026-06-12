@@ -2555,10 +2555,10 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
   // Build maps: old ID → element for user-authored footnotes and endnotes.
   // A user-authored entry has no w:type attribute (or w:type="normal") and ID >= 1.
   const footnoteByOldId = new Map<number, Element>();
-  for (const fn of Array.from(footnotesDom.getElementsByTagName('w:footnote'))) {
-    const type = fn.getAttribute('w:type');
+  for (const fn of Array.from(footnotesDom.getElementsByTagNameNS(W, 'footnote'))) {
+    const type = fn.getAttribute('w:type') ?? fn.getAttributeNS(W, 'type');
     if (type === 'separator' || type === 'continuationSeparator' || type === 'continuationNotice') continue;
-    const id = parseInt(fn.getAttribute('w:id') ?? '', 10);
+    const id = parseInt((fn.getAttribute('w:id') ?? fn.getAttributeNS(W, 'id') ?? ''), 10);
     if (!isNaN(id) && id >= 1) footnoteByOldId.set(id, fn);
   }
   if (footnoteByOldId.size === 0) return;
