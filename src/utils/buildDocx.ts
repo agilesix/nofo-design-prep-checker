@@ -2635,6 +2635,7 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
   // so those references remain valid after conversion.
   type HFEntry = { path: string; dom: Document; refs: NoteRef[] };
   const hfPaths = getStoryPartPaths(zip).filter(name => /^word\/(header|footer)\d*\.xml$/.test(name));
+  const hfEntries: HFEntry[] = [];
   for (const path of hfPaths) {
     const hfFile = zip.file(path);
     if (!hfFile) continue;
