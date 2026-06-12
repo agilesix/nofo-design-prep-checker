@@ -2573,25 +2573,52 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
     }
   }
 
-  // Walk the document body in reading order, collecting all footnote/endnote refs.
+  // Walk story parts for footnote/endnote references. Body reading order
+  // determines the sequential renumbering; header/footer refs that reference
+  // IDs not found in the body are appended to the sequence so no reference is
+  // left dangling after the conversion.
   type NoteRef = { kind: 'footnote' | 'endnote'; oldId: number; element: Element };
-  const bodyRefs: NoteRef[] = [];
 
-  function collectRefs(node: Node): void {
-    if (node.nodeType !== Node.ELEMENT_NODE) return;
-    const el = node as Element;
-    const tag = el.tagName;
-    if (tag === 'w:footnoteReference' || tag === 'w:endnoteReference') {
-      const id = parseInt(el.getAttribute('w:id') ?? '', 10);
-      if (!isNaN(id) && id >= 1) {
-        bodyRefs.push({ kind: tag === 'w:footnoteReference' ? 'footnote' : 'endnote', oldId: id, element: el });
+  function gatherRefs(root: Element): NoteRef[] {
+    const refs: NoteRef[] = [];
+    function walk(node: Node): void {
+      if (node.nodeType !== Node.ELEMENT_NODE) return;
+      const el = node as Element;
+      const tag = el.tagName;
+      if (tag === 'w:footnoteReference' || tag === 'w:endnoteReference') {
+        const id = parseInt(el.getAttribute('w:id') ?? '', 10);
+        if (!isNaN(id) && id >= 1) {
+          refs.push({ kind: tag === 'w:footnoteReference' ? 'footnote' : 'endnote', oldId: id, element: el });
+        }
+      }
+      for (const child of Array.from(el.childNodes)) walk(child);
+    }
+    walk(root);
+    return refs;
+  }
+
+  function applyRefRewrites(refs: NoteRef[], dom: Document, idMap: Map<string, number>): void {
+    for (const ref of refs) {
+      const newId = idMap.get(`${ref.kind}:${ref.oldId}`);
+      if (newId === undefined) continue;
+      if (ref.kind === 'footnote') {
+        const enRef = dom.createElementNS(W, 'w:endnoteReference');
+        for (const attr of Array.from(ref.element.attributes)) {
+          if (attr.name === 'w:id') {
+            enRef.setAttribute('w:id', String(newId));
+          } else {
+            enRef.setAttributeNS(attr.namespaceURI, attr.name, attr.value);
+          }
+        }
+        ref.element.parentNode!.replaceChild(enRef, ref.element);
+      } else {
+        ref.element.setAttribute('w:id', String(newId));
       }
     }
-    for (const child of Array.from(el.childNodes)) collectRefs(child);
   }
 
   const body = docDom.getElementsByTagName('w:body')[0];
-  if (body) collectRefs(body);
+  const bodyRefs = body ? gatherRefs(body) : [];
 
   // Assign new sequential IDs in reading order (each unique (kind, oldId) pair
   // gets exactly one new ID; duplicates reuse the same new ID).
@@ -2602,23 +2629,34 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
     if (!keyToNewId.has(key)) keyToNewId.set(key, nextId++);
   }
 
-  // Update body references in-place.
-  for (const ref of bodyRefs) {
-    const newId = keyToNewId.get(`${ref.kind}:${ref.oldId}`)!;
-    if (ref.kind === 'footnote') {
-      // Replace w:footnoteReference with w:endnoteReference, copy all attributes.
-      const enRef = docDom.createElementNS(W, 'w:endnoteReference');
-      for (const attr of Array.from(ref.element.attributes)) {
-        if (attr.name === 'w:id') {
-          enRef.setAttribute('w:id', String(newId));
-        } else {
-          enRef.setAttributeNS(attr.namespaceURI, attr.name, attr.value);
-        }
-      }
-      ref.element.parentNode!.replaceChild(enRef, ref.element);
-    } else {
-      ref.element.setAttribute('w:id', String(newId));
+  // Load header/footer parts. Any reference ID not already in keyToNewId
+  // (i.e. only present in headers/footers) gets the next sequential ID,
+  // so those references remain valid after conversion.
+  type HFEntry = { path: string; dom: Document; refs: NoteRef[] };
+  const hfPaths = Object.keys(zip.files).filter(name =>
+    /^word\/(header|footer)\d*\.xml$/.test(name)
+  );
+  const hfEntries: HFEntry[] = [];
+  for (const path of hfPaths) {
+    const hfFile = zip.file(path);
+    if (!hfFile) continue;
+    const dom = parser.parseFromString(await hfFile.async('string'), 'application/xml');
+    const refs = gatherRefs(dom.documentElement);
+    for (const ref of refs) {
+      const key = `${ref.kind}:${ref.oldId}`;
+      if (!keyToNewId.has(key)) keyToNewId.set(key, nextId++);
     }
+    hfEntries.push({ path, dom, refs });
+  }
+
+  // Rewrite document.xml body references.
+  applyRefRewrites(bodyRefs, docDom, keyToNewId);
+
+  // Rewrite header/footer references.
+  for (const { path, dom, refs } of hfEntries) {
+    if (refs.length === 0) continue;
+    applyRefRewrites(refs, dom, keyToNewId);
+    zip.file(path, serializeXml(dom));
   }
 
   // Rebuild endnotes.xml.

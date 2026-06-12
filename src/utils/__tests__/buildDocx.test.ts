@@ -1512,6 +1512,37 @@ describe('buildDocx — NOTE-001: footnote-to-endnote conversion', () => {
     const endnotesRelCount = (relsXml.match(new RegExp(ENDNOTES_REL_TYPE, 'g')) ?? []).length;
     expect(endnotesRelCount).toBe(1);
   });
+
+  it('rewrites w:footnoteReference elements in header/footer parts', async () => {
+    // Header contains a footnote reference to id=1; body also references id=1.
+    // After conversion both should be w:endnoteReference with id=1.
+    const headerXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:hdr xmlns:w="${W_NS_NOTE}">` +
+      `<w:p><w:r><w:footnoteReference w:id="1"/></w:r></w:p>` +
+      `</w:hdr>`;
+
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeNoteDocXml([{ kind: 'footnote', id: 1 }]));
+    zip.file('word/footnotes.xml', makeFootnotesXml([{ id: 1, text: 'Note.' }]));
+    zip.file('word/endnotes.xml', makeEndnotesXml());
+    zip.file('word/header1.xml', headerXml);
+    zip.file('word/_rels/document.xml.rels', makeDocRels());
+    zip.file('[Content_Types].xml', makeContentTypes());
+
+    const outZip = await getOutputZip(zip, [], [NOTE_001_CHANGE]);
+
+    // Body: no footnoteReference remaining
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+    expect(docXml).not.toContain('w:footnoteReference');
+    expect(docXml).toContain('w:endnoteReference');
+
+    // Header: footnoteReference replaced with endnoteReference
+    const hdrXml = await outZip.file('word/header1.xml')!.async('string');
+    expect(hdrXml).not.toContain('w:footnoteReference');
+    expect(hdrXml).toContain('w:endnoteReference');
+    expect(hdrXml).toContain('w:id="1"');
+  });
 });
 
 // ─── applyListPeriodFix (CLEAN-010) ──────────────────────────────────────────
