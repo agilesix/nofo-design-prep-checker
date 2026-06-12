@@ -9,12 +9,12 @@ import { groupListParagraphs } from '../../utils/listHelpers';
  * period, silently add a period to every item that does not.
  *
  * "Ends with a period" means the last non-whitespace character of the item's
- * text is '.'. No other punctuation (?, !, :, ;) is treated as equivalent.
+ * text is '.'. Only a period triggers the rule — other terminal punctuation
+ * does not count as a trigger, but does satisfy the "already punctuated" check.
  *
  * Empty list items (no text content) are skipped. Items that already end with
- * a period are left unchanged. Items ending with a colon (:) or semicolon (;)
- * are also left unchanged — they introduce sub-lists or clauses and a trailing
- * period would be grammatically incorrect. All other items receive a period.
+ * any terminal punctuation (. ? ! : ; ,) are left unchanged. All other items
+ * receive a trailing period.
  *
  * Detection uses doc.documentXml (raw OOXML) because list structure is not
  * preserved in the mammoth-generated HTML.
@@ -44,7 +44,8 @@ const CLEAN_010: Rule = {
       const texts = group.map(p => getItemText(p).trimEnd());
       const withPeriod = texts.filter(t => t.endsWith('.')).length;
       if (withPeriod === 0) continue;
-      totalToFix += texts.filter(t => t.length > 0 && !t.endsWith('.') && !t.endsWith(':') && !t.endsWith(';')).length;
+      const trailingPunctuation = /[.?!:;,]\s*$/;
+      totalToFix += texts.filter(t => t.length > 0 && !trailingPunctuation.test(t)).length;
     }
 
     if (totalToFix === 0) return [];
