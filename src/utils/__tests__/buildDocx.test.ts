@@ -1513,6 +1513,25 @@ describe('buildDocx — NOTE-001: footnote-to-endnote conversion', () => {
     expect(endnotesRelCount).toBe(1);
   });
 
+  it('does not inject spurious xmlns:w declarations on converted elements', async () => {
+    // setAttributeNS(null, 'w:prefixedAttr', ...) causes XMLSerializer to emit
+    // xmlns:w="" on the element, overriding the root-level namespace declaration
+    // and corrupting the DOCX. Verify that xmlns:w appears exactly once in the
+    // serialized document.xml (on the root element only).
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeNoteDocXml([{ kind: 'footnote', id: 1 }]));
+    zip.file('word/footnotes.xml', makeFootnotesXml([{ id: 1, text: 'Note.' }]));
+    zip.file('word/endnotes.xml', makeEndnotesXml());
+    zip.file('word/_rels/document.xml.rels', makeDocRels());
+    zip.file('[Content_Types].xml', makeContentTypes());
+
+    const outZip = await getOutputZip(zip, [], [NOTE_001_CHANGE]);
+    const docXml = await outZip.file('word/document.xml')!.async('string');
+
+    const xmlnsCount = (docXml.match(/xmlns:w=/g) ?? []).length;
+    expect(xmlnsCount).toBe(1);
+  });
+
   it('rewrites w:footnoteReference elements in header/footer parts', async () => {
     // Header contains a footnote reference to id=1; body also references id=1.
     // After conversion both should be w:endnoteReference with id=1.

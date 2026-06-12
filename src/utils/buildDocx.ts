@@ -2607,8 +2607,10 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
         for (const attr of Array.from(ref.element.attributes)) {
           if (attr.localName === 'id' && (attr.namespaceURI === W || attr.name === 'w:id')) {
             enRef.setAttributeNS(W, 'w:id', String(newId));
-          } else {
+          } else if (attr.namespaceURI) {
             enRef.setAttributeNS(attr.namespaceURI, attr.name, attr.value);
+          } else {
+            enRef.setAttribute(attr.localName, attr.value);
           }
         }
         ref.element.parentNode!.replaceChild(enRef, ref.element);
@@ -2706,8 +2708,10 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
       for (const attr of Array.from(imported.attributes)) {
         if (attr.localName === 'id' && (attr.namespaceURI === W || attr.name === 'w:id')) {
           endnoteEl.setAttributeNS(W, 'w:id', String(newId));
-        } else {
+        } else if (attr.namespaceURI) {
           endnoteEl.setAttributeNS(attr.namespaceURI, attr.name, attr.value);
+        } else {
+          endnoteEl.setAttribute(attr.localName, attr.value);
         }
       }
       while (imported.firstChild) endnoteEl.appendChild(imported.firstChild);
