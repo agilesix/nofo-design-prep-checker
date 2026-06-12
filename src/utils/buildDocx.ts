@@ -2676,8 +2676,8 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
 
   const endnotesRoot = targetDom.documentElement;
 
-  const separatorEntries = Array.from(endnotesRoot.getElementsByTagName('w:endnote')).filter(en => {
-    const type = en.getAttribute('w:type');
+  const separatorEntries = Array.from(endnotesRoot.getElementsByTagNameNS(W, 'endnote')).filter(en => {
+    const type = en.getAttribute('w:type') ?? en.getAttributeNS(W, 'type');
     return type === 'separator' || type === 'continuationSeparator' || type === 'continuationNotice';
   });
 
