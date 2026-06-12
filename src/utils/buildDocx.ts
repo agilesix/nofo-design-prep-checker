@@ -2587,6 +2587,9 @@ async function applyFootnoteToEndnoteFix(zip: JSZip): Promise<void> {
       const ns = el.namespaceURI;
       const ln = el.localName;
       if (ns === W && (ln === 'footnoteReference' || ln === 'endnoteReference')) {
+        // Skip references that are part of tracked deletions; CLEAN-009 may not
+        // have run for header/footer-only tracked changes.
+        if (findAncestorByLocalName(el, 'del') || findAncestorByLocalName(el, 'moveFrom')) return;
         const id = parseInt((el.getAttribute('w:id') ?? el.getAttributeNS(W, 'id') ?? ''), 10);
         if (!isNaN(id) && id >= 1) {
           refs.push({ kind: ln === 'footnoteReference' ? 'footnote' : 'endnote', oldId: id, element: el });
