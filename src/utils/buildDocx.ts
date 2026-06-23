@@ -1329,12 +1329,19 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
         ? paraBookmarkNames
         : [paraText.replace(/ /g, '_')];
     for (const oldName of oldNames) {
-      if (oldName !== newAnchor) {
-        anchorRemap.set(oldName, newAnchor);
-        dbg(`[CLEAN-008]   Remap added: "${oldName}" → "${newAnchor}"`);
-      } else {
+      if (oldName === newAnchor) {
         dbg(`[CLEAN-008]   WARNING: name already equals newAnchor ("${oldName}"), no remap added`);
+        continue;
       }
+      // Skip the remap when newAnchor already exists on this paragraph.  The
+      // bookmark rename will be skipped for the same reason (duplicate prevention),
+      // and hyperlinks to oldName already resolve correctly to the existing bookmark.
+      if (paraBookmarkNames.includes(newAnchor)) {
+        dbg(`[CLEAN-008]   Skipping remap "${oldName}" → "${newAnchor}": target already exists on paragraph`);
+        continue;
+      }
+      anchorRemap.set(oldName, newAnchor);
+      dbg(`[CLEAN-008]   Remap added: "${oldName}" → "${newAnchor}"`);
     }
   }
 
@@ -1366,26 +1373,23 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
   // because jsdom's XMLSerializer does not remap the 'w:' prefix, so the qualified
   // tag name lookup is reliable and avoids the complexity of the NS variant.
   if (anchorRemap.size > 0) {
-    const allHyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
-    dbg(`[CLEAN-008] Scanning ${allHyperlinks.length} w:hyperlink elements for anchor update`);
-    for (const link of allHyperlinks) {
-      const anchorQual = link.getAttribute('w:anchor');
-      const anchorNS = link.getAttributeNS(W, 'anchor');
-      const anchorPlain = link.getAttribute('anchor');
-      const anchor = anchorQual ?? anchorNS ?? anchorPlain;
-      const matched = anchor ? anchorRemap.has(anchor) : false;
-      dbg(
-        `[CLEAN-008]   hyperlink: qualified="${anchorQual}", getAttributeNS="${anchorNS}", plain="${anchorPlain}"` +
-        `, combined="${anchor}", inRemap=${matched}`
-      );
-      if (anchor && matched) {
-        const newVal = anchorRemap.get(anchor)!;
-        dbg(`[CLEAN-008]     → Updating anchor "${anchor}" to "${newVal}"`);
-        link.removeAttribute('anchor');
-        link.setAttributeNS(W, 'w:anchor', newVal);
-      }
-    }
-
+    // Rename bookmarks first.  existingBmNames008 is updated as renames happen:
+    // on success the old name is removed; on skip (duplicate target) it stays.
+    // This state is used below to guard hyperlink + .rels rewrites: if the old
+    // name is still in the set after the loop the rename was skipped and the link
+    // already resolves correctly, so it must not be redirected.  If the old name
+    // is absent the bookmark was renamed (or never existed — the no-bookmark
+    // fallback path), and the link should be updated.
+    const existingBmNames008 = new Set(
+      Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))
+        .map(
+          bm =>
+            bm.getAttribute('w:name') ??
+            bm.getAttributeNS(W, 'name') ??
+            bm.getAttribute('name'),
+        )
+        .filter((n): n is string => !!n),
+    );
     const allBookmarks = Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'));
     dbg(`[CLEAN-008] Scanning ${allBookmarks.length} w:bookmarkStart elements for name update`);
     for (const bm of allBookmarks) {
@@ -1400,9 +1404,45 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
       );
       if (name && matched) {
         const newVal = anchorRemap.get(name)!;
+        if (newVal !== name && existingBmNames008.has(newVal)) {
+          dbg(`[CLEAN-008]     → Skipping rename "${name}" to "${newVal}": target already exists`);
+          continue;
+        }
         dbg(`[CLEAN-008]     → Updating bookmark name "${name}" to "${newVal}"`);
+        bm.removeAttribute('w:name');
+        bm.removeAttributeNS(W, 'name');
         bm.removeAttribute('name');
         bm.setAttributeNS(W, 'w:name', newVal);
+        existingBmNames008.delete(name);
+        existingBmNames008.add(newVal);
+      }
+    }
+
+    const allHyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    dbg(`[CLEAN-008] Scanning ${allHyperlinks.length} w:hyperlink elements for anchor update`);
+    for (const link of allHyperlinks) {
+      const anchorQual = link.getAttribute('w:anchor');
+      const anchorNS = link.getAttributeNS(W, 'anchor');
+      const anchorPlain = link.getAttribute('anchor');
+      const anchor = anchorQual ?? anchorNS ?? anchorPlain;
+      const matched = anchor ? anchorRemap.has(anchor) : false;
+      dbg(
+        `[CLEAN-008]   hyperlink: qualified="${anchorQual}", getAttributeNS="${anchorNS}", plain="${anchorPlain}"` +
+        `, combined="${anchor}", inRemap=${matched}`
+      );
+      if (anchor && matched) {
+        // Skip if the old bookmark name is still present: the rename was skipped
+        // (duplicate prevention) and this hyperlink already resolves correctly.
+        if (existingBmNames008.has(anchor)) {
+          dbg(`[CLEAN-008]     → Skipping anchor rewrite "${anchor}": bookmark rename was skipped`);
+          continue;
+        }
+        const newVal = anchorRemap.get(anchor)!;
+        dbg(`[CLEAN-008]     → Updating anchor "${anchor}" to "${newVal}"`);
+        link.removeAttribute('w:anchor');
+        link.removeAttributeNS(W, 'anchor');
+        link.removeAttribute('anchor');
+        link.setAttributeNS(W, 'w:anchor', newVal);
       }
     }
 
@@ -1411,7 +1451,12 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
     // r:id-based links (Word's "Insert → Link → This Document" form) store
     // the anchor in the relationship Target ("#old_name") and must be updated
     // here or they will point to a non-existent bookmark after the rename.
-    await updateRelsInternalAnchorTargets(zip, anchorRemap);
+    // Filter to entries whose old name is no longer in existingBmNames008 for
+    // the same reason as the hyperlink guard above.
+    const relsRemap008 = new Map(
+      [...anchorRemap].filter(([k]) => !existingBmNames008.has(k)),
+    );
+    await updateRelsInternalAnchorTargets(zip, relsRemap008);
   }
 
   if (changed) {
@@ -1500,6 +1545,20 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
   let changed = false;
   const anchorRemap = new Map<string, string>();
 
+  // Snapshot of all bookmark names before any renames.  Used in both the
+  // per-paragraph anchorRemap-skip check and the document-wide rename loop so
+  // that cross-paragraph duplicates are caught without per-paragraph mutation.
+  const docBmNames = new Set(
+    Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))
+      .map(
+        bm =>
+          bm.getAttribute('w:name') ??
+          bm.getAttributeNS(W, 'name') ??
+          bm.getAttribute('name'),
+      )
+      .filter((n): n is string => !!n),
+  );
+
   for (const wP of paragraphs) {
     if (getHeadingLevel(wP) !== 2) continue;
 
@@ -1512,28 +1571,17 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
 
     const newSlug = slugifyHeading(corrected);
     for (const bm of Array.from(wP.getElementsByTagName('w:bookmarkStart'))) {
-      const nameAttr =
-        bm.hasAttribute('w:name')
-          ? 'w:name'
-          : bm.hasAttributeNS(W, 'name')
-            ? 'ns:name'
-            : bm.hasAttribute('name')
-              ? 'name'
-              : null;
       const oldName =
         bm.getAttribute('w:name') ??
         bm.getAttributeNS(W, 'name') ??
         bm.getAttribute('name');
       if (!oldName || oldName === newSlug) continue;
 
+      // Skip both the rename and the anchorRemap entry when newSlug already
+      // exists anywhere in the document: renaming would create a duplicate,
+      // and hyperlinks to oldName already resolve correctly.
+      if (docBmNames.has(newSlug)) continue;
       anchorRemap.set(oldName, newSlug);
-      if (nameAttr === 'w:name') {
-        bm.setAttribute('w:name', newSlug);
-      } else if (nameAttr === 'ns:name') {
-        bm.setAttributeNS(W, 'w:name', newSlug);
-      } else if (nameAttr === 'name') {
-        bm.setAttribute('name', newSlug);
-      }
     }
 
     if (corrected.length !== paraText.length) {
@@ -1583,18 +1631,9 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
   }
 
   if (anchorRemap.size > 0) {
-    const allHyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
-    for (const link of allHyperlinks) {
-      const anchor =
-        link.getAttribute('w:anchor') ??
-        link.getAttributeNS(W, 'anchor') ??
-        link.getAttribute('anchor');
-      if (anchor && anchorRemap.has(anchor)) {
-        link.removeAttribute('anchor');
-        link.setAttributeNS(W, 'w:anchor', anchorRemap.get(anchor)!);
-      }
-    }
-
+    // Rename bookmarks first.  docBmNames is kept in sync (old name deleted on
+    // success, left in place on skip).  After the loop, docBmNames.has(anchor)
+    // tells us whether a rename was skipped, guarding hyperlink + .rels rewrites.
     const allBookmarks = Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'));
     for (const bm of allBookmarks) {
       const name =
@@ -1602,13 +1641,37 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
         bm.getAttributeNS(W, 'name') ??
         bm.getAttribute('name');
       if (name && anchorRemap.has(name)) {
+        const newVal = anchorRemap.get(name)!;
+        if (newVal !== name && docBmNames.has(newVal)) continue;
+        bm.removeAttribute('w:name');
+        bm.removeAttributeNS(W, 'name');
         bm.removeAttribute('name');
-        bm.setAttributeNS(W, 'w:name', anchorRemap.get(name)!);
+        bm.setAttributeNS(W, 'w:name', newVal);
+        docBmNames.delete(name);
+        docBmNames.add(newVal);
+      }
+    }
+
+    const allHyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    for (const link of allHyperlinks) {
+      const anchor =
+        link.getAttribute('w:anchor') ??
+        link.getAttributeNS(W, 'anchor') ??
+        link.getAttribute('anchor');
+      if (anchor && anchorRemap.has(anchor)) {
+        // Skip if the old bookmark name is still present: rename was skipped and
+        // the link already resolves correctly.
+        if (docBmNames.has(anchor)) continue;
+        link.removeAttribute('w:anchor');
+        link.removeAttributeNS(W, 'anchor');
+        link.removeAttribute('anchor');
+        link.setAttributeNS(W, 'w:anchor', anchorRemap.get(anchor)!);
       }
     }
 
     // Keep r:id-based internal hyperlinks aligned with the renamed bookmarks.
-    await updateRelsInternalAnchorTargets(zip, anchorRemap);
+    const relsRemapH001 = new Map([...anchorRemap].filter(([k]) => !docBmNames.has(k)));
+    await updateRelsInternalAnchorTargets(zip, relsRemapH001);
   }
 
   if (changed) {
@@ -1933,8 +1996,12 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
       if (name) paraBookmarkNames.push(name);
     }
     const newSlug = slugifyHeading(fix.newText);
+    // Only remap when newSlug is not already on this paragraph.  If it is,
+    // the rename will be skipped (duplicate prevention) and hyperlinks to
+    // oldName already resolve correctly — redirecting them would be wrong.
+    const newSlugAlreadyPresent = paraBookmarkNames.includes(newSlug);
     for (const oldName of paraBookmarkNames) {
-      if (oldName !== newSlug) {
+      if (oldName !== newSlug && !newSlugAlreadyPresent) {
         anchorRemap.set(oldName, newSlug);
       }
     }
@@ -1948,20 +2015,21 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
   }
 
   if (anchorRemap.size > 0) {
-    const allHyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
-    for (const link of allHyperlinks) {
-      const anchor =
-        link.getAttribute('w:anchor') ??
-        link.getAttributeNS(W, 'anchor') ??
-        link.getAttribute('anchor');
-      if (anchor && anchorRemap.has(anchor)) {
-        link.removeAttributeNS(W, 'anchor');
-        link.removeAttributeNS(null, 'anchor');
-        link.removeAttribute('w:anchor');
-        link.setAttributeNS(W, 'w:anchor', anchorRemap.get(anchor)!);
-      }
-    }
-
+    // Rename bookmarks first.  existingBmNamesH004 is updated as renames happen:
+    // on success the old name is removed; on skip (duplicate target) it stays.
+    // After the loop, existingBmNamesH004.has(anchor) guards hyperlink + .rels
+    // rewrites — if the old name is still there the rename was skipped and the
+    // link already resolves correctly, so it must not be redirected.
+    const existingBmNamesH004 = new Set(
+      Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))
+        .map(
+          bm =>
+            bm.getAttribute('w:name') ??
+            bm.getAttributeNS(W, 'name') ??
+            bm.getAttribute('name'),
+        )
+        .filter((n): n is string => !!n),
+    );
     const allBookmarks = Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'));
     for (const bm of allBookmarks) {
       const name =
@@ -1969,13 +2037,37 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
         bm.getAttributeNS(W, 'name') ??
         bm.getAttribute('name');
       if (name && anchorRemap.has(name)) {
+        const newVal = anchorRemap.get(name)!;
+        if (newVal !== name && existingBmNamesH004.has(newVal)) continue;
+        bm.removeAttribute('w:name');
+        bm.removeAttributeNS(W, 'name');
         bm.removeAttribute('name');
-        bm.setAttributeNS(W, 'w:name', anchorRemap.get(name)!);
+        bm.setAttributeNS(W, 'w:name', newVal);
+        existingBmNamesH004.delete(name);
+        existingBmNamesH004.add(newVal);
+      }
+    }
+
+    const allHyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    for (const link of allHyperlinks) {
+      const anchor =
+        link.getAttribute('w:anchor') ??
+        link.getAttributeNS(W, 'anchor') ??
+        link.getAttribute('anchor');
+      if (anchor && anchorRemap.has(anchor)) {
+        // Skip if the old bookmark name is still present: rename was skipped and
+        // the link already resolves correctly.
+        if (existingBmNamesH004.has(anchor)) continue;
+        link.removeAttributeNS(W, 'anchor');
+        link.removeAttributeNS(null, 'anchor');
+        link.removeAttribute('w:anchor');
+        link.setAttributeNS(W, 'w:anchor', anchorRemap.get(anchor)!);
       }
     }
 
     // Keep r:id-based internal hyperlinks aligned with the renamed bookmarks.
-    await updateRelsInternalAnchorTargets(zip, anchorRemap);
+    const relsRemapH004 = new Map([...anchorRemap].filter(([k]) => !existingBmNamesH004.has(k)));
+    await updateRelsInternalAnchorTargets(zip, relsRemapH004);
   }
 
   if (changed) {
@@ -4225,11 +4317,23 @@ function stripContentControlsFromXmlDoc(xmlDoc: Document): boolean {
   for (const sdt of sdts) {
     const parent = sdt.parentNode;
     if (!parent) continue;
-    const sdtContent = Array.from(sdt.children).find(c => c.localName === 'sdtContent');
-    if (sdtContent) {
-      // Splice visible content in place of the <w:sdt> wrapper.
-      while (sdtContent.firstChild) {
-        parent.insertBefore(sdtContent.firstChild, sdt);
+    // Walk sdt children in document order so the relative positions of
+    // bookmarkStart, sdtContent body, and bookmarkEnd are preserved after
+    // unwrapping — hoisting sdtContent first (previous approach) placed
+    // bookmarks after the content they wrapped, breaking the bookmark span.
+    // sdtPr / sdtEndPr are style metadata and are dropped.
+    for (const child of Array.from(sdt.childNodes)) {
+      if (child.nodeType !== 1 /* ELEMENT_NODE */) continue;
+      const el = child as Element;
+      if (el.localName === 'sdtContent') {
+        while (el.firstChild) {
+          parent.insertBefore(el.firstChild, sdt);
+        }
+      } else if (el.localName === 'sdtPr' || el.localName === 'sdtEndPr') {
+        // Drop: style metadata, not document content
+      } else {
+        // bookmarkStart, bookmarkEnd, etc. — hoist in place
+        parent.insertBefore(child, sdt);
       }
     }
     parent.removeChild(sdt);

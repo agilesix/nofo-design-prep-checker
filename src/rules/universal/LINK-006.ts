@@ -453,7 +453,13 @@ function matchByNormalizedValue(
     // carries the derived anchor name (possibly with different case — Word and
     // NOFO Builder may produce different casing), use it verbatim so the
     // written anchor value wires up to the existing w:bookmarkStart element.
-    const exactBookmarkName = ooxmlNamesLower.get(suggestion.toLowerCase());
+    // Also try a leading-underscore variant: NOFO Builder creates bookmarks as
+    // "_HeadingText" (underscore + spaces→underscores), but slugifyHeading
+    // strips leading underscores, so "grants_management" must also match
+    // "_Grants_management" to avoid spurious needsBookmarkCreation.
+    const exactBookmarkName =
+      ooxmlNamesLower.get(suggestion.toLowerCase()) ??
+      ooxmlNamesLower.get('_' + suggestion.toLowerCase());
 
     const resolvedAnchor = exactBookmarkName ?? suggestion;
     if (headingMatches.some(m => m.anchor === resolvedAnchor)) return { kind: 'ambiguous' };
