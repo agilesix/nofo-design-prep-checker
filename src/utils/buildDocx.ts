@@ -1381,11 +1381,26 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
       if (anchor && matched) {
         const newVal = anchorRemap.get(anchor)!;
         dbg(`[CLEAN-008]     → Updating anchor "${anchor}" to "${newVal}"`);
+        link.removeAttribute('w:anchor');
+        link.removeAttributeNS(W, 'anchor');
         link.removeAttribute('anchor');
         link.setAttributeNS(W, 'w:anchor', newVal);
       }
     }
 
+    // Build a running set of existing bookmark names so we can skip a rename
+    // that would produce a duplicate (e.g. LINK-006 already created the target
+    // name on the same heading before CLEAN-008 runs).
+    const existingBmNames008 = new Set(
+      Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))
+        .map(
+          bm =>
+            bm.getAttribute('w:name') ??
+            bm.getAttributeNS(W, 'name') ??
+            bm.getAttribute('name'),
+        )
+        .filter((n): n is string => !!n),
+    );
     const allBookmarks = Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'));
     dbg(`[CLEAN-008] Scanning ${allBookmarks.length} w:bookmarkStart elements for name update`);
     for (const bm of allBookmarks) {
@@ -1400,9 +1415,17 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
       );
       if (name && matched) {
         const newVal = anchorRemap.get(name)!;
+        if (newVal !== name && existingBmNames008.has(newVal)) {
+          dbg(`[CLEAN-008]     → Skipping rename "${name}" to "${newVal}": target already exists`);
+          continue;
+        }
         dbg(`[CLEAN-008]     → Updating bookmark name "${name}" to "${newVal}"`);
+        bm.removeAttribute('w:name');
+        bm.removeAttributeNS(W, 'name');
         bm.removeAttribute('name');
         bm.setAttributeNS(W, 'w:name', newVal);
+        existingBmNames008.delete(name);
+        existingBmNames008.add(newVal);
       }
     }
 
@@ -1511,15 +1534,19 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
     if (wTElements.length === 0) continue;
 
     const newSlug = slugifyHeading(corrected);
+    // Track names already present on this paragraph to prevent renaming two
+    // different bookmarks to the same slug (creating a duplicate).
+    const paraBmNames = new Set(
+      Array.from(wP.getElementsByTagName('w:bookmarkStart'))
+        .map(
+          bm =>
+            bm.getAttribute('w:name') ??
+            bm.getAttributeNS(W, 'name') ??
+            bm.getAttribute('name'),
+        )
+        .filter((n): n is string => !!n),
+    );
     for (const bm of Array.from(wP.getElementsByTagName('w:bookmarkStart'))) {
-      const nameAttr =
-        bm.hasAttribute('w:name')
-          ? 'w:name'
-          : bm.hasAttributeNS(W, 'name')
-            ? 'ns:name'
-            : bm.hasAttribute('name')
-              ? 'name'
-              : null;
       const oldName =
         bm.getAttribute('w:name') ??
         bm.getAttributeNS(W, 'name') ??
@@ -1527,13 +1554,16 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
       if (!oldName || oldName === newSlug) continue;
 
       anchorRemap.set(oldName, newSlug);
-      if (nameAttr === 'w:name') {
-        bm.setAttribute('w:name', newSlug);
-      } else if (nameAttr === 'ns:name') {
-        bm.setAttributeNS(W, 'w:name', newSlug);
-      } else if (nameAttr === 'name') {
-        bm.setAttribute('name', newSlug);
-      }
+      // Skip the in-place rename when newSlug is already on this paragraph —
+      // renaming would create a duplicate bookmark name (e.g. LINK-006 already
+      // inserted newSlug before HEAD-001 ran).
+      if (paraBmNames.has(newSlug)) continue;
+      bm.removeAttribute('w:name');
+      bm.removeAttributeNS(W, 'name');
+      bm.removeAttribute('name');
+      bm.setAttributeNS(W, 'w:name', newSlug);
+      paraBmNames.delete(oldName);
+      paraBmNames.add(newSlug);
     }
 
     if (corrected.length !== paraText.length) {
@@ -1590,11 +1620,23 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
         link.getAttributeNS(W, 'anchor') ??
         link.getAttribute('anchor');
       if (anchor && anchorRemap.has(anchor)) {
+        link.removeAttribute('w:anchor');
+        link.removeAttributeNS(W, 'anchor');
         link.removeAttribute('anchor');
         link.setAttributeNS(W, 'w:anchor', anchorRemap.get(anchor)!);
       }
     }
 
+    const existingBmNamesH001 = new Set(
+      Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))
+        .map(
+          bm =>
+            bm.getAttribute('w:name') ??
+            bm.getAttributeNS(W, 'name') ??
+            bm.getAttribute('name'),
+        )
+        .filter((n): n is string => !!n),
+    );
     const allBookmarks = Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'));
     for (const bm of allBookmarks) {
       const name =
@@ -1602,8 +1644,14 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
         bm.getAttributeNS(W, 'name') ??
         bm.getAttribute('name');
       if (name && anchorRemap.has(name)) {
+        const newVal = anchorRemap.get(name)!;
+        if (newVal !== name && existingBmNamesH001.has(newVal)) continue;
+        bm.removeAttribute('w:name');
+        bm.removeAttributeNS(W, 'name');
         bm.removeAttribute('name');
-        bm.setAttributeNS(W, 'w:name', anchorRemap.get(name)!);
+        bm.setAttributeNS(W, 'w:name', newVal);
+        existingBmNamesH001.delete(name);
+        existingBmNamesH001.add(newVal);
       }
     }
 
@@ -1962,6 +2010,16 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
       }
     }
 
+    const existingBmNamesH004 = new Set(
+      Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))
+        .map(
+          bm =>
+            bm.getAttribute('w:name') ??
+            bm.getAttributeNS(W, 'name') ??
+            bm.getAttribute('name'),
+        )
+        .filter((n): n is string => !!n),
+    );
     const allBookmarks = Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'));
     for (const bm of allBookmarks) {
       const name =
@@ -1969,8 +2027,14 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
         bm.getAttributeNS(W, 'name') ??
         bm.getAttribute('name');
       if (name && anchorRemap.has(name)) {
+        const newVal = anchorRemap.get(name)!;
+        if (newVal !== name && existingBmNamesH004.has(newVal)) continue;
+        bm.removeAttribute('w:name');
+        bm.removeAttributeNS(W, 'name');
         bm.removeAttribute('name');
-        bm.setAttributeNS(W, 'w:name', anchorRemap.get(name)!);
+        bm.setAttributeNS(W, 'w:name', newVal);
+        existingBmNamesH004.delete(name);
+        existingBmNamesH004.add(newVal);
       }
     }
 
@@ -4230,6 +4294,18 @@ function stripContentControlsFromXmlDoc(xmlDoc: Document): boolean {
       // Splice visible content in place of the <w:sdt> wrapper.
       while (sdtContent.firstChild) {
         parent.insertBefore(sdtContent.firstChild, sdt);
+      }
+    }
+    // Preserve w:bookmarkStart/w:bookmarkEnd that are direct children of the
+    // w:sdt but outside w:sdtContent (e.g. bookmarks spanning the SDT boundary).
+    // parent.removeChild(sdt) would silently drop them without this hoist.
+    for (const child of Array.from(sdt.childNodes)) {
+      if (
+        child.nodeType === 1 /* ELEMENT_NODE */ &&
+        ((child as Element).localName === 'bookmarkStart' ||
+          (child as Element).localName === 'bookmarkEnd')
+      ) {
+        parent.insertBefore(child, sdt);
       }
     }
     parent.removeChild(sdt);
