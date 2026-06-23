@@ -1329,12 +1329,19 @@ async function applyHeadingLeadingSpaceFix(zip: JSZip): Promise<void> {
         ? paraBookmarkNames
         : [paraText.replace(/ /g, '_')];
     for (const oldName of oldNames) {
-      if (oldName !== newAnchor) {
-        anchorRemap.set(oldName, newAnchor);
-        dbg(`[CLEAN-008]   Remap added: "${oldName}" → "${newAnchor}"`);
-      } else {
+      if (oldName === newAnchor) {
         dbg(`[CLEAN-008]   WARNING: name already equals newAnchor ("${oldName}"), no remap added`);
+        continue;
       }
+      // Skip the remap when newAnchor already exists on this paragraph.  The
+      // bookmark rename will be skipped for the same reason (duplicate prevention),
+      // and hyperlinks to oldName already resolve correctly to the existing bookmark.
+      if (paraBookmarkNames.includes(newAnchor)) {
+        dbg(`[CLEAN-008]   Skipping remap "${oldName}" → "${newAnchor}": target already exists on paragraph`);
+        continue;
+      }
+      anchorRemap.set(oldName, newAnchor);
+      dbg(`[CLEAN-008]   Remap added: "${oldName}" → "${newAnchor}"`);
     }
   }
 
@@ -1553,11 +1560,11 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
         bm.getAttribute('name');
       if (!oldName || oldName === newSlug) continue;
 
-      anchorRemap.set(oldName, newSlug);
-      // Skip the in-place rename when newSlug is already on this paragraph —
-      // renaming would create a duplicate bookmark name (e.g. LINK-006 already
-      // inserted newSlug before HEAD-001 ran).
+      // Skip both the rename and the anchorRemap entry when newSlug is already
+      // present on this paragraph: the bookmark doesn't move, so hyperlinks to
+      // oldName already resolve correctly and should not be redirected.
       if (paraBmNames.has(newSlug)) continue;
+      anchorRemap.set(oldName, newSlug);
       bm.removeAttribute('w:name');
       bm.removeAttributeNS(W, 'name');
       bm.removeAttribute('name');
@@ -1981,8 +1988,12 @@ async function applyHeadingTextCorrections(zip: JSZip, fixes: AcceptedFix[]): Pr
       if (name) paraBookmarkNames.push(name);
     }
     const newSlug = slugifyHeading(fix.newText);
+    // Only remap when newSlug is not already on this paragraph.  If it is,
+    // the rename will be skipped (duplicate prevention) and hyperlinks to
+    // oldName already resolve correctly — redirecting them would be wrong.
+    const newSlugAlreadyPresent = paraBookmarkNames.includes(newSlug);
     for (const oldName of paraBookmarkNames) {
-      if (oldName !== newSlug) {
+      if (oldName !== newSlug && !newSlugAlreadyPresent) {
         anchorRemap.set(oldName, newSlug);
       }
     }
