@@ -1530,6 +1530,20 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
   let changed = false;
   const anchorRemap = new Map<string, string>();
 
+  // Snapshot of all bookmark names before any renames.  Used in both the
+  // per-paragraph anchorRemap-skip check and the document-wide rename loop so
+  // that cross-paragraph duplicates are caught without per-paragraph mutation.
+  const docBmNames = new Set(
+    Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))
+      .map(
+        bm =>
+          bm.getAttribute('w:name') ??
+          bm.getAttributeNS(W, 'name') ??
+          bm.getAttribute('name'),
+      )
+      .filter((n): n is string => !!n),
+  );
+
   for (const wP of paragraphs) {
     if (getHeadingLevel(wP) !== 2) continue;
 
@@ -1541,18 +1555,6 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
     if (wTElements.length === 0) continue;
 
     const newSlug = slugifyHeading(corrected);
-    // Track names already present on this paragraph to prevent renaming two
-    // different bookmarks to the same slug (creating a duplicate).
-    const paraBmNames = new Set(
-      Array.from(wP.getElementsByTagName('w:bookmarkStart'))
-        .map(
-          bm =>
-            bm.getAttribute('w:name') ??
-            bm.getAttributeNS(W, 'name') ??
-            bm.getAttribute('name'),
-        )
-        .filter((n): n is string => !!n),
-    );
     for (const bm of Array.from(wP.getElementsByTagName('w:bookmarkStart'))) {
       const oldName =
         bm.getAttribute('w:name') ??
@@ -1560,17 +1562,11 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
         bm.getAttribute('name');
       if (!oldName || oldName === newSlug) continue;
 
-      // Skip both the rename and the anchorRemap entry when newSlug is already
-      // present on this paragraph: the bookmark doesn't move, so hyperlinks to
-      // oldName already resolve correctly and should not be redirected.
-      if (paraBmNames.has(newSlug)) continue;
+      // Skip both the rename and the anchorRemap entry when newSlug already
+      // exists anywhere in the document: renaming would create a duplicate,
+      // and hyperlinks to oldName already resolve correctly.
+      if (docBmNames.has(newSlug)) continue;
       anchorRemap.set(oldName, newSlug);
-      bm.removeAttribute('w:name');
-      bm.removeAttributeNS(W, 'name');
-      bm.removeAttribute('name');
-      bm.setAttributeNS(W, 'w:name', newSlug);
-      paraBmNames.delete(oldName);
-      paraBmNames.add(newSlug);
     }
 
     if (corrected.length !== paraText.length) {
@@ -1634,16 +1630,6 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
       }
     }
 
-    const existingBmNamesH001 = new Set(
-      Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))
-        .map(
-          bm =>
-            bm.getAttribute('w:name') ??
-            bm.getAttributeNS(W, 'name') ??
-            bm.getAttribute('name'),
-        )
-        .filter((n): n is string => !!n),
-    );
     const allBookmarks = Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'));
     for (const bm of allBookmarks) {
       const name =
@@ -1652,13 +1638,13 @@ async function applyH2TitleCaseFix(zip: JSZip, changes: AutoAppliedChange[]): Pr
         bm.getAttribute('name');
       if (name && anchorRemap.has(name)) {
         const newVal = anchorRemap.get(name)!;
-        if (newVal !== name && existingBmNamesH001.has(newVal)) continue;
+        if (newVal !== name && docBmNames.has(newVal)) continue;
         bm.removeAttribute('w:name');
         bm.removeAttributeNS(W, 'name');
         bm.removeAttribute('name');
         bm.setAttributeNS(W, 'w:name', newVal);
-        existingBmNamesH001.delete(name);
-        existingBmNamesH001.add(newVal);
+        docBmNames.delete(name);
+        docBmNames.add(newVal);
       }
     }
 
@@ -4300,22 +4286,22 @@ function stripContentControlsFromXmlDoc(xmlDoc: Document): boolean {
   for (const sdt of sdts) {
     const parent = sdt.parentNode;
     if (!parent) continue;
-    const sdtContent = Array.from(sdt.children).find(c => c.localName === 'sdtContent');
-    if (sdtContent) {
-      // Splice visible content in place of the <w:sdt> wrapper.
-      while (sdtContent.firstChild) {
-        parent.insertBefore(sdtContent.firstChild, sdt);
-      }
-    }
-    // Preserve w:bookmarkStart/w:bookmarkEnd that are direct children of the
-    // w:sdt but outside w:sdtContent (e.g. bookmarks spanning the SDT boundary).
-    // parent.removeChild(sdt) would silently drop them without this hoist.
+    // Walk sdt children in document order so the relative positions of
+    // bookmarkStart, sdtContent body, and bookmarkEnd are preserved after
+    // unwrapping — hoisting sdtContent first (previous approach) placed
+    // bookmarks after the content they wrapped, breaking the bookmark span.
+    // sdtPr / sdtEndPr are style metadata and are dropped.
     for (const child of Array.from(sdt.childNodes)) {
-      if (
-        child.nodeType === 1 /* ELEMENT_NODE */ &&
-        ((child as Element).localName === 'bookmarkStart' ||
-          (child as Element).localName === 'bookmarkEnd')
-      ) {
+      if (child.nodeType !== 1 /* ELEMENT_NODE */) continue;
+      const el = child as Element;
+      if (el.localName === 'sdtContent') {
+        while (el.firstChild) {
+          parent.insertBefore(el.firstChild, sdt);
+        }
+      } else if (el.localName === 'sdtPr' || el.localName === 'sdtEndPr') {
+        // Drop: style metadata, not document content
+      } else {
+        // bookmarkStart, bookmarkEnd, etc. — hoist in place
         parent.insertBefore(child, sdt);
       }
     }

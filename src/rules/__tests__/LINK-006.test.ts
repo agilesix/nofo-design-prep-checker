@@ -1076,4 +1076,28 @@ describe('LINK-006 heading-derived anchor — slugifyHeading wins over legacy bo
     // Value must encode both anchor and heading text for bookmark creation
     expect(change!.value).toBe('Project_funding::Project funding');
   });
+
+  it('uses existing _Grants_management bookmark instead of creating bare-slug duplicate', () => {
+    // slugifyHeading("Grants management") = "Grants_management" (no leading underscore).
+    // The OOXML lookup must also try "_" + slug so that the NOFO Builder bookmark
+    // "_Grants_management" is found.  Without the fallback, needsBookmarkCreation is
+    // set and buildDocx inserts a spurious "Grants_management" alongside the original,
+    // which then causes rename rules to produce a duplicate-name conflict.
+    const html =
+      '<h2>Grants management</h2>' +
+      '<p><a href="#_Grants_management_1">See section</a></p>';
+    const documentXml = wrapDocXml(
+      `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:bookmarkStart w:id="1" w:name="_Grants_management"/>` +
+      `<w:bookmarkEnd w:id="1"/>` +
+      `<w:r><w:t>Grants management</w:t></w:r></w:p>`
+    );
+    const change = LINK_006.check(makeDoc(html, documentXml), OPTIONS)
+      .find(r => !('severity' in r)) as AutoAppliedChange | undefined;
+    expect(change).toBeDefined();
+    // Must resolve to the existing _Grants_management bookmark
+    expect(change!.value).toBe('_Grants_management');
+    // needsBookmarkCreation would encode as "slug::headingText" — must not appear
+    expect(change!.value).not.toContain('::');
+  });
 });
