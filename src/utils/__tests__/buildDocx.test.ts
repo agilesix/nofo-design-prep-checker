@@ -945,6 +945,42 @@ describe('buildDocx — CLEAN-008: heading leading-space removal', () => {
     // Unrelated internal link is also untouched
     expect(relsXml).toContain('Target="#Overview"');
   });
+
+  it('does not rewrite hyperlinks whose bookmark rename was skipped due to duplicate target', async () => {
+    // Two headings with identical leading-space text produce the same newAnchor slug.
+    // CLEAN-008 can only create one bookmark with that name; the second rename is
+    // skipped.  The hyperlink for the skipped rename must NOT be rewritten — its
+    // original bookmark still exists and the link already works.
+    //
+    // Regression for the pre-appliedRemap bug where hyperlinks were rewritten using
+    // the full anchorRemap (built before renames ran) rather than only the entries
+    // that actually succeeded.
+    const docXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_HEADING}"><w:body>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:bookmarkStart w:id="1" w:name="_Foo_bar_a"/>` +
+      `<w:r><w:t xml:space="preserve"> Foo bar</w:t></w:r>` +
+      `<w:bookmarkEnd w:id="1"/></w:p>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:bookmarkStart w:id="2" w:name="_Foo_bar_b"/>` +
+      `<w:r><w:t xml:space="preserve"> Foo bar</w:t></w:r>` +
+      `<w:bookmarkEnd w:id="2"/></w:p>` +
+      `<w:p><w:hyperlink w:anchor="_Foo_bar_a"><w:r><w:t>link A</w:t></w:r></w:hyperlink></w:p>` +
+      `<w:p><w:hyperlink w:anchor="_Foo_bar_b"><w:r><w:t>link B</w:t></w:r></w:hyperlink></w:p>` +
+      `<w:sectPr/></w:body></w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', docXml);
+
+    const outXml = await getOutputDocXml(zip, [], [HEADING_LEADING_SPACE_CHANGE]);
+
+    // First rename succeeded: _Foo_bar_a → Foo_bar; its hyperlink is updated.
+    expect(outXml).toContain('w:anchor="Foo_bar"');
+    expect(outXml).not.toContain('w:anchor="_Foo_bar_a"');
+    // Second rename skipped (Foo_bar already exists): _Foo_bar_b stays, hyperlink unchanged.
+    expect(outXml).toContain('w:anchor="_Foo_bar_b"');
+    expect(outXml).toContain('w:name="_Foo_bar_b"');
+  });
 });
 
 // ─── applyAcceptTrackedChangesAndRemoveComments (CLEAN-009) ──────────────────
@@ -2741,6 +2777,37 @@ describe('buildDocx — content control removal', () => {
     expect(outFootnotesXml).not.toBeNull();
     expect(outFootnotesXml).not.toContain('w:sdt');
     expect(outFootnotesXml).toContain('Footnote text');
+  });
+
+  it('preserves bookmark order: bookmarkStart before content, bookmarkEnd after', async () => {
+    // Regression for the two-step hoist bug: hoisting sdtContent children first
+    // then bookmarks placed bookmarkStart *after* the content, breaking the span.
+    // The fix walks sdt children in document order, so bookmarkStart preceding
+    // sdtContent stays before the content in the output.
+    const docXml =
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${SDT_NS}"><w:body>` +
+      `<w:sdt>` +
+      `<w:sdtPr/>` +
+      `<w:bookmarkStart w:id="1" w:name="section_heading"/>` +
+      `<w:sdtContent><w:p><w:r><w:t>Heading text</w:t></w:r></w:p></w:sdtContent>` +
+      `<w:bookmarkEnd w:id="1"/>` +
+      `</w:sdt>` +
+      `<w:sectPr/>` +
+      `</w:body></w:document>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', docXml);
+
+    const outXml = await getOutputDocXml(zip);
+
+    expect(outXml).not.toContain('w:sdt');
+    expect(outXml).toContain('section_heading');
+    // bookmarkStart must come before the paragraph text, bookmarkEnd after
+    const bmStart = outXml.indexOf('bookmarkStart');
+    const content = outXml.indexOf('Heading text');
+    const bmEnd = outXml.indexOf('bookmarkEnd');
+    expect(bmStart).toBeLessThan(content);
+    expect(content).toBeLessThan(bmEnd);
   });
 
 });
