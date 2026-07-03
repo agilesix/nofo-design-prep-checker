@@ -7594,6 +7594,63 @@ describe('buildDocx — LINK-006 Case 1: malformed bookmark:// link rewrite', ()
     expect(relsContent).not.toContain('bookmark://');
   });
 
+  it('inserts w:bookmarkStart/End on the heading when value encodes "anchor::headingText"', async () => {
+    const docWithHeading = (
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_LINK}" xmlns:r="${R_NS_LINK}">` +
+      `<w:body>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Some Heading</w:t></w:r></w:p>` +
+      `<w:p><w:hyperlink r:id="rId1"><w:r><w:t>link text</w:t></w:r></w:hyperlink></w:p>` +
+      `<w:sectPr/></w:body></w:document>`
+    );
+    const headingChange: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Rewired malformed bookmark:// link and inserted heading bookmark',
+      targetField: 'link.malformed.bookmark.SomeName',
+      value: 'SomeName::Some Heading',
+    };
+
+    const zip = new JSZip();
+    zip.file('word/document.xml', docWithHeading);
+    zip.file('word/_rels/document.xml.rels', makeMalformedRelsXml());
+
+    const blob = await buildDocx(zip, [], [headingChange]);
+    const outZip = await JSZip.loadAsync(blob);
+    const docFile = outZip.file('word/document.xml');
+    expect(docFile).toBeTruthy();
+    const outXml = await docFile!.async('string');
+
+    const xmlParser = new DOMParser();
+    const outDoc = xmlParser.parseFromString(outXml, 'application/xml');
+
+    const bmStarts = Array.from(outDoc.getElementsByTagName('w:bookmarkStart'));
+    const bmStart = bmStarts.find(bm => {
+      const name =
+        bm.getAttribute('w:name') ??
+        bm.getAttributeNS(W_NS_LINK, 'name') ??
+        bm.getAttribute('name') ??
+        '';
+      return name === 'SomeName';
+    });
+    expect(bmStart).toBeTruthy();
+
+    const bmId =
+      bmStart!.getAttribute('w:id') ??
+      bmStart!.getAttributeNS(W_NS_LINK, 'id') ??
+      bmStart!.getAttribute('id') ??
+      '';
+    const bmEnds = Array.from(outDoc.getElementsByTagName('w:bookmarkEnd'));
+    const bmEnd = bmEnds.find(bm => {
+      const endId =
+        bm.getAttribute('w:id') ??
+        bm.getAttributeNS(W_NS_LINK, 'id') ??
+        bm.getAttribute('id') ??
+        '';
+      return endId === bmId;
+    });
+    expect(bmEnd).toBeTruthy();
+  });
+
   it('does not rewrite hyperlinks without a matching fix', async () => {
     const zip = new JSZip();
     zip.file('word/document.xml', makeMalformedDocXml());

@@ -800,6 +800,11 @@ async function applyMalformedBookmarkFix(
     p => p.startsWith('word/_rels/') && p.endsWith('.rels')
   );
 
+  // Bookmark insertions are always applied to word/document.xml (headings live in the
+  // main body, not in header/footer story parts). Collect them here and apply post-loop
+  // so that a hyperlink in a header/footer still gets its heading bookmark created.
+  const pendingBookmarks = new Map<string, string>(); // resolvedAnchor → headingText
+
   for (const relsFilePath of relsPaths) {
     const relName = relsFilePath.slice('word/_rels/'.length); // e.g. "document.xml.rels"
     const docPath = 'word/' + relName.slice(0, -'.rels'.length); // e.g. "word/document.xml"
@@ -859,13 +864,26 @@ async function applyMalformedBookmarkFix(
       el.setAttributeNS(W, 'w:anchor', fix.resolvedAnchor);
 
       if (fix.headingText) {
-        insertBookmarkOnHeadingIfAbsent(xmlDoc, fix.resolvedAnchor, fix.headingText);
+        pendingBookmarks.set(fix.resolvedAnchor, fix.headingText);
       }
       docChanged = true;
     }
 
     if (docChanged) {
       zip.file(docPath, serializeXml(xmlDoc));
+    }
+  }
+
+  // Apply deferred bookmark insertions to word/document.xml
+  if (pendingBookmarks.size > 0) {
+    const mainDocFile = zip.file('word/document.xml');
+    if (mainDocFile) {
+      const mainXmlStr = await mainDocFile.async('string');
+      const mainXmlDoc = parser.parseFromString(mainXmlStr, 'application/xml');
+      for (const [anchor, headingText] of pendingBookmarks) {
+        insertBookmarkOnHeadingIfAbsent(mainXmlDoc, anchor, headingText);
+      }
+      zip.file('word/document.xml', serializeXml(mainXmlDoc));
     }
   }
 }
