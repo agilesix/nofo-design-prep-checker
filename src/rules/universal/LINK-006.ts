@@ -62,12 +62,13 @@ const LINK_006: Rule = {
       ? parser.parseFromString(doc.documentXml, 'application/xml')
       : null;
 
-    // Precompute exact OOXML bookmark names once to avoid O(links × bookmarks) scans
+    // Precompute exact OOXML bookmark names once to avoid O(links × bookmarks) scans.
+    // _GoBack is Word's internal navigation bookmark — exclude it from all matching.
     const ooxmlBookmarkNames: Set<string> | null = xmlDoc
       ? new Set(
           Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))
             .map((el) => el.getAttribute('w:name'))
-            .filter((name): name is string => !!name)
+            .filter((name): name is string => !!name && name !== '_GoBack')
         )
       : null;
 
@@ -281,7 +282,7 @@ const LINK_006: Rule = {
       if (ooxmlBookmarkNames && ooxmlBookmarkNames.size > 0) {
         const normRaw = normalizeBookmarkForFuzzyMatch(rawAnchor);
         const fuzzyMatches = Array.from(ooxmlBookmarkNames).filter(
-          bm => normalizeBookmarkForFuzzyMatch(bm) === normRaw
+          bm => bm !== '_GoBack' && normalizeBookmarkForFuzzyMatch(bm) === normRaw
         );
         if (fuzzyMatches.length === 1) {
           results.push({

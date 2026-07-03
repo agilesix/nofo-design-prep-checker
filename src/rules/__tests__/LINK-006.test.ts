@@ -1181,6 +1181,17 @@ describe('LINK-006 Case 1: malformed bookmark:// links', () => {
     expect(issue!.severity).toBe('warning');
     expect(issue!.instructionOnly).toBe(true);
   });
+
+  it('does not auto-fix to _GoBack even when it fuzzy-matches the raw anchor', () => {
+    // _GoBack is Word's internal navigation bookmark; it must never be a fuzzy-match target.
+    const doc = makeDoc(
+      '<p><a href="bookmark://_GoBack">link text</a></p>',
+      xmlWithBookmarks('_GoBack')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const hasAutoFix = results.some(r => !('severity' in r));
+    expect(hasAutoFix).toBe(false);
+  });
 });
 
 // ─── Case 2: orphaned OOXML bookmarks ────────────────────────────────────────
