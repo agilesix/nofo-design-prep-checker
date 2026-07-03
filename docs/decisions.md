@@ -4,6 +4,20 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
+## 2026-07-03 — LINK-006: two follow-up refinements to orphaned-bookmark detection and Case 1 fuzzy matching
+
+**Decision:** Two real-world gaps were found in HHS-2026-ACL-NIDILRR-DPCP-0221 after the original fix merged. Both were patched as follow-ups without changing the fundamental approach.
+
+**Refinement 1 — Case 2 `_`-prefix check was too broad.** The original `isResolvableByNOFOBuilder` function returned `true` for any `_`-prefixed anchor (`anchor.startsWith('_') → true`). This let `_Grants.gov` pass silently because it starts with `_`, even though the bookmark was orphaned on an unrelated paragraph. The root cause: NOFO Builder creates heading bookmarks as `_` + `slugifyHeading(headingText)`, so `slugifyHeading('Grants.gov')` = `Grants_gov` and NOFO Builder would create `_Grants_gov`, never `_Grants.gov`. The body `Grants.gov` (with period) cannot be any heading's slug because `slugifyHeading` replaces `.` with `_`. Fix: for `_`-prefixed anchors, require the body (anchor minus leading `_`) to be a key in `cleanHeadingSlugMap` — i.e. equal to `slugifyHeading(someHeadingText)`. A same-named heading existing elsewhere in the document is irrelevant; only the body-slug match determines resolvability.
+
+**Why Case 2 positional checking is not needed.** NOFO Builder completely ignores Word's physical bookmark placement — it rebuilds heading bookmarks from heading text on import. A bookmark named `_Grants_gov` will resolve correctly in NOFO Builder regardless of which paragraph it sits on in Word, because NOFO Builder creates `_Grants_gov` on the "Grants.gov" heading and all links to `_Grants_gov` resolve via that. Positional checking would produce false positives for correctly-named but physically-displaced bookmarks.
+
+**Refinement 2 — Case 1 exact match missed `and` vs `&` variants.** The malformed link `bookmark://_Contacts_and_Support` couldn't auto-fix to bookmark `_Contacts_&_Support` because only exact and `_`-prefix matches were tried. Fix: after exact match fails, run a fuzzy normalization step that lowercases, replaces `&` with `and`, and collapses non-alphanumeric sequences to `_`. Only auto-fix when normalization yields exactly one bookmark match; if multiple bookmarks normalize identically, surface an instruction-only warning — never guess. This handles the common `and`/`&` ambiguity while remaining conservative about ambiguous cases.
+
+**Outcome:** `_Grants.gov` is now flagged as an instruction-only warning (was silently passing). `bookmark://_Contacts_and_Support` now auto-fixes to `_Contacts_&_Support` (was surfacing a no-match error). Existing exact-match and heading-slug paths are unchanged.
+
+---
+
 ## 2026-07-03 — LINK-006: bookmark:// links auto-fixed; orphaned bookmarks are detection-only
 
 **Decision:** Case 1 (malformed `bookmark://` pseudo-scheme links) is safe to auto-fix silently at download time. Case 2 (OOXML bookmarks that are not derived from a heading slug) is detection-only with an instruction-only warning.
