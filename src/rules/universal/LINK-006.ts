@@ -99,24 +99,35 @@ const LINK_006: Rule = {
       const linkText = (link.textContent ?? '').trim();
       const { nearestHeading: linkNearestHeading } = getContext(link);
 
+      // Exclude auto-generated endnote/footnote navigation anchors. Mammoth
+      // renders round-trip endnote links as #endnote-N / #endnote-ref-N and
+      // footnote links as #footnote-N / #footnote-ref-N. These are never NOFO
+      // Builder heading bookmarks and must never be flagged.
+      if (/^(end|foot)note(-ref)?-\d+$/i.test(anchor)) return;
+
       // Tier 1a: exact match — anchor ID exists in the parsed HTML
       const exactEl = htmlDoc.getElementById(anchor);
       if (exactEl !== null) {
-        // If the matched element is a heading and the link text doesn't already
-        // mention the heading name, surface a link-text improvement suggestion.
-        if (/^h[1-6]$/i.test(exactEl.tagName)) {
-          const headingText = (exactEl.textContent ?? '').trim();
+        // Mammoth renders w:bookmarkStart elements as <a id="..."> inside their
+        // containing paragraph or heading, NOT as an id on the block element
+        // itself. Use .closest() to resolve to the nearest heading ancestor so
+        // links that target a heading bookmark are handled correctly regardless
+        // of whether the id is on the heading element or on an <a> inside it.
+        const headingEl = exactEl.closest('h1,h2,h3,h4,h5,h6');
+        if (headingEl !== null) {
+          const headingText = (headingEl.textContent ?? '').trim();
           if (headingText && !linkTextContainsHeading(linkText, headingText)) {
             const sectionId = findSectionForElement(link, doc);
             // If the word "see" already appears in the text immediately preceding
             // this link, omit it from the suggestion to avoid redundant phrasing
             // like "see X (see Y)".
-            const suppressSee = hasSeeBeforeLink(link as Element);
+            const suppressSee = hasSeeBeforeLink(link);
             results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
           }
         } else if (!isResolvableByNOFOBuilder(anchor, cleanHeadingSlugMap)) {
-          // Non-heading element matched: NOFO Builder resolves links by heading
-          // slug only, so a non-heading anchor will be unresolvable after import.
+          // Anchor resolves to a non-heading element with no heading ancestor:
+          // NOFO Builder resolves links by heading slug only, so this anchor
+          // will be unresolvable after import.
           const sectionId = findSectionForElement(link, doc);
           results.push({
             id: `LINK-006-${index}`,
@@ -165,8 +176,8 @@ const LINK_006: Rule = {
       if (tier1cHeading !== undefined) {
         const headingText = (tier1cHeading.textContent ?? '').trim();
         if (headingText && !linkTextContainsHeading(linkText, headingText)) {
-          const sectionId = findSectionForElement(link as Element, doc);
-          const suppressSee = hasSeeBeforeLink(link as Element);
+          const sectionId = findSectionForElement(link, doc);
+          const suppressSee = hasSeeBeforeLink(link);
           results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
         }
         return;
@@ -216,7 +227,7 @@ const LINK_006: Rule = {
         // Link-text suggestion when heading text is known (Source 3 only) and
         // the link text doesn't already reference the heading by name.
         if (headingText && !linkTextContainsHeading(linkText, headingText)) {
-          const suppressSee = hasSeeBeforeLink(link as Element);
+          const suppressSee = hasSeeBeforeLink(link);
           results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
         }
 
