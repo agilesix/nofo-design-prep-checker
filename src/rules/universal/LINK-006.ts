@@ -277,7 +277,7 @@ const LINK_006: Rule = {
 
       // Fuzzy OOXML match: treat 'and' ↔ '&' as equivalent and collapse separators.
       // Only auto-fix when normalization yields exactly one match; if multiple
-      // bookmarks normalize to the same string, flag as error — never guess.
+      // bookmarks normalize to the same string, emit an instruction-only warning — never guess.
       if (ooxmlBookmarkNames && ooxmlBookmarkNames.size > 0) {
         const normRaw = normalizeBookmarkForFuzzyMatch(rawAnchor);
         const fuzzyMatches = Array.from(ooxmlBookmarkNames).filter(
@@ -793,7 +793,7 @@ function makeLinkTextSuggestion(
 function normalizeBookmarkForFuzzyMatch(name: string): string {
   return name
     .toLowerCase()
-    .replace(/&/g, 'and')
+    .replace(/&/g, ' and ')   // pad with spaces so R&D → r_and_d, not rand
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
 }
