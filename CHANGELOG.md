@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.12.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.11.0...v1.12.0) (2026-07-03)
+
+
+### Features
+
+* **rules:** add CLEAN-025 to strip green/brown text color ([05b252a](https://github.com/agilesix/nofo-design-prep-checker/commit/05b252a3598be70b5be469c6de1c56ddb10fab85))
+* **rules:** add CLEAN-025 to strip green/brown text color ([921dd6f](https://github.com/agilesix/nofo-design-prep-checker/commit/921dd6f8fa9a75701df5acb90c99a18ba01b992b))
+
+
+### Bug Fixes
+
+* **bookmarks:** address Copilot review comments on PR 309 ([d3458df](https://github.com/agilesix/nofo-design-prep-checker/commit/d3458dfefff8eb3ea9b1474c53bca5cc62833c4e))
+* **bookmarks:** preserve existing bookmarks during heading renames ([722a974](https://github.com/agilesix/nofo-design-prep-checker/commit/722a974f0f387a5701731dfcbdb5a7cfe27d4c6f))
+* **bookmarks:** skip anchorRemap when rename is skipped for duplicate ([c37d537](https://github.com/agilesix/nofo-design-prep-checker/commit/c37d537a916573926b9b96e9b3b9f799fcb76a96))
+* **bookmarks:** use existingBmNames guard for hyperlink + .rels rewrites ([850b05d](https://github.com/agilesix/nofo-design-prep-checker/commit/850b05dd6e7313bec9a44376e0bd4e6426f1e47b))
+* **clean-025:** use "location(s)" in description, not "run(s)" ([3778f6a](https://github.com/agilesix/nofo-design-prep-checker/commit/3778f6a9349628e82ab0c8e45921d9a932e31f6d))
+* **link-006:** defer bookmark insertion to main body; add anchor::headingText test ([ad81576](https://github.com/agilesix/nofo-design-prep-checker/commit/ad8157652302aaca37cd58c122e090aaaec6fe96))
+* **links:** address PR 313 Copilot comments on malformed bookmark fix ([8c49ff0](https://github.com/agilesix/nofo-design-prep-checker/commit/8c49ff04ce2c29369e24250849ea60702374f211))
+* **links:** detect bookmark:// pseudo-links and orphaned OOXML bookmarks ([421e09c](https://github.com/agilesix/nofo-design-prep-checker/commit/421e09c163b80aed8f5615e75be874c15ba73862))
+* **links:** detect bookmark:// pseudo-links and orphaned OOXML bookmarks ([de859ce](https://github.com/agilesix/nofo-design-prep-checker/commit/de859ce19aae9ec6d0d7be46b31186267fa2b153))
+
 ## [1.11.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.10.0...v1.11.0) (2026-06-12)
 
 
