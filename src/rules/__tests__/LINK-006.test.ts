@@ -29,8 +29,10 @@ function makeDoc(html: string, documentXml = ''): ParsedDocument {
 
 /** Build a minimal OOXML snippet containing the given bookmark names. */
 function xmlWithBookmarks(...names: string[]): string {
+  const xmlEsc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const bms = names
-    .map((n, i) => `<w:bookmarkStart w:id="${i}" w:name="${n}"/><w:bookmarkEnd w:id="${i}"/>`)
+    .map((n, i) => `<w:bookmarkStart w:id="${i}" w:name="${xmlEsc(n)}"/><w:bookmarkEnd w:id="${i}"/>`)
     .join('');
   return (
     `<?xml version="1.0"?>` +
@@ -920,7 +922,10 @@ describe('LINK-006 instruction-only behavior', () => {
 
 describe('LINK-006 leading-underscore bookmark auto-fix', () => {
   it('produces no issue when #_Eligibility matches bookmark _Eligibility exactly (Tier 1b)', () => {
+    // Heading "Eligibility" is required: _Eligibility is resolvable only if its body
+    // ("Eligibility") is a heading slug, which it is when "Eligibility" exists.
     const doc = makeDoc(
+      '<h2>Eligibility</h2>' +
       '<p><a href="#_Eligibility">link</a></p>',
       xmlWithBookmarks('_Eligibility')
     );
@@ -1134,6 +1139,48 @@ describe('LINK-006 Case 1: malformed bookmark:// links', () => {
     const hasAutoFix = results.some(r => !('severity' in r));
     expect(hasAutoFix).toBe(false);
   });
+
+  it('auto-fixes bookmark:// link when anchor uses "and" but bookmark uses "&" (fuzzy match)', () => {
+    // bookmark://_Contacts_and_Support → _Contacts_&_Support after 'and' ↔ '&' normalization
+    const doc = makeDoc(
+      '<p><a href="bookmark://_Contacts_and_Support">link text</a></p>',
+      xmlWithBookmarks('_Contacts_&_Support')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const change = results.find(r => !('severity' in r)) as AutoAppliedChange | undefined;
+    expect(change).toBeDefined();
+    expect(change!.ruleId).toBe('LINK-006');
+    expect(change!.targetField).toBe('link.malformed.bookmark._Contacts_and_Support');
+    expect(change!.value).toBe('_Contacts_&_Support');
+  });
+
+  it('auto-fixes bookmark:// link when anchor uses "&" but bookmark uses "and" (reverse fuzzy match)', () => {
+    const doc = makeDoc(
+      '<p><a href="bookmark://_Contacts_&_Support">link text</a></p>',
+      xmlWithBookmarks('_Contacts_and_Support')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const change = results.find(r => !('severity' in r)) as AutoAppliedChange | undefined;
+    expect(change).toBeDefined();
+    expect(change!.ruleId).toBe('LINK-006');
+    expect(change!.targetField).toBe('link.malformed.bookmark._Contacts_&_Support');
+    expect(change!.value).toBe('_Contacts_and_Support');
+  });
+
+  it('emits a warning (no auto-fix) when fuzzy match is ambiguous (multiple bookmarks normalize identically)', () => {
+    // Both bookmarks normalize to 'contacts_and_support'; rawAnchor doesn't exactly match either.
+    const doc = makeDoc(
+      '<p><a href="bookmark://contacts_and_support">link text</a></p>',
+      xmlWithBookmarks('contacts_&_support', 'Contacts_&_support')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const hasAutoFix = results.some(r => !('severity' in r));
+    expect(hasAutoFix).toBe(false);
+    const issue = results.find(r => 'severity' in r) as Issue | undefined;
+    expect(issue).toBeDefined();
+    expect(issue!.severity).toBe('warning');
+    expect(issue!.instructionOnly).toBe(true);
+  });
 });
 
 // ─── Case 2: orphaned OOXML bookmarks ────────────────────────────────────────
@@ -1176,5 +1223,39 @@ describe('LINK-006 Case 2: orphaned OOXML bookmarks', () => {
   it('does not flag external http links', () => {
     const doc = makeDoc('<p><a href="https://example.com">external link</a></p>');
     expect(LINK_006.check(doc, OPTIONS)).toHaveLength(0);
+  });
+
+  it('flags _Grants.gov even when a "Grants.gov" heading exists (body contains non-slug char)', () => {
+    // slugifyHeading('Grants.gov') = 'Grants_gov', so the body 'Grants.gov' (with '.')
+    // is not a valid NOFO Builder heading slug. The bookmark is orphaned regardless of
+    // whether a matching heading exists elsewhere in the document.
+    const doc = makeDoc(
+      '<h2>Grants.gov</h2>' +
+      '<p><a href="#_Grants.gov">federal service desk</a></p>',
+      xmlWithBookmarks('_Grants.gov')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const issue = results.find(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    ) as Issue | undefined;
+    expect(issue).toBeDefined();
+    expect(issue!.ruleId).toBe('LINK-006');
+    expect(issue!.instructionOnly).toBe(true);
+    const hasAutoFix = results.some(r => !('severity' in r));
+    expect(hasAutoFix).toBe(false);
+  });
+
+  it('does not flag _Grants_gov when a "Grants.gov" heading exists (correctly-formatted slug)', () => {
+    // slugifyHeading('Grants.gov') = 'Grants_gov'. The bookmark '_Grants_gov' has body
+    // 'Grants_gov' which IS a key in cleanHeadingSlugMap → NOFO Builder can resolve it.
+    const doc = makeDoc(
+      '<h2>Grants.gov</h2>' +
+      '<p><a href="#_Grants_gov">grants portal</a></p>',
+      xmlWithBookmarks('_Grants_gov')
+    );
+    const hasWarning = LINK_006.check(doc, OPTIONS).some(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    );
+    expect(hasWarning).toBe(false);
   });
 });

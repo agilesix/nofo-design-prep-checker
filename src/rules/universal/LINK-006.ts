@@ -275,6 +275,39 @@ const LINK_006: Rule = {
         return;
       }
 
+      // Fuzzy OOXML match: treat 'and' ↔ '&' as equivalent and collapse separators.
+      // Only auto-fix when normalization yields exactly one match; if multiple
+      // bookmarks normalize to the same string, flag as error — never guess.
+      if (ooxmlBookmarkNames && ooxmlBookmarkNames.size > 0) {
+        const normRaw = normalizeBookmarkForFuzzyMatch(rawAnchor);
+        const fuzzyMatches = Array.from(ooxmlBookmarkNames).filter(
+          bm => normalizeBookmarkForFuzzyMatch(bm) === normRaw
+        );
+        if (fuzzyMatches.length === 1) {
+          results.push({
+            ruleId: 'LINK-006',
+            description: `Rewired malformed bookmark:// link to internal link "#${fuzzyMatches[0]}"`,
+            targetField: `link.malformed.bookmark.${rawAnchor}`,
+            value: fuzzyMatches[0],
+          } as AutoAppliedChange);
+          return;
+        }
+        if (fuzzyMatches.length > 1) {
+          results.push({
+            id: `LINK-006-malformed-${malformedIdx}`,
+            ruleId: 'LINK-006',
+            title: 'Internal link may not work in NOFO Builder',
+            severity: 'warning',
+            sectionId,
+            nearestHeading: linkNearestHeading,
+            location: href,
+            description: `This link uses a "bookmark://" URL that Word cannot resolve, and the anchor name matches multiple bookmarks after normalization. To fix it, select the link text in Word, go to Insert → Link → This Document, and select the correct heading.`,
+            instructionOnly: true,
+          } as Issue);
+          return;
+        }
+      }
+
       // Fall back to heading slug (NOFO Builder can resolve this)
       const headingEl = cleanHeadingSlugMap.get(rawAnchor);
       if (headingEl !== undefined) {
@@ -748,6 +781,23 @@ function makeLinkTextSuggestion(
   } as Issue;
 }
 
+/**
+ * Normalise a bookmark name for fuzzy Case-1 matching in `bookmark://` links.
+ * Treats 'and' and '&' as equivalent and collapses all non-alphanumeric separators
+ * (underscores, spaces, punctuation) to a uniform underscore, then strips
+ * leading/trailing underscores.
+ *
+ * e.g. '_Contacts_and_Support' → 'contacts_and_support'
+ *      '_Contacts_&_Support'   → 'contacts_and_support'  (same → match)
+ */
+function normalizeBookmarkForFuzzyMatch(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
 function findSectionForElement(el: Element, doc: ParsedDocument): string {
   const text = el.textContent ?? '';
   for (const section of doc.sections) {
@@ -762,10 +812,12 @@ function findSectionForElement(el: Element, doc: ParsedDocument): string {
  * NOFO Builder resolves internal links exclusively via slugifyHeading(headingText).
  * Two cases are treated as resolvable:
  *  1. The anchor exactly matches a heading slug in cleanHeadingSlugMap.
- *  2. The anchor begins with '_' — NOFO Builder always prefixes its own heading
- *     bookmarks with '_', so any '_'-prefixed anchor is assumed to target a
- *     heading bookmark created by NOFO Builder, even when that heading is not
- *     visible in the current HTML rendition (e.g. minimal test fixtures).
+ *  2. The anchor begins with '_' AND its body (the portion after '_') is also a
+ *     key in cleanHeadingSlugMap. NOFO Builder creates heading bookmarks as
+ *     '_' + slugifyHeading(headingText), so the body must equal a heading slug.
+ *     A bookmark like '_Grants.gov' whose body 'Grants.gov' is not any heading's
+ *     slug (slugifyHeading('Grants.gov') = 'Grants_gov') is orphaned and will be
+ *     unresolvable after import — even if a same-named heading exists elsewhere.
  *
  * A bookmark that exists in OOXML but is not derived from a heading text will be
  * unresolvable in the published NOFO even though Word can navigate to it locally.
@@ -775,8 +827,12 @@ function isResolvableByNOFOBuilder(
   cleanHeadingSlugMap: Map<string, Element>
 ): boolean {
   if (cleanHeadingSlugMap.has(anchor)) return true;
-  // '_'-prefixed bookmarks are NOFO Builder heading bookmarks; do not flag them.
-  if (anchor.startsWith('_')) return true;
+  // For '_'-prefixed bookmarks, verify the body matches a heading slug.
+  // NOFO Builder creates heading bookmarks as '_' + slugifyHeading(text), so a
+  // correctly-placed bookmark's body will be a key in cleanHeadingSlugMap.
+  if (anchor.startsWith('_')) {
+    return cleanHeadingSlugMap.has(anchor.slice(1));
+  }
   return false;
 }
 
