@@ -7508,3 +7508,164 @@ describe('buildDocx — CLEAN-025: green/brown color removal', () => {
     expect(outXml).toContain('w:val="185394"');
   });
 });
+
+// ─── LINK-006 Case 1: malformed bookmark:// rewrite ──────────────────────────
+
+describe('buildDocx — LINK-006 Case 1: malformed bookmark:// link rewrite', () => {
+  const W_NS_LINK = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const R_NS_LINK = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const RELS_NS_LINK = 'http://schemas.openxmlformats.org/package/2006/relationships';
+
+  const MALFORMED_BOOKMARK_CHANGE: AutoAppliedChange = {
+    ruleId: 'LINK-006',
+    description: 'Rewired malformed bookmark:// link to internal link "#SomeName"',
+    targetField: 'link.malformed.bookmark.SomeName',
+    value: 'SomeName',
+  };
+
+  function makeMalformedDocXml(): string {
+    return (
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_LINK}" xmlns:r="${R_NS_LINK}">` +
+      `<w:body><w:p>` +
+      `<w:hyperlink r:id="rId1"><w:r><w:t>link text</w:t></w:r></w:hyperlink>` +
+      `</w:p><w:sectPr/></w:body></w:document>`
+    );
+  }
+
+  function makeMalformedRelsXml(): string {
+    return (
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<Relationships xmlns="${RELS_NS_LINK}">` +
+      `<Relationship Id="rId1" ` +
+      `Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" ` +
+      `Target="bookmark://SomeName" TargetMode="External"/>` +
+      `</Relationships>`
+    );
+  }
+
+  it('replaces r:id with w:anchor on the hyperlink element', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeMalformedDocXml());
+    zip.file('word/_rels/document.xml.rels', makeMalformedRelsXml());
+
+    const outXml = await getOutputDocXml(zip, [], [MALFORMED_BOOKMARK_CHANGE]);
+    const xmlParser = new DOMParser();
+    const xmlDoc = xmlParser.parseFromString(outXml, 'application/xml');
+
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(1);
+
+    const hl = hyperlinks[0]!;
+    const anchor = hl.getAttribute('w:anchor') ?? hl.getAttributeNS(W_NS_LINK, 'anchor');
+    expect(anchor).toBe('SomeName');
+
+    // r:id should be removed
+    const rId = hl.getAttribute('r:id') ?? hl.getAttributeNS(R_NS_LINK, 'id');
+    expect(rId).toBeFalsy();
+  });
+
+  it('preserves link text content after rewrite', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeMalformedDocXml());
+    zip.file('word/_rels/document.xml.rels', makeMalformedRelsXml());
+
+    const outXml = await getOutputDocXml(zip, [], [MALFORMED_BOOKMARK_CHANGE]);
+    const xmlParser = new DOMParser();
+    const xmlDoc = xmlParser.parseFromString(outXml, 'application/xml');
+
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    const linkText = Array.from(hyperlinks[0]!.getElementsByTagName('w:t'))
+      .map(t => t.textContent ?? '')
+      .join('');
+    expect(linkText).toBe('link text');
+  });
+
+  it('removes the bookmark:// Relationship entry from the rels file', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeMalformedDocXml());
+    zip.file('word/_rels/document.xml.rels', makeMalformedRelsXml());
+
+    const blob = await buildDocx(zip, [], [MALFORMED_BOOKMARK_CHANGE]);
+    const outZip = await JSZip.loadAsync(blob);
+    const relsFile = outZip.file('word/_rels/document.xml.rels');
+    expect(relsFile).toBeTruthy();
+    const relsContent = await relsFile!.async('string');
+    expect(relsContent).not.toContain('bookmark://');
+  });
+
+  it('inserts w:bookmarkStart/End on the heading when value encodes "anchor::headingText"', async () => {
+    const docWithHeading = (
+      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+      `<w:document xmlns:w="${W_NS_LINK}" xmlns:r="${R_NS_LINK}">` +
+      `<w:body>` +
+      `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Some Heading</w:t></w:r></w:p>` +
+      `<w:p><w:hyperlink r:id="rId1"><w:r><w:t>link text</w:t></w:r></w:hyperlink></w:p>` +
+      `<w:sectPr/></w:body></w:document>`
+    );
+    const headingChange: AutoAppliedChange = {
+      ruleId: 'LINK-006',
+      description: 'Rewired malformed bookmark:// link and inserted heading bookmark',
+      targetField: 'link.malformed.bookmark.SomeName',
+      value: 'SomeName::Some Heading',
+    };
+
+    const zip = new JSZip();
+    zip.file('word/document.xml', docWithHeading);
+    zip.file('word/_rels/document.xml.rels', makeMalformedRelsXml());
+
+    const blob = await buildDocx(zip, [], [headingChange]);
+    const outZip = await JSZip.loadAsync(blob);
+    const docFile = outZip.file('word/document.xml');
+    expect(docFile).toBeTruthy();
+    const outXml = await docFile!.async('string');
+
+    const xmlParser = new DOMParser();
+    const outDoc = xmlParser.parseFromString(outXml, 'application/xml');
+
+    const bmStarts = Array.from(outDoc.getElementsByTagName('w:bookmarkStart'));
+    const bmStart = bmStarts.find(bm => {
+      const name =
+        bm.getAttribute('w:name') ??
+        bm.getAttributeNS(W_NS_LINK, 'name') ??
+        bm.getAttribute('name') ??
+        '';
+      return name === 'SomeName';
+    });
+    expect(bmStart).toBeTruthy();
+
+    const bmId =
+      bmStart!.getAttribute('w:id') ??
+      bmStart!.getAttributeNS(W_NS_LINK, 'id') ??
+      bmStart!.getAttribute('id') ??
+      '';
+    const bmEnds = Array.from(outDoc.getElementsByTagName('w:bookmarkEnd'));
+    const bmEnd = bmEnds.find(bm => {
+      const endId =
+        bm.getAttribute('w:id') ??
+        bm.getAttributeNS(W_NS_LINK, 'id') ??
+        bm.getAttribute('id') ??
+        '';
+      return endId === bmId;
+    });
+    expect(bmEnd).toBeTruthy();
+  });
+
+  it('does not rewrite hyperlinks without a matching fix', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeMalformedDocXml());
+    zip.file('word/_rels/document.xml.rels', makeMalformedRelsXml());
+
+    // Pass no autoAppliedChanges
+    const outXml = await getOutputDocXml(zip, [], []);
+    const xmlParser = new DOMParser();
+    const xmlDoc = xmlParser.parseFromString(outXml, 'application/xml');
+
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    expect(hyperlinks).toHaveLength(1);
+    // r:id should still be present (unchanged)
+    const hl = hyperlinks[0]!;
+    const rId = hl.getAttribute('r:id') ?? hl.getAttributeNS(R_NS_LINK, 'id');
+    expect(rId).toBeTruthy();
+  });
+});

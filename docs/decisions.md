@@ -4,6 +4,20 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
+## 2026-07-03 — LINK-006: bookmark:// links auto-fixed; orphaned bookmarks are detection-only
+
+**Decision:** Case 1 (malformed `bookmark://` pseudo-scheme links) is safe to auto-fix silently at download time. Case 2 (OOXML bookmarks that are not derived from a heading slug) is detection-only with an instruction-only warning.
+
+**Reason — Case 1 is safe to auto-fix:** A `bookmark://` URL is always a Word artifact created by a hyperlink dialog failure. It maps to an r:id Relationship with `TargetMode="External"` and `Target="bookmark://anchorName"` — a non-standard URL scheme that neither Word nor NOFO Builder can resolve. The link is always broken as delivered. Replacing the r:id relationship with a `w:anchor` attribute pointing to the same anchor name is guaranteed to be an improvement: the worst case is that the resolved anchor doesn't exist in the published NOFO, which is the same broken state as before. The rewrite is safe even without user confirmation.
+
+**Reason — Case 2 is detection-only:** An orphaned bookmark (exists in OOXML but is not derived from any heading's `slugifyHeading(text)`) could be a legitimate non-heading anchor — a bookmark placed in body text to mark a specific paragraph or table row. Auto-rewiring to the nearest heading would silently change the link's destination semantics without user input, which could be wrong. The correct resolution always requires the user to make an intentional choice in Word via Insert → Link → This Document. Emitting an instruction-only warning surfaces the problem without destroying user intent.
+
+**Alternative considered for Case 2:** Auto-fix when the orphaned bookmark is close to a heading (within N paragraphs). Rejected because "close to a heading" is ambiguous in long NOFO sections and the risk of a wrong rewrite is non-trivial. Detection-only is the conservative safe choice.
+
+**Outcome:** LINK-006 now detects three classes of internal link problems: (1) malformed `bookmark://` links — auto-fixed, (2) orphaned OOXML bookmarks — instruction-only warning, (3) broken `#anchor` links — fuzzy retarget (user-accepted) or instruction-only, unchanged from prior behavior.
+
+---
+
 ## 2026-07-03 — CLEAN-025: HSL tolerance used for green/brown color detection
 
 **Decision:** Color detection in CLEAN-025 converts each `w:color` hex value to HSL and applies range-based thresholds (green: hue 80–160°; brown: hue 20–45°, saturation ≤ 60%, lightness 15–75°) rather than matching against an exact list of known hex values.
