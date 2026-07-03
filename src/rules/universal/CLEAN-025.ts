@@ -35,7 +35,7 @@ const CLEAN_025: Rule = {
     return [
       {
         ruleId: 'CLEAN-025',
-        description: `Green or brown text color removed from ${count} run${count === 1 ? '' : 's'}.`,
+        description: `Green or brown text color removed from ${count} location${count === 1 ? '' : 's'}.`,
         targetField: 'run.color.green-brown.strip',
         value: String(count),
       },

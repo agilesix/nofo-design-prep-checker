@@ -334,7 +334,7 @@ export async function buildDocx(
     await applyBoldColonFix(zip);
   }
 
-  // Remove green or brown text color from heading and body paragraph runs
+  // Remove green or brown text color from heading and body paragraphs (runs and paragraph marks)
   if (hasGreenBrownColorFix) {
     await applyGreenBrownColorFix(zip);
   }

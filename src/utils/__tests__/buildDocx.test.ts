@@ -7404,7 +7404,7 @@ function makeColorDocXml(body: string): string {
 
 const GREEN_BROWN_COLOR_CHANGE: AutoAppliedChange = {
   ruleId: 'CLEAN-025',
-  description: 'Green or brown text color removed from 1 run.',
+  description: 'Green or brown text color removed from 1 location.',
   targetField: 'run.color.green-brown.strip',
 };
 
