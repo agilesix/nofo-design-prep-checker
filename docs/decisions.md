@@ -4,6 +4,18 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
+## 2026-07-03 — CLEAN-025: HSL tolerance used for green/brown color detection
+
+**Decision:** Color detection in CLEAN-025 converts each `w:color` hex value to HSL and applies range-based thresholds (green: hue 80–160°; brown: hue 20–45°, saturation ≤ 60%, lightness 15–75°) rather than matching against an exact list of known hex values.
+
+**Reason:** Real-world NOFOs contain slight variations of the same branded green (e.g. `04813D`, `007E40`, `22763F`) depending on which team produced the template. Exact-match lists require constant maintenance as new variants appear. HSL ranges catch the full gamut of visually similar colors in a single rule without a growing allowlist.
+
+**Alternative considered:** Exact hex allowlist (`04813D`, `9A826E`, etc.). Rejected because new variants would require code changes, and the HSL approach was validated against canonical samples (04813D → H≈147°, 9A826E → H≈27°) and known-safe colors (185394 blue → H≈211°, 21272D dark navy → H≈209°).
+
+**Outcome:** HSL ranges implemented in `CLEAN-025.ts` (detect) and `buildDocx.ts` (apply). Near-grays (saturation < 5%) are excluded to avoid touching colors like `3D3D3D` that look neutral on screen.
+
+---
+
 ## 2026-06-12 — NOTE-001 auto-fix reverted; restored as improved warning rule
 
 **Decision:** The NOTE-001 footnote-to-endnote auto-fix introduced in the same sprint was reverted after four fix attempts failed to resolve "unreadable content" errors when opening downloaded documents in Word. NOTE-001 is restored as a warning rule, but with improved detection: it now scans for live w:footnoteReference elements in word/document.xml rather than looking for a "Footnotes" heading at the bottom of the document.

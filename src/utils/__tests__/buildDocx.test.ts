@@ -7388,3 +7388,123 @@ describe('buildDocx — CDC-001: Financial capability statement internal link', 
     expect(Array.from(xmlDoc.getElementsByTagName('w:hyperlink'))).toHaveLength(0);
   });
 });
+
+// ─── applyGreenBrownColorFix (CLEAN-025) ─────────────────────────────────────
+
+const W_NS_COLOR = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
+function makeColorDocXml(body: string): string {
+  return (
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
+    `<w:document xmlns:w="${W_NS_COLOR}">` +
+    `<w:body>${body}<w:sectPr/></w:body>` +
+    `</w:document>`
+  );
+}
+
+const GREEN_BROWN_COLOR_CHANGE: AutoAppliedChange = {
+  ruleId: 'CLEAN-025',
+  description: 'Green or brown text color removed from 1 run.',
+  targetField: 'run.color.green-brown.strip',
+};
+
+describe('buildDocx — CLEAN-025: green/brown color removal', () => {
+  it('strips green w:color from a run in a Heading5 paragraph', async () => {
+    const body =
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading5"/></w:pPr>` +
+      `<w:r><w:rPr><w:color w:val="04813D"/></w:rPr><w:t>Eligible Entities</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeColorDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [GREEN_BROWN_COLOR_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const run = Array.from(wP!.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:r'
+    ) as Element | undefined;
+    const rPr = run
+      ? (Array.from(run.childNodes).find(
+          n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+        ) as Element | undefined)
+      : undefined;
+
+    expect(rPr?.getElementsByTagName('w:color').length ?? 0).toBe(0);
+    expect(wP?.getElementsByTagName('w:t')[0]?.textContent).toBe('Eligible Entities');
+  });
+
+  it('strips brown w:color from the paragraph mark (pPr/rPr) of a Heading1', async () => {
+    const body =
+      `<w:p>` +
+      `<w:pPr>` +
+      `<w:pStyle w:val="Heading1"/>` +
+      `<w:rPr><w:color w:val="9A826E"/></w:rPr>` +
+      `</w:pPr>` +
+      `<w:r><w:t>Introduction</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeColorDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [GREEN_BROWN_COLOR_CHANGE]);
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(outXml, 'application/xml');
+
+    const [wP] = Array.from(xmlDoc.getElementsByTagName('w:p'));
+    const pPr = Array.from(wP!.childNodes).find(
+      n => n.nodeType === 1 && (n as Element).tagName === 'w:pPr'
+    ) as Element | undefined;
+    const pRpr = pPr
+      ? (Array.from(pPr.childNodes).find(
+          n => n.nodeType === 1 && (n as Element).tagName === 'w:rPr'
+        ) as Element | undefined)
+      : undefined;
+
+    expect(pRpr?.getElementsByTagName('w:color').length ?? 0).toBe(0);
+  });
+
+  it('leaves green color untouched on a run with an excluded rStyle (Fillintext)', async () => {
+    const body =
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Normal"/></w:pPr>` +
+      `<w:r><w:rPr><w:rStyle w:val="Fillintext"/><w:color w:val="04813D"/></w:rPr><w:t>Fill in</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeColorDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [GREEN_BROWN_COLOR_CHANGE]);
+    expect(outXml).toContain('w:val="04813D"');
+  });
+
+  it('leaves green color untouched on a run inside a table (w:tbl)', async () => {
+    const body =
+      `<w:tbl>` +
+      `<w:tr><w:tc>` +
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading3"/></w:pPr>` +
+      `<w:r><w:rPr><w:color w:val="04813D"/></w:rPr><w:t>Table heading</w:t></w:r>` +
+      `</w:p>` +
+      `</w:tc></w:tr>` +
+      `</w:tbl>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeColorDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [GREEN_BROWN_COLOR_CHANGE]);
+    expect(outXml).toContain('w:val="04813D"');
+  });
+
+  it('leaves a non-green, non-brown color (185394 blue) untouched on a heading run', async () => {
+    const body =
+      `<w:p>` +
+      `<w:pPr><w:pStyle w:val="Heading2"/></w:pPr>` +
+      `<w:r><w:rPr><w:color w:val="185394"/></w:rPr><w:t>Section Title</w:t></w:r>` +
+      `</w:p>`;
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeColorDocXml(body));
+
+    const outXml = await getOutputDocXml(zip, [], [GREEN_BROWN_COLOR_CHANGE]);
+    expect(outXml).toContain('w:val="185394"');
+  });
+});
