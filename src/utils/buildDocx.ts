@@ -4775,6 +4775,9 @@ function c1AddHyperlinkStyle(xmlDoc: Document, W: string, run: Element): void {
 }
 
 // ─── CLEAN-025: Remove green or brown text color from headings and body paragraphs ─
+// SYNC: C25_EXCLUDED_STYLES, C25_HEADING_STYLES, and c25IsGreenOrBrown below are
+// duplicated from src/rules/universal/CLEAN-025.ts. If you change HSL thresholds
+// or the excluded/heading style lists in either file, update the other to match.
 
 const C25_EXCLUDED_STYLES = new Set([
   'InstructionBoxes',

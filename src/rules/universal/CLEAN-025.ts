@@ -1,5 +1,8 @@
 import type { Rule, AutoAppliedChange, ParsedDocument, RuleRunnerOptions } from '../../types';
 
+// SYNC: C25_EXCLUDED_STYLES, C25_HEADING_STYLES, and the HSL logic in c25IsGreenOrBrown
+// are duplicated in src/utils/buildDocx.ts (applyGreenBrownColorFix). If you change
+// HSL thresholds or the excluded/heading style lists here, update buildDocx.ts to match.
 const C25_EXCLUDED_STYLES = new Set([
   'InstructionBoxes',
   'InstructionBoxHeading',
