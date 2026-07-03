@@ -117,11 +117,11 @@ const LINK_006: Rule = {
         if (headingEl !== null) {
           const headingText = (headingEl.textContent ?? '').trim();
           if (headingText && !linkTextContainsHeading(linkText, headingText)) {
-            const sectionId = findSectionForElement(link as Element, doc);
+            const sectionId = findSectionForElement(link, doc);
             // If the word "see" already appears in the text immediately preceding
             // this link, omit it from the suggestion to avoid redundant phrasing
             // like "see X (see Y)".
-            const suppressSee = hasSeeBeforeLink(link as Element);
+            const suppressSee = hasSeeBeforeLink(link);
             results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
           }
         } else if (!isResolvableByNOFOBuilder(anchor, cleanHeadingSlugMap)) {
@@ -176,8 +176,8 @@ const LINK_006: Rule = {
       if (tier1cHeading !== undefined) {
         const headingText = (tier1cHeading.textContent ?? '').trim();
         if (headingText && !linkTextContainsHeading(linkText, headingText)) {
-          const sectionId = findSectionForElement(link as Element, doc);
-          const suppressSee = hasSeeBeforeLink(link as Element);
+          const sectionId = findSectionForElement(link, doc);
+          const suppressSee = hasSeeBeforeLink(link);
           results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
         }
         return;
@@ -227,7 +227,7 @@ const LINK_006: Rule = {
         // Link-text suggestion when heading text is known (Source 3 only) and
         // the link text doesn't already reference the heading by name.
         if (headingText && !linkTextContainsHeading(linkText, headingText)) {
-          const suppressSee = hasSeeBeforeLink(link as Element);
+          const suppressSee = hasSeeBeforeLink(link);
           results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
         }
 

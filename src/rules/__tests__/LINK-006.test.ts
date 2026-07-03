@@ -1277,7 +1277,8 @@ describe('LINK-006 Case 2: orphaned OOXML bookmarks', () => {
     const doc = makeDoc(
       '<h2>Grants.gov</h2>' +
       '<p><a id="_Grants.gov"></a>Maureen Linden</p>' +
-      '<p><a href="#_Grants.gov">federal service desk</a></p>'
+      '<p><a href="#_Grants.gov">federal service desk</a></p>',
+      xmlWithBookmarks('_Grants.gov')
     );
     const results = LINK_006.check(doc, OPTIONS);
     const issue = results.find(
