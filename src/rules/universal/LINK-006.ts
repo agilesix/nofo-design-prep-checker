@@ -68,6 +68,17 @@ const LINK_006: Rule = {
       ? new Set(getOoxmlBookmarkNames(xmlDoc))
       : null;
 
+    // Build a fuzzy lookup index (normalizedForm → bookmarkName | null) once per
+    // document so each malformed link resolves in O(1) instead of O(bookmarks).
+    // null = multiple bookmarks map to the same normalized form (ambiguous).
+    const fuzzyBookmarkIndex = new Map<string, string | null>();
+    if (ooxmlBookmarkNames) {
+      for (const bm of ooxmlBookmarkNames) {
+        const norm = normalizeBookmarkForFuzzyMatch(bm);
+        fuzzyBookmarkIndex.set(norm, fuzzyBookmarkIndex.has(norm) ? null : bm);
+      }
+    }
+
     // Cache fuzzy results — the same broken anchor may appear in many links
     const fuzzyCache = new Map<string, FuzzyMatchResult>();
     const getContext = buildLocationLookup(htmlDoc);
@@ -275,30 +286,19 @@ const LINK_006: Rule = {
       // Fuzzy OOXML match: treat 'and' ↔ '&' as equivalent and collapse separators.
       // Only auto-fix when normalization yields exactly one match; if multiple
       // bookmarks normalize to the same string, emit an instruction-only warning — never guess.
-      if (ooxmlBookmarkNames && ooxmlBookmarkNames.size > 0) {
+      if (fuzzyBookmarkIndex.size > 0) {
         const normRaw = normalizeBookmarkForFuzzyMatch(rawAnchor);
-        let fuzzyFirst: string | null = null;
-        let fuzzyAmbiguous = false;
-        for (const bm of ooxmlBookmarkNames) {
-          if (normalizeBookmarkForFuzzyMatch(bm) === normRaw) {
-            if (fuzzyFirst === null) {
-              fuzzyFirst = bm;
-            } else {
-              fuzzyAmbiguous = true;
-              break;
-            }
+        const fuzzyTarget = fuzzyBookmarkIndex.get(normRaw);
+        if (fuzzyTarget !== undefined) {
+          if (fuzzyTarget !== null) {
+            results.push({
+              ruleId: 'LINK-006',
+              description: `Rewired malformed bookmark:// link to internal link "#${fuzzyTarget}"`,
+              targetField: `link.malformed.bookmark.${rawAnchor}`,
+              value: fuzzyTarget,
+            } as AutoAppliedChange);
+            return;
           }
-        }
-        if (fuzzyFirst !== null && !fuzzyAmbiguous) {
-          results.push({
-            ruleId: 'LINK-006',
-            description: `Rewired malformed bookmark:// link to internal link "#${fuzzyFirst}"`,
-            targetField: `link.malformed.bookmark.${rawAnchor}`,
-            value: fuzzyFirst,
-          } as AutoAppliedChange);
-          return;
-        }
-        if (fuzzyAmbiguous) {
           results.push({
             id: `LINK-006-malformed-${malformedIdx}`,
             ruleId: 'LINK-006',
@@ -788,7 +788,7 @@ function makeLinkTextSuggestion(
 }
 
 /**
- * Normalise a bookmark name for fuzzy Case-1 matching in `bookmark://` links.
+ * Normalize a bookmark name for fuzzy Case-1 matching in `bookmark://` links.
  * Treats 'and' and '&' as equivalent and collapses all non-alphanumeric separators
  * (underscores, spaces, punctuation) to a uniform underscore, then strips
  * leading/trailing underscores.
