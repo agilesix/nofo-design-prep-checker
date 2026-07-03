@@ -852,9 +852,10 @@ async function applyMalformedBookmarkFix(
       // Remove r:id
       el.removeAttribute('r:id');
       el.removeAttributeNS(R, 'id');
-      // Set w:anchor (remove first to avoid namespace duplication)
+      // Set w:anchor (remove all forms first to avoid namespace duplication)
       el.removeAttribute('w:anchor');
       el.removeAttributeNS(W, 'anchor');
+      el.removeAttributeNS(null, 'anchor'); // bare 'anchor' from namespace-prefix stripping
       el.setAttributeNS(W, 'w:anchor', fix.resolvedAnchor);
 
       if (fix.headingText) {

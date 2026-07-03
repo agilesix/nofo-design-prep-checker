@@ -7581,6 +7581,19 @@ describe('buildDocx — LINK-006 Case 1: malformed bookmark:// link rewrite', ()
     expect(linkText).toBe('link text');
   });
 
+  it('removes the bookmark:// Relationship entry from the rels file', async () => {
+    const zip = new JSZip();
+    zip.file('word/document.xml', makeMalformedDocXml());
+    zip.file('word/_rels/document.xml.rels', makeMalformedRelsXml());
+
+    const blob = await buildDocx(zip, [], [MALFORMED_BOOKMARK_CHANGE]);
+    const outZip = await JSZip.loadAsync(blob);
+    const relsFile = outZip.file('word/_rels/document.xml.rels');
+    expect(relsFile).toBeTruthy();
+    const relsContent = await relsFile!.async('string');
+    expect(relsContent).not.toContain('bookmark://');
+  });
+
   it('does not rewrite hyperlinks without a matching fix', async () => {
     const zip = new JSZip();
     zip.file('word/document.xml', makeMalformedDocXml());
