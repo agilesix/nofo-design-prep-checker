@@ -63,13 +63,9 @@ const LINK_006: Rule = {
       : null;
 
     // Precompute exact OOXML bookmark names once to avoid O(links × bookmarks) scans.
-    // _GoBack is Word's internal navigation bookmark — exclude it from all matching.
+    // getOoxmlBookmarkNames already excludes _GoBack and caches per xmlDoc.
     const ooxmlBookmarkNames: Set<string> | null = xmlDoc
-      ? new Set(
-          Array.from(xmlDoc.getElementsByTagName('w:bookmarkStart'))
-            .map((el) => el.getAttribute('w:name'))
-            .filter((name): name is string => !!name && name !== '_GoBack')
-        )
+      ? new Set(getOoxmlBookmarkNames(xmlDoc))
       : null;
 
     // Cache fuzzy results — the same broken anchor may appear in many links
@@ -281,19 +277,28 @@ const LINK_006: Rule = {
       // bookmarks normalize to the same string, emit an instruction-only warning — never guess.
       if (ooxmlBookmarkNames && ooxmlBookmarkNames.size > 0) {
         const normRaw = normalizeBookmarkForFuzzyMatch(rawAnchor);
-        const fuzzyMatches = Array.from(ooxmlBookmarkNames).filter(
-          bm => bm !== '_GoBack' && normalizeBookmarkForFuzzyMatch(bm) === normRaw
-        );
-        if (fuzzyMatches.length === 1) {
+        let fuzzyFirst: string | null = null;
+        let fuzzyAmbiguous = false;
+        for (const bm of ooxmlBookmarkNames) {
+          if (normalizeBookmarkForFuzzyMatch(bm) === normRaw) {
+            if (fuzzyFirst === null) {
+              fuzzyFirst = bm;
+            } else {
+              fuzzyAmbiguous = true;
+              break;
+            }
+          }
+        }
+        if (fuzzyFirst !== null && !fuzzyAmbiguous) {
           results.push({
             ruleId: 'LINK-006',
-            description: `Rewired malformed bookmark:// link to internal link "#${fuzzyMatches[0]}"`,
+            description: `Rewired malformed bookmark:// link to internal link "#${fuzzyFirst}"`,
             targetField: `link.malformed.bookmark.${rawAnchor}`,
-            value: fuzzyMatches[0],
+            value: fuzzyFirst,
           } as AutoAppliedChange);
           return;
         }
-        if (fuzzyMatches.length > 1) {
+        if (fuzzyAmbiguous) {
           results.push({
             id: `LINK-006-malformed-${malformedIdx}`,
             ruleId: 'LINK-006',
