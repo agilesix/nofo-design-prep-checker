@@ -106,12 +106,45 @@ const LINK_006: Rule = {
             const suppressSee = hasSeeBeforeLink(link as Element);
             results.push(makeLinkTextSuggestion(`LINK-006-ltext-${index}`, linkText, headingText, href, anchor, sectionId, linkNearestHeading, suppressSee));
           }
+        } else if (!isResolvableByNOFOBuilder(anchor, cleanHeadingSlugMap)) {
+          // Non-heading element matched: NOFO Builder resolves links by heading
+          // slug only, so a non-heading anchor will be unresolvable after import.
+          const sectionId = findSectionForElement(link, doc);
+          results.push({
+            id: `LINK-006-${index}`,
+            ruleId: 'LINK-006',
+            title: 'Internal link may not work in NOFO Builder',
+            severity: 'warning',
+            sectionId,
+            nearestHeading: linkNearestHeading,
+            location: href,
+            description: `This internal link points to a non-heading anchor (#${anchor}). NOFO Builder resolves internal links by heading name only, so this link may not work in the published NOFO. To fix it, select the link text in Word, go to Insert → Link → This Document, and select the correct heading.`,
+            instructionOnly: true,
+          } as Issue);
         }
         return;
       }
 
       // Tier 1b: exact match against OOXML bookmark names
-      if (ooxmlBookmarkNames && ooxmlBookmarkNames.has(anchor)) return;
+      if (ooxmlBookmarkNames && ooxmlBookmarkNames.has(anchor)) {
+        // Anchor exists as an OOXML bookmark, but NOFO Builder resolves links by
+        // heading slug only. Warn when the bookmark is not derived from any heading.
+        if (!isResolvableByNOFOBuilder(anchor, cleanHeadingSlugMap)) {
+          const sectionId = findSectionForElement(link, doc);
+          results.push({
+            id: `LINK-006-${index}`,
+            ruleId: 'LINK-006',
+            title: 'Internal link may not work in NOFO Builder',
+            severity: 'warning',
+            sectionId,
+            nearestHeading: linkNearestHeading,
+            location: href,
+            description: `This internal link points to bookmark "#${anchor}" which is not derived from a heading. NOFO Builder resolves internal links by heading name only, so this link may not work in the published NOFO. To fix it, select the link text in Word, go to Insert → Link → This Document, and select the correct heading.`,
+            instructionOnly: true,
+          } as Issue);
+        }
+        return;
+      }
 
       // Tier 1c: match via slug of trimmed heading text.
       // Handles headings with leading spaces (CLEAN-008 strips these in the output)
@@ -209,6 +242,63 @@ const LINK_006: Rule = {
         nearestHeading: linkNearestHeading,
         location: href,
         description: `This internal link may be broken. To fix it, select the link text in Word, go to Insert → Link → This Document, and select the correct heading. Do not edit the link URL directly.`,
+        instructionOnly: true,
+      } as Issue);
+    });
+
+    // Case 1: bookmark:// pseudo-scheme links.
+    // Word creates these when a hyperlink dialog produces a relationship with
+    // TargetMode="External" and Target="bookmark://anchorName". Mammoth renders
+    // them as <a href="bookmark://..."> — not caught by the a[href^="#"] query above.
+    // Word and NOFO Builder cannot resolve this URL scheme, so the link is always
+    // broken. Rewrite to w:anchor when the anchor can be resolved; emit a warning
+    // when it cannot.
+    const bookmarkSchemeLinks = Array.from(htmlDoc.querySelectorAll('a[href^="bookmark://"]'));
+    bookmarkSchemeLinks.forEach((link, malformedIdx) => {
+      const href = link.getAttribute('href') ?? '';
+      const rawAnchor = href.slice('bookmark://'.length);
+      if (!rawAnchor) return;
+      const { nearestHeading: linkNearestHeading } = getContext(link);
+      const sectionId = findSectionForElement(link, doc);
+
+      // Prefer OOXML bookmark name (preserves case, works in Word immediately)
+      const exactOoxmlAnchor =
+        (ooxmlBookmarkNames?.has(rawAnchor) ? rawAnchor : null) ??
+        (ooxmlBookmarkNames?.has('_' + rawAnchor) ? '_' + rawAnchor : null);
+      if (exactOoxmlAnchor !== null) {
+        results.push({
+          ruleId: 'LINK-006',
+          description: `Rewired malformed bookmark:// link to internal link "#${exactOoxmlAnchor}"`,
+          targetField: `link.malformed.bookmark.${rawAnchor}`,
+          value: exactOoxmlAnchor,
+        } as AutoAppliedChange);
+        return;
+      }
+
+      // Fall back to heading slug (NOFO Builder can resolve this)
+      const headingEl = cleanHeadingSlugMap.get(rawAnchor);
+      if (headingEl !== undefined) {
+        const headingText = (headingEl.textContent ?? '').trim();
+        // Encode headingText so buildDocx can insert a bookmark if none exists
+        results.push({
+          ruleId: 'LINK-006',
+          description: `Rewired malformed bookmark:// link to internal link "#${rawAnchor}"`,
+          targetField: `link.malformed.bookmark.${rawAnchor}`,
+          value: `${rawAnchor}::${headingText}`,
+        } as AutoAppliedChange);
+        return;
+      }
+
+      // No match — cannot rewrite, instruct user to fix manually
+      results.push({
+        id: `LINK-006-malformed-${malformedIdx}`,
+        ruleId: 'LINK-006',
+        title: 'Internal link may not work in NOFO Builder',
+        severity: 'warning',
+        sectionId,
+        nearestHeading: linkNearestHeading,
+        location: href,
+        description: `This link uses a "bookmark://" URL that Word cannot resolve, and no matching heading was found to rewire it to. To fix it, select the link text in Word, go to Insert → Link → This Document, and select the correct heading.`,
         instructionOnly: true,
       } as Issue);
     });
@@ -664,6 +754,30 @@ function findSectionForElement(el: Element, doc: ParsedDocument): string {
     if (section.rawText.includes(text)) return section.id;
   }
   return doc.sections[0]?.id ?? 'section-preamble';
+}
+
+/**
+ * Returns true when the anchor is resolvable by NOFO Builder after import.
+ *
+ * NOFO Builder resolves internal links exclusively via slugifyHeading(headingText).
+ * Two cases are treated as resolvable:
+ *  1. The anchor exactly matches a heading slug in cleanHeadingSlugMap.
+ *  2. The anchor begins with '_' — NOFO Builder always prefixes its own heading
+ *     bookmarks with '_', so any '_'-prefixed anchor is assumed to target a
+ *     heading bookmark created by NOFO Builder, even when that heading is not
+ *     visible in the current HTML rendition (e.g. minimal test fixtures).
+ *
+ * A bookmark that exists in OOXML but is not derived from a heading text will be
+ * unresolvable in the published NOFO even though Word can navigate to it locally.
+ */
+function isResolvableByNOFOBuilder(
+  anchor: string,
+  cleanHeadingSlugMap: Map<string, Element>
+): boolean {
+  if (cleanHeadingSlugMap.has(anchor)) return true;
+  // '_'-prefixed bookmarks are NOFO Builder heading bookmarks; do not flag them.
+  if (anchor.startsWith('_')) return true;
+  return false;
 }
 
 export default LINK_006;

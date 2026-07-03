@@ -1101,3 +1101,80 @@ describe('LINK-006 heading-derived anchor — slugifyHeading wins over legacy bo
     expect(change!.value).not.toContain('::');
   });
 });
+
+// ─── Case 1: malformed bookmark:// links ─────────────────────────────────────
+
+describe('LINK-006 Case 1: malformed bookmark:// links', () => {
+  it('auto-fixes bookmark:// link when anchor matches an existing OOXML bookmark', () => {
+    const doc = makeDoc(
+      '<h2>Contacts and Support</h2>' +
+      '<p><a href="bookmark://SomeName">link text</a></p>',
+      xmlWithBookmarks('SomeName')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const change = results.find(r => !('severity' in r)) as AutoAppliedChange | undefined;
+    expect(change).toBeDefined();
+    expect(change!.ruleId).toBe('LINK-006');
+    expect(change!.targetField).toBe('link.malformed.bookmark.SomeName');
+    expect(change!.value).toBe('SomeName');
+  });
+
+  it('emits a warning Issue for bookmark:// link with no matching heading or bookmark', () => {
+    const doc = makeDoc(
+      '<h2>Contacts and Support</h2>' +
+      '<p><a href="bookmark://UnknownAnchor">link text</a></p>'
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const issue = results.find(r => 'severity' in r) as Issue | undefined;
+    expect(issue).toBeDefined();
+    expect(issue!.ruleId).toBe('LINK-006');
+    expect(issue!.severity).toBe('warning');
+    expect(issue!.instructionOnly).toBe(true);
+    // Must not auto-fix
+    const hasAutoFix = results.some(r => !('severity' in r));
+    expect(hasAutoFix).toBe(false);
+  });
+});
+
+// ─── Case 2: orphaned OOXML bookmarks ────────────────────────────────────────
+
+describe('LINK-006 Case 2: orphaned OOXML bookmarks', () => {
+  it('emits a warning for w:anchor pointing to OOXML bookmark not derived from a heading', () => {
+    // "ArbitraryBookmark" exists as an OOXML bookmark but is not a heading slug
+    const doc = makeDoc(
+      '<h2 id="Some_Heading">Some Heading</h2>' +
+      '<p><a href="#ArbitraryBookmark">link text</a></p>',
+      xmlWithBookmarks('ArbitraryBookmark')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const issue = results.find(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    ) as Issue | undefined;
+    expect(issue).toBeDefined();
+    expect(issue!.ruleId).toBe('LINK-006');
+    expect(issue!.instructionOnly).toBe(true);
+    // Must not auto-fix
+    const hasAutoFix = results.some(r => !('severity' in r));
+    expect(hasAutoFix).toBe(false);
+  });
+
+  it('does not flag an anchor that matches a heading slug (correctly resolvable)', () => {
+    // "Some_Heading" is the slug for "Some Heading" — NOFO Builder can resolve this
+    const doc = makeDoc(
+      '<h2 id="Some_Heading">Some Heading</h2>' +
+      '<p><a href="#Some_Heading">link text</a></p>',
+      xmlWithBookmarks('Some_Heading')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    // Only a link-text suggestion at most; no warning about unresolvable anchor
+    const hasWarning = results.some(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    );
+    expect(hasWarning).toBe(false);
+  });
+
+  it('does not flag external http links', () => {
+    const doc = makeDoc('<p><a href="https://example.com">external link</a></p>');
+    expect(LINK_006.check(doc, OPTIONS)).toHaveLength(0);
+  });
+});

@@ -171,6 +171,9 @@ export async function buildDocx(
           value: c.value,
         } as AcceptedFix)
     );
+  const malformedBookmarkFixes = autoAppliedChanges.filter(
+    c => c.ruleId === 'LINK-006' && c.targetField?.startsWith('link.malformed.bookmark.') && !!c.value
+  );
 
   // Apply metadata patches
   if (metaFixes.length > 0) {
@@ -180,6 +183,11 @@ export async function buildDocx(
   // Apply body patches (links, format) plus auto-applied bookmark retargets
   if (bodyFixes.length > 0 || imgFixes.length > 0 || autoLinkBookmarkChanges.length > 0) {
     await applyDocumentBodyFixes(zip, [...bodyFixes, ...imgFixes, ...autoLinkBookmarkChanges]);
+  }
+
+  // Rewrite malformed bookmark:// r:id hyperlinks to w:anchor (LINK-006 Case 1)
+  if (malformedBookmarkFixes.length > 0) {
+    await applyMalformedBookmarkFix(zip, malformedBookmarkFixes);
   }
 
   // Apply auto-applied email mailto patches
@@ -750,6 +758,115 @@ function insertBookmarkOnHeadingIfAbsent(
   const pPr = Array.from(targetPara.children).find(c => c.localName === 'pPr');
   targetPara.insertBefore(bmStart, pPr ? pPr.nextSibling : targetPara.firstChild);
   targetPara.appendChild(bmEnd);
+}
+
+/**
+ * LINK-006 Case 1: Rewrite malformed bookmark:// r:id hyperlinks to w:anchor.
+ *
+ * Word creates bookmark:// relationships with TargetMode="External" when the
+ * hyperlink dialog produces a non-resolvable internal target. Word and NOFO
+ * Builder cannot resolve the bookmark:// URL scheme. This function:
+ *  1. Finds each .rels entry whose Target starts with "bookmark://"
+ *  2. Records the rId → resolvedAnchor mapping, then removes the .rels entry
+ *  3. In the matching document XML, replaces the r:id attribute on the
+ *     corresponding w:hyperlink with w:anchor pointing to the resolved anchor
+ *  4. When value encodes "anchor::headingText", inserts a w:bookmarkStart/End
+ *     on the heading paragraph if none exists yet
+ */
+async function applyMalformedBookmarkFix(
+  zip: JSZip,
+  fixes: AutoAppliedChange[]
+): Promise<void> {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
+  const parser = new DOMParser();
+
+  // Build lookup: rawAnchor → { resolvedAnchor, headingText? }
+  const fixMap = new Map<string, { resolvedAnchor: string; headingText: string | null }>();
+  for (const fix of fixes) {
+    const rawAnchor = (fix.targetField ?? '').replace('link.malformed.bookmark.', '');
+    const rawValue = (fix.value ?? '').trim();
+    const colonIdx = rawValue.indexOf('::');
+    const resolvedAnchor = colonIdx >= 0 ? rawValue.slice(0, colonIdx) : rawValue;
+    const headingText = colonIdx >= 0 ? rawValue.slice(colonIdx + 2) : null;
+    if (rawAnchor && resolvedAnchor) {
+      fixMap.set(rawAnchor, { resolvedAnchor, headingText });
+    }
+  }
+  if (fixMap.size === 0) return;
+
+  const relsPaths = Object.keys(zip.files).filter(
+    p => p.startsWith('word/_rels/') && p.endsWith('.rels')
+  );
+
+  for (const relsFilePath of relsPaths) {
+    const relName = relsFilePath.slice('word/_rels/'.length); // e.g. "document.xml.rels"
+    const docPath = 'word/' + relName.slice(0, -'.rels'.length); // e.g. "word/document.xml"
+
+    const relsFile = zip.file(relsFilePath);
+    if (!relsFile) continue;
+
+    const relsStr = await relsFile.async('string');
+    const relsDoc = parser.parseFromString(relsStr, 'application/xml');
+
+    // Map rId → fix for this rels file
+    const ridToFix = new Map<string, { resolvedAnchor: string; headingText: string | null }>();
+    let relsChanged = false;
+
+    const relsByNS = Array.from(relsDoc.getElementsByTagNameNS(RELS_NS, 'Relationship'));
+    const relsByTag = Array.from(relsDoc.getElementsByTagName('Relationship'));
+    const allRels = Array.from(new Set<Element>([...relsByNS, ...relsByTag]));
+
+    for (const rel of allRels) {
+      const target = rel.getAttribute('Target') ?? '';
+      if (!target.startsWith('bookmark://')) continue;
+      const rawAnchor = target.slice('bookmark://'.length);
+      const fix = fixMap.get(rawAnchor);
+      if (!fix) continue;
+      const rId = rel.getAttribute('Id') ?? '';
+      if (rId) ridToFix.set(rId, fix);
+      rel.parentNode?.removeChild(rel);
+      relsChanged = true;
+    }
+
+    if (relsChanged) {
+      zip.file(relsFilePath, serializeXml(relsDoc), { compression: 'STORE' });
+    }
+
+    if (ridToFix.size === 0) continue;
+
+    const docFile = zip.file(docPath);
+    if (!docFile) continue;
+
+    const xmlStr = await docFile.async('string');
+    const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+    let docChanged = false;
+
+    const hyperlinks = Array.from(xmlDoc.getElementsByTagName('w:hyperlink'));
+    for (const el of hyperlinks) {
+      const rId = el.getAttribute('r:id') ?? el.getAttributeNS(R, 'id') ?? '';
+      const fix = ridToFix.get(rId);
+      if (!fix) continue;
+
+      // Remove r:id
+      el.removeAttribute('r:id');
+      el.removeAttributeNS(R, 'id');
+      // Set w:anchor (remove first to avoid namespace duplication)
+      el.removeAttribute('w:anchor');
+      el.removeAttributeNS(W, 'anchor');
+      el.setAttributeNS(W, 'w:anchor', fix.resolvedAnchor);
+
+      if (fix.headingText) {
+        insertBookmarkOnHeadingIfAbsent(xmlDoc, fix.resolvedAnchor, fix.headingText);
+      }
+      docChanged = true;
+    }
+
+    if (docChanged) {
+      zip.file(docPath, serializeXml(xmlDoc));
+    }
+  }
 }
 
 /**
