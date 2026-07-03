@@ -137,7 +137,7 @@ const LINK_006: Rule = {
             sectionId,
             nearestHeading: linkNearestHeading,
             location: href,
-            description: `This internal link points to a non-heading anchor (#${anchor}). NOFO Builder resolves internal links by heading name only, so this link may not work in the published NOFO. To fix it, select the link text in Word, go to Insert → Link → This Document, and select the correct heading.`,
+            description: `This internal link points to a non-heading anchor (#${anchor}). NOFO Builder resolves internal links by heading name only, so this link will be broken in the published NOFO. To fix it: if it should point to a section of this document, update it to link to the correct heading (Insert → Link → This Document in Word); if it should point to an external website, remove the internal link and replace it with the external URL.`,
             instructionOnly: true,
           } as Issue);
         }
