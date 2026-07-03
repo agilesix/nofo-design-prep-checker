@@ -103,6 +103,9 @@ export async function buildDocx(
   const hasBoldColonFix = autoAppliedChanges.some(
     c => c.targetField === 'text.colon.unbold'
   );
+  const hasGreenBrownColorFix = autoAppliedChanges.some(
+    c => c.targetField === 'run.color.green-brown.strip'
+  );
   const hasPartialHyperlinkFix = autoAppliedChanges.some(
     c => c.targetField === 'link.partial.fix'
   );
@@ -329,6 +332,11 @@ export async function buildDocx(
   // Remove bold from sole-colon runs immediately preceded by non-bold text
   if (hasBoldColonFix) {
     await applyBoldColonFix(zip);
+  }
+
+  // Remove green or brown text color from heading and body paragraphs (runs and paragraph marks)
+  if (hasGreenBrownColorFix) {
+    await applyGreenBrownColorFix(zip);
   }
 
   // Remove SAMHSA H1 divider lines (all-underscore H1 paragraphs after "Step 1:")
@@ -4763,5 +4771,119 @@ function c1AddHyperlinkStyle(xmlDoc: Document, W: string, run: Element): void {
     const rStyle = xmlDoc.createElementNS(W, 'w:rStyle');
     rStyle.setAttributeNS(W, 'w:val', 'Hyperlink');
     rPr.insertBefore(rStyle, rPr.firstChild);
+  }
+}
+
+// ─── CLEAN-025: Remove green or brown text color from headings and body paragraphs ─
+// SYNC: C25_EXCLUDED_STYLES, C25_HEADING_STYLES, and c25IsGreenOrBrown below are
+// duplicated from src/rules/universal/CLEAN-025.ts. If you change HSL thresholds
+// or the excluded/heading style lists in either file, update the other to match.
+
+const C25_EXCLUDED_STYLES = new Set([
+  'InstructionBoxes',
+  'InstructionBoxHeading',
+  'Fillintext',
+  'FillintextChar',
+  'PlaceholderText',
+]);
+
+const C25_HEADING_STYLES = new Set([
+  'Heading1', 'Heading2', 'Heading3', 'Heading4', 'Heading5', 'Heading6',
+]);
+
+function c25HexToRgb(hex: string): [number, number, number] | null {
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return null;
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return null;
+  return [r, g, b];
+}
+
+function c25RgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const l = (max + min) / 2;
+  if (max === min) return [0, 0, l * 100];
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h: number;
+  switch (max) {
+    case rn: h = (gn - bn) / d + (gn < bn ? 6 : 0); break;
+    case gn: h = (bn - rn) / d + 2; break;
+    default:  h = (rn - gn) / d + 4; break;
+  }
+  return [h * 60, s * 100, l * 100];
+}
+
+function c25IsGreenOrBrown(hex: string): boolean {
+  const rgb = c25HexToRgb(hex);
+  if (!rgb) return false;
+  const [h, s, l] = c25RgbToHsl(...rgb);
+  if (s < 5) return false;
+  if (h >= 80 && h <= 160) return true;
+  if (h >= 20 && h <= 45 && s <= 60 && l >= 15 && l <= 75) return true;
+  return false;
+}
+
+async function applyGreenBrownColorFix(zip: JSZip): Promise<void> {
+  const docFile = zip.file('word/document.xml');
+  if (!docFile) return;
+
+  const xmlStr = await docFile.async('string');
+  if (!xmlStr.includes('w:color')) return;
+
+  const parser = new DOMParser();
+  const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+
+  let changed = false;
+
+  for (const wP of Array.from(xmlDoc.getElementsByTagName('w:p'))) {
+    if (findAncestorByLocalName(wP, 'tbl')) continue;
+
+    const pPr = directChildEl(wP, 'w:pPr');
+    const pStyle = (pPr ? directChildEl(pPr, 'w:pStyle') : null)?.getAttribute('w:val') ?? '';
+
+    if (C25_EXCLUDED_STYLES.has(pStyle)) continue;
+    if (pStyle !== '' && pStyle !== 'Normal' && !C25_HEADING_STYLES.has(pStyle)) continue;
+
+    // Strip green/brown color from each run
+    for (const run of Array.from(wP.getElementsByTagName('w:r'))) {
+      const rPr = directChildEl(run, 'w:rPr');
+      if (!rPr) continue;
+      const rStyleVal = directChildEl(rPr, 'w:rStyle')?.getAttribute('w:val') ?? '';
+      if (C25_EXCLUDED_STYLES.has(rStyleVal)) continue;
+      const color = directChildEl(rPr, 'w:color');
+      if (!color) continue;
+      const val = color.getAttribute('w:val') ?? '';
+      if (!val || val.toLowerCase() === 'auto') continue;
+      if (c25IsGreenOrBrown(val)) {
+        rPr.removeChild(color);
+        changed = true;
+      }
+    }
+
+    // Strip green/brown color from paragraph mark (pPr/rPr/w:color)
+    if (pPr) {
+      const pRpr = directChildEl(pPr, 'w:rPr');
+      if (pRpr) {
+        const color = directChildEl(pRpr, 'w:color');
+        if (color) {
+          const val = color.getAttribute('w:val') ?? '';
+          if (val && val.toLowerCase() !== 'auto' && c25IsGreenOrBrown(val)) {
+            pRpr.removeChild(color);
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+
+  if (changed) {
+    zip.file('word/document.xml', serializeXml(xmlDoc));
   }
 }
