@@ -4,7 +4,7 @@ flowchart TD
     C -- No --> D[Show .docx-only error]
     D --> B
 
-    C -- Yes --> D2[Unzip & pre-process\nJSZip.loadAsync → strip content controls\nw:sdt unwrapped, stale displacedByCustomXml\nmarkers on adjacent bookmarks cleared\nbefore mammoth or any rule runs]
+    C -- Yes --> D2[Unzip & pre-process\nJSZip.loadAsync → strip content controls\nw:sdt unwrapped, stale displacedByCustomXml\nmarkers on adjacent bookmarks cleared\nbefore any rule runs — mammoth below still\nparses the original unstripped bytes]
 
     D2 --> E[Parse document\nmammoth.js → HTML + paragraph objects\nJSZip → raw XML + relationships]
 
