@@ -876,7 +876,8 @@ function isResolvableByNOFOBuilder(
  *     "Insert Bookmark" UI, which forbids these characters entirely) preserve
  *     '&' (treated as the word "and", matching normalizeBookmarkForFuzzyMatch's
  *     existing convention), ':' (common in "Step N:"/"Section N:" headings),
- *     and '-' literally instead of substituting an underscore. Deliberately
+ *     '-', and '/' (e.g. "Step 3/4: Overview", per slugifyHeading's own doc
+ *     comment) literally instead of substituting an underscore. Deliberately
  *     does NOT extend to '.' or other punctuation — see isResolvableByNOFOBuilder's
  *     doc comment for why (the _Grants.gov case must stay unresolvable).
  *  2. Case differences between the stored bookmark name and the heading's
@@ -933,15 +934,16 @@ function matchesHeadingSlugWithWordQuirks(
  * Normalizes a bookmark body for comparison against heading slugs: treats
  * '&' as the word "and" (padded with underscores so it becomes a standalone
  * word, matching normalizeBookmarkForFuzzyMatch's convention — e.g.
- * "Contacts_&_Support" → "Contacts_and_Support"), converts ':' and '-' to
- * '_' (matching what slugifyHeading itself does to any non-alphanumeric
- * character), then collapses repeated underscores. Deliberately leaves every
- * other character — most importantly '.' — untouched.
+ * "Contacts_&_Support" → "Contacts_and_Support"), converts ':', '-', and '/'
+ * to '_' (matching what slugifyHeading itself does to any non-alphanumeric
+ * character — e.g. slugifyHeading turns "Step 3/4: Overview" into
+ * "Step_3_4_Overview"), then collapses repeated underscores. Deliberately
+ * leaves every other character — most importantly '.' — untouched.
  */
 function normalizeBookmarkBodyForHeadingComparison(body: string): string {
   return body
     .replace(/&/g, '_and_')
-    .replace(/[:-]/g, '_')
+    .replace(/[:/-]/g, '_')
     .replace(/_+/g, '_')
     .replace(/^_+|_+$/g, '');
 }

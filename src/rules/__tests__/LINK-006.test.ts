@@ -1451,6 +1451,20 @@ describe('LINK-006 Case 2: literal punctuation (&, :, -) and case-insensitive ma
     expect(hasWarning).toBe(false);
   });
 
+  it('does not flag a bookmark with a literal slash where slugifyHeading would use an underscore', () => {
+    // slugifyHeading's own doc comment example: "Step 3/4: Overview" → "Step_3_4_Overview".
+    const doc = makeDoc(
+      '<h2>Step 3/4: Overview</h2>' +
+      '<p><a id="_Step_3/4:_Overview"></a>body text</p>' +
+      '<p><a href="#_Step_3/4:_Overview">see overview</a></p>',
+      xmlWithBookmarks('_Step_3/4:_Overview')
+    );
+    const hasWarning = LINK_006.check(doc, OPTIONS).some(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    );
+    expect(hasWarning).toBe(false);
+  });
+
   it('does not flag a bookmark whose case differs from the current heading text', () => {
     const doc = makeDoc(
       '<h2>paper submissions</h2>' +
