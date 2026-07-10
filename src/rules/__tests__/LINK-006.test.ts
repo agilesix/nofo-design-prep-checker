@@ -1404,14 +1404,14 @@ describe('LINK-006 Case 2: Word bookmark-naming quirks (numeric suffix, truncati
 //
 // A second live-testing pass found 6 more confirmed false positives that the
 // numeric-suffix/truncation-prefix tolerance above did not cover: some
-// bookmark-generating tools preserve '&', ':', and '-' literally where
+// bookmark-generating tools preserve '&', ':', '-', and '/' literally where
 // slugifyHeading would substitute an underscore, and heading text can drift in
 // case independently of an already-created bookmark name. All 6 are genuinely
 // heading-derived bookmarks NOFO Builder resolves correctly; none of the new
 // tolerance extends to '.' (or any other punctuation), which is what keeps the
 // _Grants.gov regression guard passing.
 
-describe('LINK-006 Case 2: literal punctuation (&, :, -) and case-insensitive match', () => {
+describe('LINK-006 Case 2: literal punctuation (&, :, -, /) and case-insensitive match', () => {
   it('does not flag a bookmark with a literal ampersand where the heading uses "and"', () => {
     const doc = makeDoc(
       '<h2>Contacts and support</h2>' +
