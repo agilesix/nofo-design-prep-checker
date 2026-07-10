@@ -829,12 +829,20 @@ function findSectionForElement(el: Element, doc: ParsedDocument): string {
  * NOFO Builder resolves internal links exclusively via slugifyHeading(headingText).
  * Two cases are treated as resolvable:
  *  1. The anchor exactly matches a heading slug in cleanHeadingSlugMap.
- *  2. The anchor begins with '_' AND its body (the portion after '_') is also a
- *     key in cleanHeadingSlugMap. NOFO Builder creates heading bookmarks as
- *     '_' + slugifyHeading(headingText), so the body must equal a heading slug.
- *     A bookmark like '_Grants.gov' whose body 'Grants.gov' is not any heading's
+ *  2. The anchor begins with '_' AND its body (the portion after '_') resolves to
+ *     a heading slug in cleanHeadingSlugMap — see matchesHeadingSlugWithWordQuirks
+ *     for the exact/suffix/truncation tolerance applied to the body. NOFO Builder
+ *     creates heading bookmarks as '_' + slugifyHeading(headingText); a bookmark
+ *     like '_Grants.gov' whose body 'Grants.gov' does not resolve to any heading's
  *     slug (slugifyHeading('Grants.gov') = 'Grants_gov') is orphaned and will be
  *     unresolvable after import — even if a same-named heading exists elsewhere.
+ *
+ * Case 2's body-matching tolerance is deliberately NOT applied to case 1 (the bare,
+ * no-underscore anchor): case 1 covers anchors that are literally typed as a heading
+ * slug, not Word's auto-generated heading-bookmark convention, so it stays a strict
+ * exact match. This also keeps a non-heading, non-underscore-prefixed bookmark (e.g.
+ * a bookmark sitting on a bullet-list paragraph) correctly unresolvable even if its
+ * name happens to be a prefix of some unrelated heading's slug.
  *
  * A bookmark that exists in OOXML but is not derived from a heading text will be
  * unresolvable in the published NOFO even though Word can navigate to it locally.
@@ -844,11 +852,57 @@ function isResolvableByNOFOBuilder(
   cleanHeadingSlugMap: Map<string, Element>
 ): boolean {
   if (cleanHeadingSlugMap.has(anchor)) return true;
-  // For '_'-prefixed bookmarks, verify the body matches a heading slug.
+  // For '_'-prefixed bookmarks, verify the body resolves to a heading slug.
   // NOFO Builder creates heading bookmarks as '_' + slugifyHeading(text), so a
-  // correctly-placed bookmark's body will be a key in cleanHeadingSlugMap.
+  // correctly-placed bookmark's body will be a key in cleanHeadingSlugMap —
+  // modulo the known Word bookmark-naming quirks handled below.
   if (anchor.startsWith('_')) {
-    return cleanHeadingSlugMap.has(anchor.slice(1));
+    return matchesHeadingSlugWithWordQuirks(anchor.slice(1), cleanHeadingSlugMap);
+  }
+  return false;
+}
+
+/**
+ * Returns true when `body` resolves to some key in `cleanHeadingSlugMap`,
+ * tolerating two known Word bookmark-naming quirks that surface when a
+ * heading-derived bookmark was displaced next to a content control
+ * (w:displacedByCustomXml) and ends up outside its heading paragraph after
+ * the sdt is unwrapped at import time — the exact match against the current
+ * heading slug then fails even though the bookmark is genuinely
+ * heading-derived and NOFO Builder resolves it correctly on import:
+ *
+ *  1. Trailing numeric disambiguation suffix — Word appends _1, _2, … to
+ *     bookmark names when multiple headings share the same text (the same
+ *     quirk the Tier 2 fuzzy matcher already strips; see findFuzzyMatch).
+ *  2. Legacy 40-character bookmark-name truncation — Word truncates long
+ *     bookmark names at an underscore boundary, so the body is a clean
+ *     underscore-delimited prefix of the full heading slug (e.g.
+ *     "Line_item_budget_and" prefixing "Line_item_budget_and_staffing_plan"),
+ *     never a mid-word cut. A double underscore can appear where a whole
+ *     segment was dropped, so runs of underscores are collapsed to one
+ *     before comparing.
+ *
+ * Requiring an underscore immediately after the matched prefix (rather than
+ * a bare substring match) prevents an unrelated short heading from
+ * spuriously "prefix-matching" a longer, unrelated one.
+ */
+function matchesHeadingSlugWithWordQuirks(
+  body: string,
+  cleanHeadingSlugMap: Map<string, Element>
+): boolean {
+  const normalizedBody = body.replace(/_+/g, '_');
+  const candidates = [normalizedBody];
+  const withoutSuffix = normalizedBody.replace(/_\d+$/, '');
+  if (withoutSuffix !== normalizedBody) candidates.push(withoutSuffix);
+
+  if (candidates.some(c => cleanHeadingSlugMap.has(c))) return true;
+
+  for (const slug of cleanHeadingSlugMap.keys()) {
+    for (const candidate of candidates) {
+      if (slug.length > candidate.length && slug.startsWith(candidate) && slug[candidate.length] === '_') {
+        return true;
+      }
+    }
   }
   return false;
 }
