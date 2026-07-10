@@ -1400,6 +1400,86 @@ describe('LINK-006 Case 2: Word bookmark-naming quirks (numeric suffix, truncati
   });
 });
 
+// ─── Case 2 continued: literal punctuation and case drift on displaced bookmarks ───
+//
+// A second live-testing pass found 6 more confirmed false positives that the
+// numeric-suffix/truncation-prefix tolerance above did not cover: some
+// bookmark-generating tools preserve '&', ':', and '-' literally where
+// slugifyHeading would substitute an underscore, and heading text can drift in
+// case independently of an already-created bookmark name. All 6 are genuinely
+// heading-derived bookmarks NOFO Builder resolves correctly; none of the new
+// tolerance extends to '.' (or any other punctuation), which is what keeps the
+// _Grants.gov regression guard passing.
+
+describe('LINK-006 Case 2: literal punctuation (&, :, -) and case-insensitive match', () => {
+  it('does not flag a bookmark with a literal ampersand where the heading uses "and"', () => {
+    const doc = makeDoc(
+      '<h2>Contacts and support</h2>' +
+      '<p><a id="_Contacts_&amp;_Support"></a>body text</p>' +
+      '<p><a href="#_Contacts_&amp;_Support">see contacts</a></p>',
+      xmlWithBookmarks('_Contacts_&_Support')
+    );
+    const hasWarning = LINK_006.check(doc, OPTIONS).some(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    );
+    expect(hasWarning).toBe(false);
+  });
+
+  it('does not flag a bookmark with a literal colon (common in "Step N:" headings)', () => {
+    const doc = makeDoc(
+      '<h2>Step 6: Learn about your eligibility</h2>' +
+      '<p><a id="_Step_6:_Learn"></a>body text</p>' +
+      '<p><a href="#_Step_6:_Learn">see step 6</a></p>',
+      xmlWithBookmarks('_Step_6:_Learn')
+    );
+    const hasWarning = LINK_006.check(doc, OPTIONS).some(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    );
+    expect(hasWarning).toBe(false);
+  });
+
+  it('does not flag a bookmark with a literal hyphen where slugifyHeading would use an underscore', () => {
+    const doc = makeDoc(
+      '<h2>Line item budget and staffing plan</h2>' +
+      '<p><a id="_Line-item_budget_and"></a>body text</p>' +
+      '<p><a href="#_Line-item_budget_and">see budget</a></p>',
+      xmlWithBookmarks('_Line-item_budget_and')
+    );
+    const hasWarning = LINK_006.check(doc, OPTIONS).some(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    );
+    expect(hasWarning).toBe(false);
+  });
+
+  it('does not flag a bookmark whose case differs from the current heading text', () => {
+    const doc = makeDoc(
+      '<h2>paper submissions</h2>' +
+      '<p><a id="_Paper_Submissions"></a>body text</p>' +
+      '<p><a href="#_Paper_Submissions">see paper submissions</a></p>',
+      xmlWithBookmarks('_Paper_Submissions')
+    );
+    const hasWarning = LINK_006.check(doc, OPTIONS).some(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    );
+    expect(hasWarning).toBe(false);
+  });
+
+  it('still flags _Grants.gov when combined with a case difference (period protection survives case-insensitivity)', () => {
+    const doc = makeDoc(
+      '<h2>grants.gov</h2>' +
+      '<p><a id="_Grants.Gov"></a>Maureen Linden</p>' +
+      '<p><a href="#_Grants.Gov">federal service desk</a></p>',
+      xmlWithBookmarks('_Grants.Gov')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const issue = results.find(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    ) as Issue | undefined;
+    expect(issue).toBeDefined();
+    expect(issue!.instructionOnly).toBe(true);
+  });
+});
+
 // ─── Issue 2 regression: bookmark on a non-heading (bullet list) paragraph ───
 
 describe('LINK-006: bookmark on a non-heading bullet-list paragraph (#DEI)', () => {

@@ -864,17 +864,29 @@ function isResolvableByNOFOBuilder(
 
 /**
  * Returns true when `body` resolves to some key in `cleanHeadingSlugMap`,
- * tolerating two known Word bookmark-naming quirks that surface when a
+ * tolerating known Word/bookmark-generator naming quirks that surface when a
  * heading-derived bookmark was displaced next to a content control
  * (w:displacedByCustomXml) and ends up outside its heading paragraph after
  * the sdt is unwrapped at import time — the exact match against the current
  * heading slug then fails even though the bookmark is genuinely
  * heading-derived and NOFO Builder resolves it correctly on import:
  *
- *  1. Trailing numeric disambiguation suffix — Word appends _1, _2, … to
+ *  1. Literal punctuation slugifyHeading would have converted to an
+ *     underscore. Some bookmark-generating tools (unlike Word's native
+ *     "Insert Bookmark" UI, which forbids these characters entirely) preserve
+ *     '&' (treated as the word "and", matching normalizeBookmarkForFuzzyMatch's
+ *     existing convention), ':' (common in "Step N:"/"Section N:" headings),
+ *     and '-' literally instead of substituting an underscore. Deliberately
+ *     does NOT extend to '.' or other punctuation — see isResolvableByNOFOBuilder's
+ *     doc comment for why (the _Grants.gov case must stay unresolvable).
+ *  2. Case differences between the stored bookmark name and the heading's
+ *     current text — Word/NOFO Builder casing has been observed to drift
+ *     independently of the bookmark (the same tolerance Source 3's OOXML
+ *     bookmark lookup already applies elsewhere in this file).
+ *  3. Trailing numeric disambiguation suffix — Word appends _1, _2, … to
  *     bookmark names when multiple headings share the same text (the same
  *     quirk the Tier 2 fuzzy matcher already strips; see findFuzzyMatch).
- *  2. Legacy 40-character bookmark-name truncation — Word truncates long
+ *  4. Legacy 40-character bookmark-name truncation — Word truncates long
  *     bookmark names at an underscore boundary, so the body is a clean
  *     underscore-delimited prefix of the full heading slug (e.g.
  *     "Line_item_budget_and" prefixing "Line_item_budget_and_staffing_plan"),
@@ -890,21 +902,49 @@ function matchesHeadingSlugWithWordQuirks(
   body: string,
   cleanHeadingSlugMap: Map<string, Element>
 ): boolean {
-  const normalizedBody = body.replace(/_+/g, '_');
+  const normalizedBody = normalizeBookmarkBodyForHeadingComparison(body);
   const candidates = [normalizedBody];
   const withoutSuffix = normalizedBody.replace(/_\d+$/, '');
   if (withoutSuffix !== normalizedBody) candidates.push(withoutSuffix);
 
-  if (candidates.some(c => cleanHeadingSlugMap.has(c))) return true;
-
+  const slugsLower = new Map<string, string>();
   for (const slug of cleanHeadingSlugMap.keys()) {
+    const lower = slug.toLowerCase();
+    if (!slugsLower.has(lower)) slugsLower.set(lower, slug);
+  }
+
+  if (candidates.some(c => slugsLower.has(c.toLowerCase()))) return true;
+
+  for (const slugLower of slugsLower.keys()) {
     for (const candidate of candidates) {
-      if (slug.length > candidate.length && slug.startsWith(candidate) && slug[candidate.length] === '_') {
+      const candidateLower = candidate.toLowerCase();
+      if (
+        slugLower.length > candidateLower.length &&
+        slugLower.startsWith(candidateLower) &&
+        slugLower[candidateLower.length] === '_'
+      ) {
         return true;
       }
     }
   }
   return false;
+}
+
+/**
+ * Normalizes a bookmark body for comparison against heading slugs: treats
+ * '&' as the word "and" (padded with underscores so it becomes a standalone
+ * word, matching normalizeBookmarkForFuzzyMatch's convention — e.g.
+ * "Contacts_&_Support" → "Contacts_and_Support"), converts ':' and '-' to
+ * '_' (matching what slugifyHeading itself does to any non-alphanumeric
+ * character), then collapses repeated underscores. Deliberately leaves every
+ * other character — most importantly '.' — untouched.
+ */
+function normalizeBookmarkBodyForHeadingComparison(body: string): string {
+  return body
+    .replace(/&/g, '_and_')
+    .replace(/[:-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
 }
 
 export default LINK_006;
