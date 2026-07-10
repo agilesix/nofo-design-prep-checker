@@ -1291,6 +1291,140 @@ describe('LINK-006 Case 2: orphaned OOXML bookmarks', () => {
   });
 });
 
+// ─── Case 2 continued: Word bookmark-naming quirks on displaced bookmarks ────
+//
+// Bookmarks that were originally w:displacedByCustomXml="next" siblings before a
+// <w:sdt> can end up outside their heading paragraph after the sdt is unwrapped
+// at import time (see fix/strip-sdts-at-import). The bookmark is still genuinely
+// heading-derived and NOFO Builder resolves it correctly on import, but its name
+// no longer exactly equals the current heading slug because of two known Word
+// bookmark-naming quirks: a trailing numeric disambiguation suffix (_1, _2, …)
+// for repeated heading text, and legacy 40-character bookmark-name truncation for
+// long headings. isResolvableByNOFOBuilder must tolerate both — without treating
+// an unrelated, non-heading bookmark as resolvable just because it happens to be
+// a short prefix of some heading's slug.
+
+describe('LINK-006 Case 2: Word bookmark-naming quirks (numeric suffix, truncation)', () => {
+  it('does not flag a bookmark with a Word numeric disambiguation suffix (_2) for a repeated heading', () => {
+    const doc = makeDoc(
+      '<h2>Attachments</h2><p>first occurrence body</p>' +
+      '<h3>Attachments</h3>' +
+      '<p><a id="_Attachments_2"></a>second occurrence body</p>' +
+      '<p><a href="#_Attachments_2">see attachments</a></p>',
+      xmlWithBookmarks('_Attachments_2')
+    );
+    const hasWarning = LINK_006.check(doc, OPTIONS).some(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    );
+    expect(hasWarning).toBe(false);
+  });
+
+  it('does not flag a truncated bookmark that is a clean underscore-boundary prefix of the heading slug', () => {
+    // Word's legacy 40-character bookmark-name cap truncates long headings at an
+    // underscore boundary — "Line_item_budget_and" is a prefix of the full slug.
+    const doc = makeDoc(
+      '<h2>Line item budget and staffing plan</h2>' +
+      '<p><a id="_Line_item_budget_and"></a>body text</p>' +
+      '<p><a href="#_Line_item_budget_and">see budget</a></p>',
+      xmlWithBookmarks('_Line_item_budget_and')
+    );
+    const hasWarning = LINK_006.check(doc, OPTIONS).some(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    );
+    expect(hasWarning).toBe(false);
+  });
+
+  it('does not flag a truncated bookmark with a doubled underscore where a segment was dropped', () => {
+    const doc = makeDoc(
+      '<h2>Required forms and certifications</h2>' +
+      '<p><a id="_Required__forms"></a>body text</p>' +
+      '<p><a href="#_Required__forms">see forms</a></p>',
+      xmlWithBookmarks('_Required__forms')
+    );
+    const hasWarning = LINK_006.check(doc, OPTIONS).some(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    );
+    expect(hasWarning).toBe(false);
+  });
+
+  it('still flags an unrelated short bookmark that only coincidentally prefixes a heading slug', () => {
+    // "_Attach" must NOT resolve just because "Attachments" starts with "Attach" —
+    // there is no underscore boundary immediately after "Attach" in "Attachments",
+    // so this is not the truncation pattern and must remain a warning.
+    const doc = makeDoc(
+      '<h2>Attachments</h2>' +
+      '<p><a id="_Attach"></a>unrelated body text</p>' +
+      '<p><a href="#_Attach">see attach</a></p>',
+      xmlWithBookmarks('_Attach')
+    );
+    const hasWarning = LINK_006.check(doc, OPTIONS).some(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    );
+    expect(hasWarning).toBe(true);
+  });
+
+  it('still flags _Grants.gov even with the new tolerance (regression guard)', () => {
+    // "Grants.gov" contains a literal period that never appears in any heading
+    // slug, so none of the new tolerances (suffix-strip, underscore-boundary
+    // prefix) can make this orphaned bookmark spuriously resolvable.
+    const doc = makeDoc(
+      '<h2>Grants.gov</h2>' +
+      '<p><a id="_Grants.gov"></a>Maureen Linden</p>' +
+      '<p><a href="#_Grants.gov">federal service desk</a></p>',
+      xmlWithBookmarks('_Grants.gov')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const issue = results.find(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    ) as Issue | undefined;
+    expect(issue).toBeDefined();
+    expect(issue!.instructionOnly).toBe(true);
+  });
+
+  it('does not falsely resolve a non-heading bookmark just because a similarly-worded heading exists', () => {
+    // #DEI (no leading underscore) must stay strict/exact-match-only (case 1),
+    // even though "DEI initiatives and inclusion practices" would satisfy the
+    // underscore-boundary prefix tolerance if it were applied to case 1.
+    const doc = makeDoc(
+      '<h2>DEI initiatives and inclusion practices</h2>' +
+      '<ul><li><a id="DEI"></a>Applicants must address diversity, equity, and inclusion.</li></ul>' +
+      '<p><a href="#DEI">DEI section</a></p>',
+      xmlWithBookmarks('DEI')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const issue = results.find(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    ) as Issue | undefined;
+    expect(issue).toBeDefined();
+    expect(issue!.description).toContain('non-heading anchor (#DEI)');
+  });
+});
+
+// ─── Issue 2 regression: bookmark on a non-heading (bullet list) paragraph ───
+
+describe('LINK-006: bookmark on a non-heading bullet-list paragraph (#DEI)', () => {
+  it('flags #DEI as a warning when the bookmark sits on a bullet-list paragraph, not a heading', () => {
+    // Confirms current, correct behavior: a bookmark that exists in OOXML but is
+    // not on (or derived from) a heading is genuinely unresolvable by NOFO
+    // Builder, and must remain a warning.
+    const doc = makeDoc(
+      '<h2>Program requirements</h2>' +
+      '<ul><li><a id="DEI"></a>Applicants must address diversity, equity, and inclusion.</li></ul>' +
+      '<p><a href="#DEI">DEI section</a></p>',
+      xmlWithBookmarks('DEI')
+    );
+    const results = LINK_006.check(doc, OPTIONS);
+    const issue = results.find(
+      r => 'severity' in r && (r as Issue).severity === 'warning'
+    ) as Issue | undefined;
+    expect(issue).toBeDefined();
+    expect(issue!.ruleId).toBe('LINK-006');
+    expect(issue!.instructionOnly).toBe(true);
+    expect(issue!.description).toContain('non-heading anchor (#DEI)');
+    expect(results.some(r => !('severity' in r))).toBe(false);
+  });
+});
+
 // ─── Endnote/footnote exclusion ───────────────────────────────────────────────
 
 describe('LINK-006 endnote/footnote exclusion', () => {
