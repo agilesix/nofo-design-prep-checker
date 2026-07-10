@@ -4,6 +4,18 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
+## 2026-07-10 — Move SDT stripping to import time
+
+**Decision:** Run `stripContentControlsFromXmlDoc` as a pre-processing step in `parseDocx.ts` immediately after unzipping, before mammoth or any rule sees the document. Removed the download-time call from `buildDocx.ts`.
+
+**Reason:** `w:displacedByCustomXml="next"` bookmarks sit as body-level siblings before `w:sdt` elements. When the prepped download is opened and resaved in Word, Word strips these displaced bookmarks, breaking internal links in NOFO Builder. By stripping SDTs at import time, bookmarks are relocated into normal paragraph positions and survive a subsequent Word resave.
+
+**Alternative considered:** Proactively relocating displaced bookmarks into adjacent paragraphs before download. Rejected due to risk of broken bookmark spans across SDT boundaries and unintended interaction with heading rename rules.
+
+**Outcome:** All rules and mammoth always see an SDT-free document. Displaced bookmark attributes (`w:displacedByCustomXml`) are also cleaned up after stripping. One narrow caveat: mammoth has special-case handling for native SDT checkbox content controls; stripping before mammoth would degrade these to plain text in the live preview. Assessed as non-blocking since this codebase uses glyph-based checkboxes exclusively.
+
+---
+
 ## 2026-07-03 — LINK-006: third-pass audit and fix of false positives in HHS-2026-ACL-NIDILRR-DPCP-0221
 
 **Context:** After the PR 313 and PR 314 fixes were deployed, two categories of false positive remained and one true positive was still missing. A full audit of every internal-link warning produced on HHS-2026-ACL-NIDILRR-DPCP-0221 was conducted by extracting and inspecting the document's OOXML and mammoth-generated HTML before writing any fix.
