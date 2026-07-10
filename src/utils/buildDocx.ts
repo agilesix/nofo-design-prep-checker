@@ -4,16 +4,7 @@ import { DGHT_STEP1_ANCHOR } from '../rules/opdiv/CLEAN-007-constants';
 import { groupListParagraphs } from './listHelpers';
 import { slugifyHeading } from './anchorUtils';
 import { applyTimeFormatsToText } from './timeFormat';
-
-// XMLSerializer.serializeToString() drops the XML declaration. Word for iOS
-// (and strict XML consumers) require it — desktop Word auto-repairs missing
-// declarations, masking the issue on non-iOS platforms. This wrapper restores
-// the standard OOXML declaration whenever it is absent.
-const _xmlSerializer = new XMLSerializer();
-function serializeXml(xmlDoc: Document): string {
-  const raw = _xmlSerializer.serializeToString(xmlDoc);
-  return raw.startsWith('<?xml') ? raw : `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${raw}`;
-}
+import { serializeXml } from './xmlSerialize';
 
 const BUILD_DOCX_DEBUG =
   (globalThis as typeof globalThis & {
@@ -382,10 +373,11 @@ export async function buildDocx(
     await applyIntergovernmentalReviewSentenceCaseFix(zip);
   }
 
-  // Strip content controls — unconditional, silent (documented on the Download
-  // page; no issue is surfaced to the user and no entry goes in the summary).
-  // Runs before TABLE-004 so that tables wrapped in w:sdt are already unwrapped.
-  await applyRemoveContentControls(zip);
+  // Content-control (<w:sdt>) stripping moved to import time (parseDocx.ts,
+  // via stripContentControlsFromZip) so that content controls — and any
+  // bookmarks Word displaced next to them — are unwrapped before any rule
+  // runs, not just before download. By the time a document reaches this
+  // pipeline it is already content-control-free.
 
   // Apply heading style to "Important: public information" in single-cell tables
   if (hasImportantPublicHeadingFix) {
@@ -4076,38 +4068,6 @@ function directChildEl(parent: Element, tagName: string): Element | null {
   return null;
 }
 
-/**
- * Strips all <w:sdt> (content control) elements from every story part in the
- * document: word/document.xml, word/footnotes.xml, word/endnotes.xml, and any
- * header/footer parts present in the ZIP. This is the same part set used by
- * applyAcceptTrackedChangesAndRemoveComments.
- *
- * For each <w:sdt>, the visible content inside <w:sdtContent> is spliced in
- * place of the wrapper; <w:sdtPr> and <w:sdtEndPr> are discarded. Applied
- * unconditionally on every download.
- *
- * A cheap string pre-check ('<w:sdt') skips DOM parsing for parts that contain
- * no content controls, keeping the common case (no content controls) nearly free.
- */
-async function applyRemoveContentControls(zip: JSZip): Promise<void> {
-  const parser = new DOMParser();
-
-
-  for (const path of getStoryPartPaths(zip)) {
-    const file = zip.file(path);
-    if (!file) continue;
-
-    const xmlStr = await file.async('string');
-    // Cheap pre-check: skip DOM parse when the part contains no content controls.
-    if (!xmlStr.includes('<w:sdt')) continue;
-
-    const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
-    if (stripContentControlsFromXmlDoc(xmlDoc)) {
-      zip.file(path, serializeXml(xmlDoc));
-    }
-  }
-}
-
 // ─── CLEAN-018: Remove universal instruction box tables ──────────────────────
 
 /**
@@ -4181,17 +4141,6 @@ function c18IsInstructionBoxTbl(tbl: Element): boolean {
   return text.includes('instructions');
 }
 
-/**
- * Unwraps all <w:sdt> elements in the given XML document in-place, splicing
- * each control's <w:sdtContent> children into the parent in its place.
- * <w:sdtPr> and <w:sdtEndPr> are discarded with the wrapper.
- * Returns true when at least one <w:sdt> was found and removed.
- *
- * Processes in reverse document order so nested controls are unwrapped before
- * their ancestors — when an inner <w:sdt> is removed, its extracted children
- * land inside the outer <w:sdtContent>, which the outer pass then hoists
- * correctly.
- */
 // ─── ATTACH-001: Required. paragraph positioning in Attachments h5 blocks ────
 
 /**
@@ -4452,38 +4401,6 @@ function att_isRunBold(run: Element): boolean {
     b.getAttribute('val') ??
     null;
   return val === null || val === '' || val === 'true' || val === '1';
-}
-
-function stripContentControlsFromXmlDoc(xmlDoc: Document): boolean {
-  const sdts = Array.from(xmlDoc.getElementsByTagName('w:sdt')).reverse();
-  if (sdts.length === 0) return false;
-
-  for (const sdt of sdts) {
-    const parent = sdt.parentNode;
-    if (!parent) continue;
-    // Walk sdt children in document order so the relative positions of
-    // bookmarkStart, sdtContent body, and bookmarkEnd are preserved after
-    // unwrapping — hoisting sdtContent first (previous approach) placed
-    // bookmarks after the content they wrapped, breaking the bookmark span.
-    // sdtPr / sdtEndPr are style metadata and are dropped.
-    for (const child of Array.from(sdt.childNodes)) {
-      if (child.nodeType !== 1 /* ELEMENT_NODE */) continue;
-      const el = child as Element;
-      if (el.localName === 'sdtContent') {
-        while (el.firstChild) {
-          parent.insertBefore(el.firstChild, sdt);
-        }
-      } else if (el.localName === 'sdtPr' || el.localName === 'sdtEndPr') {
-        // Drop: style metadata, not document content
-      } else {
-        // bookmarkStart, bookmarkEnd, etc. — hoist in place
-        parent.insertBefore(child, sdt);
-      }
-    }
-    parent.removeChild(sdt);
-  }
-
-  return true;
 }
 
 // ─── CLEAN-020: Remove SAMHSA H1 divider lines ───────────────────────────────

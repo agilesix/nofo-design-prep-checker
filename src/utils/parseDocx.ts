@@ -2,6 +2,7 @@ import mammoth from 'mammoth';
 import JSZip from 'jszip';
 import type { ParsedDocument, Section, ActiveContentGuide } from '../types';
 import { sanitizeHtml } from './sanitize';
+import { stripContentControlsFromZip } from './contentControlStripping';
 
 export async function parseDocx(
   file: File,
@@ -9,9 +10,20 @@ export async function parseDocx(
 ): Promise<ParsedDocument> {
   const arrayBuffer = await file.arrayBuffer();
 
+  // Load as JSZip and strip <w:sdt> content controls immediately, before
+  // mammoth or any rule sees the document. This relocates content into
+  // normal document structure at the earliest possible point — in
+  // particular, bookmarks Word displaced next to a content control
+  // (w:displacedByCustomXml) end up sitting next to plain content instead of
+  // an opaque <w:sdt> — so they survive every rule in the pipeline and a
+  // subsequent Word resave without breaking internal links.
+  const zipArchive = await JSZip.loadAsync(arrayBuffer);
+  await stripContentControlsFromZip(zipArchive);
+  const strippedArrayBuffer = await zipArchive.generateAsync({ type: 'arraybuffer' });
+
   // Parse with mammoth for HTML
   const mammothResult = await mammoth.convertToHtml(
-    { arrayBuffer },
+    { arrayBuffer: strippedArrayBuffer },
     {
       styleMap: [
         "p[style-name='Heading 1'] => h1:fresh",
@@ -25,9 +37,6 @@ export async function parseDocx(
   );
 
   const html = sanitizeHtml(mammothResult.value);
-
-  // Load as JSZip for raw XML access
-  const zipArchive = await JSZip.loadAsync(arrayBuffer);
 
   // Read core XML files now so rules can inspect OOXML synchronously
   const documentXmlFile = zipArchive.file('word/document.xml');

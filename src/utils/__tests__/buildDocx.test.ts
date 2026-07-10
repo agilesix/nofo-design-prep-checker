@@ -2645,172 +2645,12 @@ describe('buildDocx — applyH2TitleCaseFix', () => {
   });
 });
 
-// ─── applyRemoveContentControls ──────────────────────────────────────────────
-
-const SDT_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-
-/** Build a document.xml string that wraps `innerXml` in a single <w:sdt>. */
-function makeSdtDocumentXml(innerXml: string): string {
-  return (
-    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-    `<w:document xmlns:w="${SDT_NS}">` +
-    `<w:body>` +
-    `<w:sdt>` +
-    `<w:sdtPr><w:tag w:val="testControl"/></w:sdtPr>` +
-    `<w:sdtContent>${innerXml}</w:sdtContent>` +
-    `</w:sdt>` +
-    `<w:sectPr/>` +
-    `</w:body>` +
-    `</w:document>`
-  );
-}
-
-/** Run buildDocx and return the text of any named part from the output blob. */
-async function readOutputPart(zip: JSZip, path: string): Promise<string | null> {
-  const blob = await buildDocx(zip, [], []);
-  const outZip = await JSZip.loadAsync(blob);
-  const file = outZip.file(path);
-  if (!file) return null;
-  return file.async('string');
-}
-
-describe('buildDocx — content control removal', () => {
-  it('removes the <w:sdt> wrapper and its <w:sdtPr> / <w:sdtContent> elements', async () => {
-    const zip = new JSZip();
-    zip.file('word/document.xml', makeSdtDocumentXml('<w:p><w:r><w:t>Hello</w:t></w:r></w:p>'));
-
-    const outXml = await getOutputDocXml(zip);
-
-    expect(outXml).not.toContain('w:sdt');
-    expect(outXml).not.toContain('w:sdtPr');
-    expect(outXml).not.toContain('w:sdtContent');
-  });
-
-  it('preserves the visible text content from inside the content control', async () => {
-    const zip = new JSZip();
-    zip.file(
-      'word/document.xml',
-      makeSdtDocumentXml('<w:p><w:r><w:t>Preserved text</w:t></w:r></w:p>')
-    );
-
-    const outXml = await getOutputDocXml(zip);
-
-    const paragraphs = extractParagraphTexts(outXml);
-    expect(paragraphs).toContain('Preserved text');
-  });
-
-  it('leaves a document with no content controls unchanged', async () => {
-    const zip = await makeZip(['First paragraph', 'Second paragraph']);
-
-    const outXml = await getOutputDocXml(zip);
-
-    expect(outXml).not.toContain('w:sdt');
-    const paragraphs = extractParagraphTexts(outXml);
-    expect(paragraphs).toContain('First paragraph');
-    expect(paragraphs).toContain('Second paragraph');
-  });
-
-  it('unwraps nested content controls, preserving the innermost text', async () => {
-    // An outer <w:sdt> wraps an inner <w:sdt>. Reverse-order processing removes
-    // the inner control first; the outer pass then correctly hoists the already-
-    // extracted content. No <w:sdt> should survive.
-    const nestedXml =
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<w:document xmlns:w="${SDT_NS}">` +
-      `<w:body>` +
-      `<w:sdt><w:sdtPr/>` +
-      `<w:sdtContent>` +
-      `<w:sdt><w:sdtPr/>` +
-      `<w:sdtContent><w:p><w:r><w:t>Inner text</w:t></w:r></w:p></w:sdtContent>` +
-      `</w:sdt>` +
-      `</w:sdtContent>` +
-      `</w:sdt>` +
-      `<w:sectPr/>` +
-      `</w:body>` +
-      `</w:document>`;
-    const zip = new JSZip();
-    zip.file('word/document.xml', nestedXml);
-
-    const outXml = await getOutputDocXml(zip);
-
-    expect(outXml).not.toContain('w:sdt');
-    expect(extractParagraphTexts(outXml)).toContain('Inner text');
-  });
-
-  it('strips content controls from a header part (word/header1.xml)', async () => {
-    // Content controls in headers live in a separate ZIP entry — they must be
-    // stripped even though they are not in word/document.xml.
-    const headerXml =
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<w:hdr xmlns:w="${SDT_NS}">` +
-      `<w:sdt><w:sdtPr/>` +
-      `<w:sdtContent><w:p><w:r><w:t>Header text</w:t></w:r></w:p></w:sdtContent>` +
-      `</w:sdt>` +
-      `</w:hdr>`;
-    const zip = new JSZip();
-    zip.file('word/document.xml', makeDocumentXml(['Body text']));
-    zip.file('word/header1.xml', headerXml);
-
-    const outHeaderXml = await readOutputPart(zip, 'word/header1.xml');
-
-    expect(outHeaderXml).not.toBeNull();
-    expect(outHeaderXml).not.toContain('w:sdt');
-    expect(outHeaderXml).toContain('Header text');
-  });
-
-  it('strips content controls from footnotes (word/footnotes.xml)', async () => {
-    // Content controls in footnotes are in word/footnotes.xml — they must also
-    // be stripped from the output.
-    const footnotesXml =
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<w:footnotes xmlns:w="${SDT_NS}">` +
-      `<w:sdt><w:sdtPr/>` +
-      `<w:sdtContent><w:p><w:r><w:t>Footnote text</w:t></w:r></w:p></w:sdtContent>` +
-      `</w:sdt>` +
-      `</w:footnotes>`;
-    const zip = new JSZip();
-    zip.file('word/document.xml', makeDocumentXml(['Body text']));
-    zip.file('word/footnotes.xml', footnotesXml);
-
-    const outFootnotesXml = await readOutputPart(zip, 'word/footnotes.xml');
-
-    expect(outFootnotesXml).not.toBeNull();
-    expect(outFootnotesXml).not.toContain('w:sdt');
-    expect(outFootnotesXml).toContain('Footnote text');
-  });
-
-  it('preserves bookmark order: bookmarkStart before content, bookmarkEnd after', async () => {
-    // Regression for the two-step hoist bug: hoisting sdtContent children first
-    // then bookmarks placed bookmarkStart *after* the content, breaking the span.
-    // The fix walks sdt children in document order, so bookmarkStart preceding
-    // sdtContent stays before the content in the output.
-    const docXml =
-      `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +
-      `<w:document xmlns:w="${SDT_NS}"><w:body>` +
-      `<w:sdt>` +
-      `<w:sdtPr/>` +
-      `<w:bookmarkStart w:id="1" w:name="section_heading"/>` +
-      `<w:sdtContent><w:p><w:r><w:t>Heading text</w:t></w:r></w:p></w:sdtContent>` +
-      `<w:bookmarkEnd w:id="1"/>` +
-      `</w:sdt>` +
-      `<w:sectPr/>` +
-      `</w:body></w:document>`;
-    const zip = new JSZip();
-    zip.file('word/document.xml', docXml);
-
-    const outXml = await getOutputDocXml(zip);
-
-    expect(outXml).not.toContain('w:sdt');
-    expect(outXml).toContain('section_heading');
-    // bookmarkStart must come before the paragraph text, bookmarkEnd after
-    const bmStart = outXml.indexOf('bookmarkStart');
-    const content = outXml.indexOf('Heading text');
-    const bmEnd = outXml.indexOf('bookmarkEnd');
-    expect(bmStart).toBeLessThan(content);
-    expect(content).toBeLessThan(bmEnd);
-  });
-
-});
+// Content-control (<w:sdt>) stripping moved to import time — see
+// src/utils/contentControlStripping.ts and its test file. buildDocx() no
+// longer strips content controls itself, so a document containing <w:sdt>
+// passed directly to buildDocx() (as these tests used to do) now passes
+// through unchanged; that behavior is covered where the stripping actually
+// happens now.
 
 // ─── applyHeadingLevelCorrections (HEAD-003) ─────────────────────────────────
 
@@ -5387,13 +5227,11 @@ describe('buildDocx — ZIP compression settings (iOS compatibility)', () => {
     const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
     const zip = new JSZip();
 
-    // document.xml with a content control so applyRemoveContentControls rewrites it.
     // Repeated padding ensures DEFLATE can actually compress the content.
     const padding = `<w:p><w:r><w:t>padding paragraph</w:t></w:r></w:p>`.repeat(40);
     zip.file('word/document.xml', [
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
       `<w:document xmlns:w="${W}"><w:body>`,
-      `<w:sdt><w:sdtContent><w:p><w:r><w:t>sdt content</w:t></w:r></w:p></w:sdtContent></w:sdt>`,
       padding,
       `<w:sectPr/></w:body></w:document>`,
     ].join(''));
@@ -5446,7 +5284,7 @@ describe('buildDocx — ZIP compression settings (iOS compatibility)', () => {
     const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
     const zip = new JSZip();
 
-    // Minimal document — no content controls, so applyRemoveContentControls is a no-op.
+    // Minimal document — no fix path touches it, so it passes through unchanged.
     zip.file('word/document.xml', [
       `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
       `<w:document xmlns:w="${W}"><w:body>`,
@@ -5847,23 +5685,9 @@ async function getPartText(blob: Blob, path: string): Promise<string> {
 describe('buildDocx — XML declaration preservation (iOS Word compatibility)', () => {
   // ── word/document.xml ────────────────────────────────────────────────────────
 
-  it('document.xml retains the XML declaration after applyRemoveContentControls rewrites it', async () => {
-    // applyRemoveContentControls runs unconditionally and rewrites document.xml
-    // whenever the file contains <w:sdt> elements.
-    const zip = new JSZip();
-    zip.file('word/document.xml', [
-      XML_DECL,
-      `<w:document xmlns:w="${W_OOXML}"><w:body>`,
-      `<w:sdt><w:sdtContent>`,
-      `<w:p><w:r><w:t>inner text</w:t></w:r></w:p>`,
-      `</w:sdtContent></w:sdt>`,
-      `<w:sectPr/></w:body></w:document>`,
-    ].join(''));
-
-    const blob = await buildDocx(zip, [], []);
-    const xml = await getPartText(blob, 'word/document.xml');
-    expect(xml.startsWith(XML_DECL), 'XML declaration must be present after content-control removal').toBe(true);
-  });
+  // Coverage for content-control removal preserving the XML declaration now
+  // lives in contentControlStripping.test.ts, since stripping moved to import
+  // time and buildDocx() no longer rewrites document.xml for <w:sdt>.
 
   it('document.xml retains the XML declaration after applyDoublespaceFix rewrites it', async () => {
     const zip = new JSZip();
