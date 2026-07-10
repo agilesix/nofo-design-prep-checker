@@ -5665,8 +5665,9 @@ describe('buildDocx — ZIP round-trip integrity', () => {
 // file anyway.  Word for iOS is strict: a missing declaration causes
 // OfficeImportErrorDomain error 912 ("file is structurally corrupt").
 //
-// The serializeXml() helper in buildDocx.ts restores the declaration whenever
-// the serializer omits it.  The tests below lock in that behaviour by
+// The serializeXml() helper (src/utils/xmlSerialize.ts, used by buildDocx.ts
+// and contentControlStripping.ts) restores the declaration whenever the
+// serializer omits it.  The tests below lock in that behaviour by
 // triggering a real parse→modify→serialize cycle for each category of XML
 // part that buildDocx can rewrite, then asserting the expected declaration is
 // present in the output.  If serializeXml() is ever replaced with a bare

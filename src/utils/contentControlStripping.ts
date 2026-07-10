@@ -2,11 +2,19 @@ import type JSZip from 'jszip';
 import { serializeXml } from './xmlSerialize';
 import { getStoryPartPaths } from './storyParts';
 
+const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+
 /**
  * Walks sibling nodes starting at `node` in the given direction, clearing a
  * `w:displacedByCustomXml` attribute whose value matches `value`. Stops at
  * the first element that doesn't carry a matching attribute (non-element
  * nodes, e.g. whitespace text, are skipped over transparently).
+ *
+ * Checks both the qualified attribute name and the namespace-aware form —
+ * some DOM implementations only populate one or the other for
+ * namespace-prefixed XML attributes (see the getAttribute/getAttributeNS
+ * fallback pattern used throughout buildDocx.ts, e.g. around bookmark name
+ * and anchor lookups).
  */
 function clearDisplacedByCustomXml(
   node: ChildNode | null,
@@ -17,8 +25,10 @@ function clearDisplacedByCustomXml(
   while (current) {
     if (current.nodeType === 1 /* ELEMENT_NODE */) {
       const el = current as Element;
-      if (el.getAttribute('w:displacedByCustomXml') !== value) break;
+      const displaced = el.getAttribute('w:displacedByCustomXml') ?? el.getAttributeNS(W, 'displacedByCustomXml');
+      if (displaced !== value) break;
       el.removeAttribute('w:displacedByCustomXml');
+      el.removeAttributeNS(W, 'displacedByCustomXml');
     }
     current = current[direction];
   }
@@ -45,7 +55,17 @@ function clearDisplacedByCustomXml(
  * breaking whatever internal link anchors to it.
  */
 export function stripContentControlsFromXmlDoc(xmlDoc: Document): boolean {
-  const sdts = Array.from(xmlDoc.getElementsByTagName('w:sdt')).reverse();
+  // Combine the namespace-aware and qualified-name lookups (and de-dupe via
+  // Set) — some DOM implementations only populate one or the other for
+  // namespace-prefixed elements, matching the pattern used for bookmarkStart/
+  // bookmarkEnd lookups elsewhere in buildDocx.ts. A silent empty result here
+  // would make this whole pre-processing step a no-op.
+  const sdts = Array.from(
+    new Set([
+      ...Array.from(xmlDoc.getElementsByTagNameNS(W, 'sdt')),
+      ...Array.from(xmlDoc.getElementsByTagName('w:sdt')),
+    ])
+  ).reverse();
   if (sdts.length === 0) return false;
 
   for (const sdt of sdts) {
