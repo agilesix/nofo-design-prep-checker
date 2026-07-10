@@ -4,6 +4,18 @@ This file logs significant decisions made during the development of the NOFO Des
 
 ---
 
+## 2026-07-10 — Move SDT stripping to import time
+
+**Decision:** Run `stripContentControlsFromXmlDoc` as a pre-processing step in `parseDocx.ts` immediately after unzipping, before any rule sees the document. Removed the download-time call from `buildDocx.ts`. mammoth is intentionally still given the original, unstripped bytes — see Outcome.
+
+**Reason:** `w:displacedByCustomXml="next"` bookmarks sit as body-level siblings before `w:sdt` elements. When the prepped download is opened and resaved in Word, Word strips these displaced bookmarks, breaking internal links in NOFO Builder. By stripping SDTs at import time, each bookmark ends up sitting directly against normal paragraph content instead of an opaque `<w:sdt>` wrapper, and its stale `w:displacedByCustomXml` marker is cleared — so it reads as an ordinary, non-displaced bookmark and survives a subsequent Word resave.
+
+**Alternative considered:** Proactively relocating displaced bookmarks into adjacent paragraphs before download. Rejected due to risk of broken bookmark spans across SDT boundaries and unintended interaction with heading rename rules.
+
+**Outcome:** All rules and the eventual download always see an SDT-free document. Displaced bookmark attributes (`w:displacedByCustomXml`) are also cleaned up after stripping. mammoth continues to parse the original, unstripped `arrayBuffer` rather than a JSZip-regenerated one: its own `w:sdt` handling is already a passthrough (identical HTML either way, including native checkbox content controls), and it never writes back to a `.docx`, so what it sees has no bearing on the resave problem — while regenerating a buffer just to feed it would add overhead and risk the binary-entry corruption documented in `buildDocx.ts`'s deep-clone comment.
+
+---
+
 ## 2026-07-03 — LINK-006: third-pass audit and fix of false positives in HHS-2026-ACL-NIDILRR-DPCP-0221
 
 **Context:** After the PR 313 and PR 314 fixes were deployed, two categories of false positive remained and one true positive was still missing. A full audit of every internal-link warning produced on HHS-2026-ACL-NIDILRR-DPCP-0221 was conducted by extracting and inspecting the document's OOXML and mammoth-generated HTML before writing any fix.
