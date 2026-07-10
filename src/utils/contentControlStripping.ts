@@ -10,11 +10,11 @@ const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
  * the first element that doesn't carry a matching attribute (non-element
  * nodes, e.g. whitespace text, are skipped over transparently).
  *
- * Checks both the qualified attribute name and the namespace-aware form —
- * some DOM implementations only populate one or the other for
- * namespace-prefixed XML attributes (see the getAttribute/getAttributeNS
- * fallback pattern used throughout buildDocx.ts, e.g. around bookmark name
- * and anchor lookups).
+ * Checks the qualified attribute name, the namespace-aware form, and the
+ * bare unprefixed local name — some DOM implementations only populate one
+ * of the three for namespace-prefixed XML attributes (see the three-way
+ * getAttribute/getAttributeNS/getAttribute fallback pattern used throughout
+ * buildDocx.ts, e.g. bookmark w:id and w:name lookups).
  */
 function clearDisplacedByCustomXml(
   node: ChildNode | null,
@@ -25,10 +25,14 @@ function clearDisplacedByCustomXml(
   while (current) {
     if (current.nodeType === 1 /* ELEMENT_NODE */) {
       const el = current as Element;
-      const displaced = el.getAttribute('w:displacedByCustomXml') ?? el.getAttributeNS(W, 'displacedByCustomXml');
+      const displaced =
+        el.getAttribute('w:displacedByCustomXml') ??
+        el.getAttributeNS(W, 'displacedByCustomXml') ??
+        el.getAttribute('displacedByCustomXml');
       if (displaced !== value) break;
       el.removeAttribute('w:displacedByCustomXml');
       el.removeAttributeNS(W, 'displacedByCustomXml');
+      el.removeAttribute('displacedByCustomXml');
     }
     current = current[direction];
   }
