@@ -8,7 +8,7 @@ This file logs significant decisions made during the development of the NOFO Des
 
 **Decision:** Run `stripContentControlsFromXmlDoc` as a pre-processing step in `parseDocx.ts` immediately after unzipping, before mammoth or any rule sees the document. Removed the download-time call from `buildDocx.ts`.
 
-**Reason:** `w:displacedByCustomXml="next"` bookmarks sit as body-level siblings before `w:sdt` elements. When the prepped download is opened and resaved in Word, Word strips these displaced bookmarks, breaking internal links in NOFO Builder. By stripping SDTs at import time, bookmarks are relocated into normal paragraph positions and survive a subsequent Word resave.
+**Reason:** `w:displacedByCustomXml="next"` bookmarks sit as body-level siblings before `w:sdt` elements. When the prepped download is opened and resaved in Word, Word strips these displaced bookmarks, breaking internal links in NOFO Builder. By stripping SDTs at import time, each bookmark ends up sitting directly against normal paragraph content instead of an opaque `<w:sdt>` wrapper, and its stale `w:displacedByCustomXml` marker is cleared — so it reads as an ordinary, non-displaced bookmark and survives a subsequent Word resave.
 
 **Alternative considered:** Proactively relocating displaced bookmarks into adjacent paragraphs before download. Rejected due to risk of broken bookmark spans across SDT boundaries and unintended interaction with heading rename rules.
 

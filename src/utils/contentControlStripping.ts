@@ -1,18 +1,6 @@
 import type JSZip from 'jszip';
 import { serializeXml } from './xmlSerialize';
-
-/**
- * Returns the canonical set of OOXML "story part" paths that carry document
- * body content: the main document, footnotes, endnotes, and any header/footer
- * parts present in the ZIP.
- */
-function getStoryPartPaths(zip: JSZip): string[] {
-  const fixed = ['word/document.xml', 'word/footnotes.xml', 'word/endnotes.xml'];
-  const headerFooter = Object.keys(zip.files).filter(name =>
-    /^word\/(header|footer)\d*\.xml$/.test(name)
-  );
-  return [...fixed, ...headerFooter];
-}
+import { getStoryPartPaths } from './storyParts';
 
 /**
  * Walks sibling nodes starting at `node` in the given direction, clearing a

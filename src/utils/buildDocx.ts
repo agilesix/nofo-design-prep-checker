@@ -5,6 +5,7 @@ import { groupListParagraphs } from './listHelpers';
 import { slugifyHeading } from './anchorUtils';
 import { applyTimeFormatsToText } from './timeFormat';
 import { serializeXml } from './xmlSerialize';
+import { getStoryPartPaths } from './storyParts';
 
 const BUILD_DOCX_DEBUG =
   (globalThis as typeof globalThis & {
@@ -374,10 +375,11 @@ export async function buildDocx(
   }
 
   // Content-control (<w:sdt>) stripping moved to import time (parseDocx.ts,
-  // via stripContentControlsFromZip) so that content controls — and any
-  // bookmarks Word displaced next to them — are unwrapped before any rule
-  // runs, not just before download. By the time a document reaches this
-  // pipeline it is already content-control-free.
+  // via stripContentControlsFromZip) so that content controls are unwrapped
+  // — and any bookmark Word displaced next to one has its stale
+  // w:displacedByCustomXml marker cleared — before any rule runs, not just
+  // before download. By the time a document reaches this pipeline it is
+  // already content-control-free.
 
   // Apply heading style to "Important: public information" in single-cell tables
   if (hasImportantPublicHeadingFix) {
@@ -969,22 +971,6 @@ async function applyDoublespaceFix(zip: JSZip): Promise<void> {
 
 
   zip.file('word/document.xml', serializeXml(xmlDoc));
-}
-
-/**
- * Returns the canonical set of OOXML "story part" paths that carry document
- * body content: the main document, footnotes, endnotes, and any header/footer
- * parts present in the ZIP.
- *
- * Any function that needs to operate across all text-bearing parts should use
- * this helper so the set stays consistent in one place.
- */
-function getStoryPartPaths(zip: JSZip): string[] {
-  const fixed = ['word/document.xml', 'word/footnotes.xml', 'word/endnotes.xml'];
-  const headerFooter = Object.keys(zip.files).filter(name =>
-    /^word\/(header|footer)\d*\.xml$/.test(name)
-  );
-  return [...fixed, ...headerFooter];
 }
 
 function findAncestorByLocalName(el: Element, localName: string): Element | null {
