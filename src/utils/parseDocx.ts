@@ -10,20 +10,30 @@ export async function parseDocx(
 ): Promise<ParsedDocument> {
   const arrayBuffer = await file.arrayBuffer();
 
-  // Load as JSZip and strip <w:sdt> content controls immediately, before
-  // mammoth or any rule sees the document. This relocates content into
-  // normal document structure at the earliest possible point — in
-  // particular, bookmarks Word displaced next to a content control
-  // (w:displacedByCustomXml) end up sitting next to plain content instead of
-  // an opaque <w:sdt> — so they survive every rule in the pipeline and a
-  // subsequent Word resave without breaking internal links.
+  // Load as JSZip and strip <w:sdt> content controls immediately, before any
+  // rule sees the document. This relocates content into normal document
+  // structure at the earliest possible point — in particular, bookmarks Word
+  // displaced next to a content control (w:displacedByCustomXml) end up
+  // sitting next to plain content instead of an opaque <w:sdt> — so they
+  // survive every rule in the pipeline and a subsequent Word resave without
+  // breaking internal links.
+  //
+  // mammoth below is intentionally given the *original* arrayBuffer, not a
+  // JSZip-regenerated one. mammoth's own <w:sdt> handling already recurses
+  // into sdtContent unconditionally (a no-op passthrough for anything but
+  // checkbox content controls), so stripping first would not change its HTML
+  // output — and mammoth never writes back to a .docx file, so it has no
+  // bearing on the resave problem this fixes. Regenerating a full ArrayBuffer
+  // via JSZip.generateAsync() just to feed mammoth would add avoidable
+  // overhead on every import and risks the binary-entry corruption documented
+  // in buildDocx.ts's deep-clone comment (generateAsync → re-unzip round
+  // trips have been observed to silently drop images/fonts in some browsers).
   const zipArchive = await JSZip.loadAsync(arrayBuffer);
   await stripContentControlsFromZip(zipArchive);
-  const strippedArrayBuffer = await zipArchive.generateAsync({ type: 'arraybuffer' });
 
   // Parse with mammoth for HTML
   const mammothResult = await mammoth.convertToHtml(
-    { arrayBuffer: strippedArrayBuffer },
+    { arrayBuffer },
     {
       styleMap: [
         "p[style-name='Heading 1'] => h1:fresh",
