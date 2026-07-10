@@ -909,19 +909,14 @@ function matchesHeadingSlugWithWordQuirks(
   if (withoutSuffix !== normalizedBody) candidates.push(withoutSuffix);
   const candidatesLower = candidates.map(c => c.toLowerCase());
 
-  const slugsLower = new Set<string>();
   for (const slug of cleanHeadingSlugMap.keys()) {
-    slugsLower.add(slug.toLowerCase());
-  }
-
-  if (candidatesLower.some(c => slugsLower.has(c))) return true;
-
-  for (const slugLower of slugsLower) {
+    const slugLower = slug.toLowerCase();
     for (const candidateLower of candidatesLower) {
       if (
-        slugLower.length > candidateLower.length &&
-        slugLower.startsWith(candidateLower) &&
-        slugLower[candidateLower.length] === '_'
+        slugLower === candidateLower ||
+        (slugLower.length > candidateLower.length &&
+          slugLower.startsWith(candidateLower) &&
+          slugLower[candidateLower.length] === '_')
       ) {
         return true;
       }
