@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.12.1](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.12.0...v1.12.1) (2026-07-21)
+
+
+### Bug Fixes
+
+* add unprefixed fallback to displacedByCustomXml lookup ([5f0eb1c](https://github.com/agilesix/nofo-design-prep-checker/commit/5f0eb1cb038ccbcba2649f6ccc9eae254a074383))
+* address copilot review on eslint v10 migration ([c66fe90](https://github.com/agilesix/nofo-design-prep-checker/commit/c66fe902ffe6584df741118f73f1b3662369fe7d))
+* **deps:** bump vite to v7 for vitest v4 compatibility ([a997888](https://github.com/agilesix/nofo-design-prep-checker/commit/a997888a92f9cc874109d0194c424c4780a2fe41))
+* **deps:** upgrade eslint to v10 and migrate to flat config ([198c122](https://github.com/agilesix/nofo-design-prep-checker/commit/198c122fc9ec40fb69c1a675f1014f0a7f949671))
+* **deps:** upgrade eslint to v10 and migrate to flat config ([9a194e2](https://github.com/agilesix/nofo-design-prep-checker/commit/9a194e2365aa77ff9ecf21d382bc6dde3c63ed0e))
+* extract getStoryPartPaths, correct bookmark wording ([fd642c2](https://github.com/agilesix/nofo-design-prep-checker/commit/fd642c25d30999f030ba8d7795a81d705ecf9503))
+* **LINK-006:** address Copilot review comments on PR 314 ([2189df1](https://github.com/agilesix/nofo-design-prep-checker/commit/2189df1251ae3fdf657da7c5ff805c74a6e57b0c))
+* **LINK-006:** address Copilot review comments on PR 314 ([692ec7d](https://github.com/agilesix/nofo-design-prep-checker/commit/692ec7d835b224b570c0c981489d6396dc5ae06a))
+* **LINK-006:** address Copilot review comments on PR 314 ([e9cef61](https://github.com/agilesix/nofo-design-prep-checker/commit/e9cef61d9a2435ff4379450ec88c5efc201efb07))
+* **LINK-006:** also tolerate literal slash in bookmark bodies ([e80d6cc](https://github.com/agilesix/nofo-design-prep-checker/commit/e80d6ccbeb9b40fcde63ca147dee0590b219b825))
+* **LINK-006:** exclude _GoBack from Case 1 OOXML bookmark matching ([e5d21c6](https://github.com/agilesix/nofo-design-prep-checker/commit/e5d21c6042d0f4ff7cce1cbe363e38d4869448c7))
+* **LINK-006:** exclude endnotes and fix bookmark-inside-heading false positives ([5cd0b5c](https://github.com/agilesix/nofo-design-prep-checker/commit/5cd0b5ce9420ef895d42e2d62f21d3655c7103cf))
+* **LINK-006:** exclude endnotes and fix bookmark-inside-heading false… ([83961ab](https://github.com/agilesix/nofo-design-prep-checker/commit/83961ab78b15ca069925dc2e96a31b8c16a70702))
+* **LINK-006:** tighten orphaned-bookmark check; fuzzy and/& match ([3c202e5](https://github.com/agilesix/nofo-design-prep-checker/commit/3c202e5331e95392f71154884f695d8f3973359d))
+* **LINK-006:** tolerate literal &/:/- and case drift in Case 2 ([32da125](https://github.com/agilesix/nofo-design-prep-checker/commit/32da1257ee6945f3eb2a2630e933c558c2ba4a0c))
+* **LINK-006:** tolerate literal &/:/- and case drift in Case 2 ([553a122](https://github.com/agilesix/nofo-design-prep-checker/commit/553a1227235c40b1ce5eb409bd4d061210057cdb))
+* **LINK-006:** tolerate Word bookmark-naming quirks in Case 2 ([fb3124f](https://github.com/agilesix/nofo-design-prep-checker/commit/fb3124fb7093076573c2d843160a830ffe384321))
+* **LINK-006:** tolerate Word bookmark-naming quirks in Case 2 ([a1e9cce](https://github.com/agilesix/nofo-design-prep-checker/commit/a1e9ccef6aed83dd82e62b91e7cbe7e404b28fcd))
+* namespace-aware SDT/attribute lookups, stale comment ([62e2f24](https://github.com/agilesix/nofo-design-prep-checker/commit/62e2f2406fca5f2b591c45496082ad6865236a5f))
+* stop regenerating docx buffer just to feed mammoth ([5a5f09f](https://github.com/agilesix/nofo-design-prep-checker/commit/5a5f09f3ad9f63671bc64c86a943718af1c2513e))
+* strip SDTs at import time instead of download time ([87e4763](https://github.com/agilesix/nofo-design-prep-checker/commit/87e4763307ed3e3ec9ea493ec802cdde1c2a0397))
+
 ## [1.12.0](https://github.com/agilesix/nofo-design-prep-checker/compare/v1.11.0...v1.12.0) (2026-07-03)
 
 
