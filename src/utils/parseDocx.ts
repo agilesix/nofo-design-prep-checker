@@ -88,14 +88,13 @@ function buildSections(html: string): Section[] {
   const elements = Array.from(doc.body.children);
 
   const sections: Section[] = [];
-  let currentSection: Section | null = null;
   let sectionHtml = '';
-  let pageEstimate = 1;
+  let pageEstimate: number;
   let charCount = 0;
   const CHARS_PER_PAGE = 3000; // rough estimate
 
   // Add a default section for content before first heading
-  currentSection = {
+  let currentSection: Section = {
     id: 'section-preamble',
     heading: 'Document start',
     headingLevel: 0,
