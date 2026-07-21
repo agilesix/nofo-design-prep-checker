@@ -34,7 +34,7 @@ const LINK_004: Rule = {
         return;
       }
 
-      let isValid = false;
+      let isValid: boolean;
       try {
         const url = new URL(href);
         // Basic checks: must have a hostname with a dot

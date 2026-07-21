@@ -88,9 +88,9 @@ function buildSections(html: string): Section[] {
   const elements = Array.from(doc.body.children);
 
   const sections: Section[] = [];
-  let currentSection: Section | null = null;
+  let currentSection: Section;
   let sectionHtml = '';
-  let pageEstimate = 1;
+  let pageEstimate: number;
   let charCount = 0;
   const CHARS_PER_PAGE = 3000; // rough estimate
 

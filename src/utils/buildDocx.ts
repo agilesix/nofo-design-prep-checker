@@ -3266,12 +3266,11 @@ function asteriskedBoldPhraseInParagraph(xmlDoc: Document, W: string, para: Elem
           const ri = span[0]!;
           const rs = offsets[ri]!;
           const re = offsets[ri + 1]!;
-          let phraseRun = runs[ri]!;
+          const phraseRun = runs[ri]!;
 
           // Split off the after part first (so re aligns with phrase end)
           if (me < re) {
-            const [bp] = asteriskedSplitRun(para, phraseRun, me - rs);
-            phraseRun = bp; // bp covers [rs..me); afterRun covers [me..re)
+            asteriskedSplitRun(para, phraseRun, me - rs);
             splitDone = true;
             changed = true;
             break; // Re-read DOM next pass
@@ -3279,8 +3278,7 @@ function asteriskedBoldPhraseInParagraph(xmlDoc: Document, W: string, para: Elem
 
           // Split off the before part (so rs aligns with phrase start)
           if (mi > rs) {
-            const [, ap] = asteriskedSplitRun(para, phraseRun, mi - rs);
-            phraseRun = ap; // ap covers [mi..re==me)
+            asteriskedSplitRun(para, phraseRun, mi - rs);
             splitDone = true;
             changed = true;
             break; // Re-read DOM next pass
